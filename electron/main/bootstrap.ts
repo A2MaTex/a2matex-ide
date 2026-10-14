@@ -15,7 +15,7 @@ export function createWindow() {
     minWidth: 960,
     minHeight: 640,
     show: false,
-    backgroundColor: '#080b10',
+    backgroundColor: '#02060d',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(import.meta.dirname, '../preload/index.cjs'),

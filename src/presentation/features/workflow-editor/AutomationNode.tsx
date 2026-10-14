@@ -28,7 +28,7 @@ export function AutomationNode({ data, selected }: NodeProps<AutomationFlowNode>
         />
       ))}
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
-        <span className="grid size-7 place-items-center rounded-md bg-primary/10 text-primary">
+        <span className="grid size-7 place-items-center rounded-md bg-primary/10 text-cyan-400">
           <NodeIcon icon={data.icon} className="size-3.5" />
         </span>
         <div className="min-w-0 flex-1">

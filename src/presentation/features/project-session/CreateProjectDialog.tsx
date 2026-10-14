@@ -32,7 +32,7 @@ export function CreateProjectDialog({
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/65 backdrop-blur-sm" />
         <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,460px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-6 shadow-2xl outline-none">
           <div className="flex items-start gap-3">
-            <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-primary">
+            <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-cyan-400">
               <FolderPlus className="size-5" />
             </div>
             <div className="min-w-0 flex-1">
@@ -69,11 +69,11 @@ export function CreateProjectDialog({
             <div className="mt-6 flex justify-end gap-2">
               <Dialog.Close asChild>
                 <Button type="button" variant="ghost" disabled={busy}>
-                  Cancel
+                  <span className='text-sm font-medium'>Cancel</span>
                 </Button>
               </Dialog.Close>
               <Button type="submit" disabled={busy || !name.trim()}>
-                {busy ? 'Creating…' : 'Choose folder & create'}
+               <span className='text-sm font-medium'>{busy ? 'Creating…' : 'Choose folder & create'}</span> 
               </Button>
             </div>
           </form>

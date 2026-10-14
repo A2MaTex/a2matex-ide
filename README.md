@@ -87,11 +87,3 @@ Trên Linux headless:
 ```bash
 xvfb-run -a npm run test:e2e:run
 ```
-
-## Tài liệu
-
-- [Kế hoạch triển khai](implementation/README.md)
-- [Roadmap](implementation/08_DELIVERY_ROADMAP.md)
-- [Decision log](implementation/09_DECISIONS_AND_OPEN_QUESTIONS.md)
-- [ADR project source format](implementation/adr/ADR-001-project-source-format.md)
-- [ADR workflow authoring](implementation/adr/ADR-002-workflow-authoring-contract.md)

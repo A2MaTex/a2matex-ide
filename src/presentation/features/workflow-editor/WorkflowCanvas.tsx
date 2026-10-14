@@ -171,13 +171,13 @@ export function WorkflowCanvas({ workflow, issues, execute }: WorkflowCanvasProp
         proOptions={{ hideAttribution: true }}
         className="bg-editor-canvas"
       >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#344052" />
+        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1b4770" />
         <MiniMap
           pannable
           zoomable
           className="border! border-border! bg-panel!"
           nodeColor="var(--primary)"
-          maskColor="rgb(4 7 11 / 68%)"
+          maskColor="rgb(2 6 13 / 72%)"
         />
         <Controls
           showInteractive={false}

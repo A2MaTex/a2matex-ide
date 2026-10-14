@@ -1,4 +1,4 @@
-import { Boxes, FolderKanban, Settings, Workflow } from 'lucide-react';
+import { FolderKanban, Settings, Workflow } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router-dom';
 
 import { HostConnectionBadge } from '@presentation/features/host-status/HostConnectionBadge';
@@ -13,43 +13,46 @@ const navItems = [
 export function AppShell() {
   return (
     <div className="flex h-screen min-h-130 overflow-hidden bg-background text-foreground">
-      <aside className="flex w-17 shrink-0 flex-col items-center border-r border-border bg-sidebar py-3">
-        <div
-          className="mb-5 grid size-10 place-items-center rounded-xl border border-primary/30 bg-primary/10 text-primary shadow-[0_0_24px_var(--primary-glow)]"
-          aria-label="A2MaTeX Studio"
-        >
-          <Boxes className="size-5" aria-hidden="true" />
-        </div>
-
-        <nav className="flex w-full flex-col items-center gap-1 px-2" aria-label="Primary">
+      <aside
+        aria-label="Application sidebar"
+        className="group/sidebar flex w-17 shrink-0 flex-col overflow-hidden border-r border-border bg-sidebar py-3 transition-[width] duration-300 ease-out hover:w-48 focus-within:w-48 motion-reduce:transition-none"
+      >
+        <nav className="flex w-full flex-col gap-2 px-2" aria-label="Primary">
           {navItems.map(({ icon: Icon, label, to }) => (
             <NavLink
               key={to}
               to={to}
+              title={label}
               className={({ isActive }) =>
                 cn(
-                  'group flex w-full flex-col items-center gap-1 rounded-lg px-1 py-2 text-[10px] font-medium text-muted-foreground outline-none transition-colors hover:bg-accent hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70',
-                  isActive && 'bg-accent text-foreground',
+                  'group/nav relative flex h-11 w-full shrink-0 items-center overflow-hidden rounded-lg text-xs font-medium text-muted-foreground outline-none transition-[background-color,border-color,color,box-shadow] hover:bg-accent/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70',
+                  isActive
+                    ? 'nav-active text-cyan-300 shadow-[inset_0_0_6px_var(--color-brand-blue)]'
+                    : undefined,
                 )
               }
             >
-              <Icon className="size-4.5" aria-hidden="true" />
-              <span>{label}</span>
+              <span className="absolute left-4.25 grid size-4.5 shrink-0 place-items-center">
+                <Icon className="size-4.5" aria-hidden="true" />
+              </span>
+              <span className="ml-12 translate-x-2 whitespace-nowrap opacity-0 transition-[opacity,transform] duration-200 group-hover/sidebar:translate-x-0 group-hover/sidebar:opacity-100 group-focus-within/sidebar:translate-x-0 group-focus-within/sidebar:opacity-100 motion-reduce:transition-none">
+                {label}
+              </span>
             </NavLink>
           ))}
         </nav>
 
-        <div className="mt-auto size-2 rounded-full bg-success shadow-[0_0_10px_var(--success)]" />
+        <div className="relative mt-auto h-8 w-full shrink-0" aria-label="Host connected">
+          <span className="absolute left-7.5 top-3 size-2 rounded-full bg-success shadow-[0_0_10px_var(--success)]" />
+        </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-12 shrink-0 items-center justify-between border-b border-border bg-panel/90 px-4 backdrop-blur">
-          <div className="flex min-w-0 items-center gap-3">
-            <div className="min-w-0">
-              <div className="truncate text-sm font-semibold tracking-tight">A2MaTeX Studio</div>
-              <div className="text-[10px] uppercase tracking-[0.18em] text-muted-foreground">
-                Automation workspace
-              </div>
+        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-panel/90 px-4 backdrop-blur">
+          <div className="flex items-center">
+            <img src="/full-logo.webp" alt="" aria-hidden="true" className="object-contain w-32" />
+            <div className="truncate text-xl mt-1.5 font-medium tracking-tight text-white/60">
+              Studio
             </div>
           </div>
           <HostConnectionBadge />

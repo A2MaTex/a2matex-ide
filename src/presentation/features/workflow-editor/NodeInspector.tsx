@@ -1,4 +1,4 @@
-import { Copy, Settings2, Trash2 } from 'lucide-react';
+import { Copy, PanelRightClose, Settings2, Trash2 } from 'lucide-react';
 
 import type { WorkflowNode } from '@domain/project/project';
 import { findNodeDefinition } from '@domain/workflow/builtin-node-catalog';
@@ -16,6 +16,25 @@ interface NodeInspectorProps {
   execute(command: WorkflowCommand): boolean;
   onDuplicate(): void;
   onDelete(): void;
+  onCollapse(): void;
+}
+
+function InspectorHeader({ onCollapse }: { onCollapse(): void }) {
+  return (
+    <div className="flex h-9 items-center gap-2 border-b border-border px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+      <Settings2 className="size-3.5" />
+      <span className="flex-1">Inspector</span>
+      <button
+        type="button"
+        onClick={onCollapse}
+        aria-label="Collapse Inspector"
+        title="Collapse Inspector"
+        className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+      >
+        <PanelRightClose className="size-3.5" />
+      </button>
+    </div>
+  );
 }
 
 function normalizeInput(value: string, property: PropertyDefinition): JsonValue {
@@ -33,17 +52,16 @@ export function NodeInspector({
   execute,
   onDuplicate,
   onDelete,
+  onCollapse,
 }: NodeInspectorProps) {
   if (!node) {
     return (
       <section className="h-full bg-panel" aria-label="Node inspector">
-        <div className="flex h-9 items-center gap-2 border-b border-border px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-          <Settings2 className="size-3.5" /> Inspector
-        </div>
+        <InspectorHeader onCollapse={onCollapse} />
         <div className="grid h-48 place-items-center p-6 text-center">
           <div>
             <Settings2 className="mx-auto size-6 text-muted-foreground" />
-            <p className="mt-3 text-xs font-medium">Select a node</p>
+            <p className="mt-3 text-sm font-medium">Select a node</p>
             <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
               Node properties and validation details appear here.
             </p>
@@ -56,8 +74,9 @@ export function NodeInspector({
   const definition = findNodeDefinition(node.type, node.nodeVersion);
   if (!definition) {
     return (
-      <section className="h-full bg-panel p-4" aria-label="Node inspector">
-        <p className="text-xs text-destructive">Node definition is unavailable.</p>
+      <section className="h-full bg-panel" aria-label="Node inspector">
+        <InspectorHeader onCollapse={onCollapse} />
+        <p className="p-4 text-xs text-destructive">Node definition is unavailable.</p>
       </section>
     );
   }
@@ -69,12 +88,10 @@ export function NodeInspector({
 
   return (
     <section className="h-full overflow-y-auto bg-panel" aria-label="Node inspector">
-      <div className="flex h-9 items-center gap-2 border-b border-border px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-        <Settings2 className="size-3.5" /> Inspector
-      </div>
+      <InspectorHeader onCollapse={onCollapse} />
       <div className="border-b border-border p-4">
         <div className="flex items-center gap-3">
-          <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-primary">
+          <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-cyan-400">
             <NodeIcon icon={definition.icon} className="size-4" />
           </span>
           <div className="min-w-0 flex-1">
@@ -84,10 +101,10 @@ export function NodeInspector({
             </p>
           </div>
         </div>
-        <p className="mt-3 text-[10px] leading-4 text-muted-foreground">{definition.description}</p>
-        <div className="mt-3 flex gap-1">
+        <p className="mt-3 text-xs leading-4 text-muted-foreground">{definition.description}</p>
+        <div className="mt-3 flex gap-1 text-sm">
           <Button size="sm" variant="ghost" onClick={onDuplicate}>
-            <Copy /> Duplicate
+            <Copy/> Duplicate
           </Button>
           <Button size="sm" variant="ghost" onClick={onDelete}>
             <Trash2 /> Delete
@@ -106,8 +123,8 @@ export function NodeInspector({
               'mt-2 w-full rounded-md border bg-background px-2.5 text-xs outline-none focus:border-primary ' +
               (fieldIssues.length > 0 ? 'border-destructive' : 'border-border');
             return (
-              <div key={name}>
-                <label htmlFor={'property-' + name} className="text-[11px] font-medium">
+              <div key={name} className='text-sm'>
+                <label htmlFor={'property-' + name} className="text-xs font-medium">
                   {property.title}
                 </label>
                 {property.description ? (

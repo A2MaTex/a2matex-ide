@@ -1,16 +1,18 @@
 import {
+  ChevronDown,
   ChevronRight,
   CirclePlay,
   FileJson2,
   Folder,
+  PanelRightOpen,
   Redo2,
   Save,
   SaveAll,
   Undo2,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo } from 'react';
-import { Group, Panel, Separator } from 'react-resizable-panels';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ReactFlowProvider } from '@xyflow/react';
 
@@ -39,6 +41,15 @@ function ResizeHandle({ orientation }: { orientation: 'horizontal' | 'vertical' 
   );
 }
 
+function SidebarResizeHandle() {
+  return (
+    <Separator
+      aria-label="Resize Explorer and Node Palette"
+      className="h-px cursor-row-resize bg-border outline-none transition-colors data-[separator=active]:bg-primary data-[separator=hover]:bg-primary"
+    />
+  );
+}
+
 function isTextInput(target: EventTarget | null) {
   return (
     target instanceof HTMLInputElement ||
@@ -52,7 +63,7 @@ function newNodeId(type: string) {
   return type.replace(/[^a-z0-9]+/gi, '-') + '-' + crypto.randomUUID().slice(0, 8);
 }
 
-export function Phase2WorkspacePage() {
+export function MainWorkflowPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
   const session = useProjectStore((state) => state.session);
@@ -72,6 +83,13 @@ export function Phase2WorkspacePage() {
   const selectNode = useEditorStore((state) => state.selectNode);
   const copyNode = useEditorStore((state) => state.copyNode);
   const resetWorkflowSession = useEditorStore((state) => state.resetWorkflowSession);
+  const [explorerExpanded, setExplorerExpanded] = useState(true);
+  const [workflowsExpanded, setWorkflowsExpanded] = useState(true);
+  const [nodePaletteExpanded, setNodePaletteExpanded] = useState(true);
+  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const explorerPanelRef = usePanelRef();
+  const nodePalettePanelRef = usePanelRef();
+  const inspectorPanelRef = usePanelRef();
   useProjectCloseGuard(dirty);
 
   const document = session?.snapshot.document;
@@ -172,7 +190,7 @@ export function Phase2WorkspacePage() {
             Open or create a project before entering its workspace.
           </p>
           <Button className="mt-5" onClick={() => navigate('/projects')}>
-            Go to projects
+            <span className="text-sm font-medium">Go to projects</span>
           </Button>
         </div>
       </div>
@@ -232,7 +250,7 @@ export function Phase2WorkspacePage() {
             {workflow.nodes.length} nodes · {issues.length} problems
           </span>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1 text-sm">
           <Button size="sm" variant="ghost" onClick={undo} disabled={undoStack.length === 0}>
             <Undo2 /> Undo
           </Button>
@@ -273,26 +291,121 @@ export function Phase2WorkspacePage() {
           <Group className="h-full" orientation="horizontal">
             <Panel defaultSize="21%" minSize="16%" maxSize="32%">
               <aside
-                className="h-full overflow-y-auto bg-panel"
+                className="h-full min-h-0 overflow-hidden bg-panel"
                 aria-label="Project explorer and node palette"
               >
-                <div className="flex h-9 items-center gap-2 border-b border-border px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                  <Folder className="size-3.5" /> Explorer
-                </div>
-                <div className="p-2 text-[11px]">
-                  <div className="flex items-center gap-1.5 rounded px-1.5 py-1 text-secondary-foreground">
-                    <FileJson2 className="size-3.5 text-primary" /> a2matex.project.json
-                  </div>
-                  <div className="flex items-center gap-1.5 rounded px-1.5 py-1 text-secondary-foreground">
-                    <ChevronRight className="size-3" />
-                    <Folder className="size-3.5 text-primary" /> workflows
-                  </div>
-                  <div className="ml-5 flex items-center gap-1.5 rounded bg-accent px-1.5 py-1">
-                    <FileJson2 className="size-3.5 text-warning" />
-                    {workflowPath.split('/').at(-1)}
-                  </div>
-                </div>
-                <NodePalette onAdd={addFromPalette} />
+                <Group className="h-full min-h-0" orientation="vertical">
+                  <Panel
+                    id="explorer-panel"
+                    panelRef={explorerPanelRef}
+                    defaultSize="34%"
+                    minSize="84px"
+                    collapsedSize="36px"
+                    collapsible
+                    groupResizeBehavior={
+                      explorerExpanded ? 'preserve-relative-size' : 'preserve-pixel-size'
+                    }
+                    onResize={(size) => setExplorerExpanded(size.inPixels > 48)}
+                  >
+                    <section className="flex h-full min-h-0 flex-col overflow-hidden bg-panel">
+                      <button
+                        type="button"
+                        aria-expanded={explorerExpanded}
+                        aria-controls="project-explorer-tree"
+                        onClick={() => {
+                          if (explorerExpanded) {
+                            setExplorerExpanded(false);
+                            explorerPanelRef.current?.collapse();
+                            return;
+                          }
+
+                          setExplorerExpanded(true);
+                          setNodePaletteExpanded(false);
+                          nodePalettePanelRef.current?.collapse();
+                          explorerPanelRef.current?.expand();
+                          explorerPanelRef.current?.resize('100%');
+                        }}
+                        className="flex h-9 w-full shrink-0 items-center gap-1.5 px-2.5 text-left uppercase text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
+                      >
+                        {explorerExpanded ? (
+                          <ChevronDown className="size-3.5" />
+                        ) : (
+                          <ChevronRight className="size-3.5" />
+                        )}
+                        <span className="font-semibold text-xs">Explorer</span>
+                      </button>
+                      {explorerExpanded ? (
+                        <div
+                          id="project-explorer-tree"
+                          className="min-h-0 flex-1 overflow-y-auto px-2 text-[11px]"
+                        >
+                          <div className="flex items-center gap-1.5 rounded px-1.5 py-1 text-secondary-foreground">
+                            <span className="size-3" aria-hidden="true" />
+                            <FileJson2 className="size-3.5 text-cyan-400" />
+                            <span className="truncate">a2matex.project.json</span>
+                          </div>
+                          <button
+                            type="button"
+                            aria-expanded={workflowsExpanded}
+                            aria-controls="workflows-tree"
+                            onClick={() => setWorkflowsExpanded((expanded) => !expanded)}
+                            className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-secondary-foreground transition-colors hover:bg-accent/50"
+                          >
+                            {workflowsExpanded ? (
+                              <ChevronDown className="size-3" />
+                            ) : (
+                              <ChevronRight className="size-3" />
+                            )}
+                            <Folder className="size-3.5 text-cyan-400" /> workflows
+                          </button>
+                          {workflowsExpanded ? (
+                            <div id="workflows-tree" className="ml-5">
+                              <div className="flex items-center gap-1.5 rounded bg-accent px-1.5 py-1">
+                                <FileJson2 className="size-3.5 text-warning" />
+                                <span className="truncate">{workflowPath.split('/').at(-1)}</span>
+                              </div>
+                            </div>
+                          ) : null}
+                        </div>
+                      ) : null}
+                    </section>
+                  </Panel>
+
+                  <SidebarResizeHandle />
+
+                  <Panel
+                    id="node-palette-panel"
+                    panelRef={nodePalettePanelRef}
+                    defaultSize="66%"
+                    minSize="84px"
+                    collapsedSize="36px"
+                    collapsible
+                    groupResizeBehavior={
+                      nodePaletteExpanded ? 'preserve-relative-size' : 'preserve-pixel-size'
+                    }
+                    onResize={(size) => setNodePaletteExpanded(size.inPixels > 48)}
+                  >
+                    <NodePalette
+                      onAdd={addFromPalette}
+                      expanded={nodePaletteExpanded}
+                      onExpandedChange={(expanded) => {
+                        if (!expanded) {
+                          setNodePaletteExpanded(false);
+                          nodePalettePanelRef.current?.collapse();
+                          return;
+                        }
+
+                        setNodePaletteExpanded(true);
+                        setExplorerExpanded(false);
+                        explorerPanelRef.current?.collapse();
+                        nodePalettePanelRef.current?.expand();
+                        nodePalettePanelRef.current?.resize('100%');
+                      }}
+                    />
+                  </Panel>
+
+                  <Panel id="sidebar-fill-panel" defaultSize="1px" minSize="0px" aria-hidden />
+                </Group>
               </aside>
             </Panel>
             <ResizeHandle orientation="horizontal" />
@@ -314,18 +427,40 @@ export function Phase2WorkspacePage() {
               </section>
             </Panel>
             <ResizeHandle orientation="horizontal" />
-            <Panel defaultSize="22%" minSize="18%" maxSize="36%">
-              <NodeInspector
-                node={selectedNode}
-                issues={issues}
-                execute={execute}
-                onDuplicate={() => selectedNode && duplicateNode(selectedNode.id)}
-                onDelete={() => {
-                  if (!selectedNode) return;
-                  execute({ type: 'node.remove', payload: { nodeId: selectedNode.id } });
-                  selectNode(null);
-                }}
-              />
+            <Panel
+              id="inspector-panel"
+              panelRef={inspectorPanelRef}
+              defaultSize="22%"
+              minSize="18%"
+              maxSize="36%"
+              collapsedSize="38px"
+              collapsible
+              onResize={(size) => setInspectorCollapsed(size.inPixels <= 48)}
+            >
+              {inspectorCollapsed ? (
+                <button
+                  type="button"
+                  onClick={() => inspectorPanelRef.current?.expand()}
+                  aria-label="Expand Inspector"
+                  title="Expand Inspector"
+                  className="flex h-full w-full flex-col items-center gap-2 bg-panel py-2 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+                >
+                  <PanelRightOpen className="size-4 shrink-0" />
+                </button>
+              ) : (
+                <NodeInspector
+                  node={selectedNode}
+                  issues={issues}
+                  execute={execute}
+                  onDuplicate={() => selectedNode && duplicateNode(selectedNode.id)}
+                  onDelete={() => {
+                    if (!selectedNode) return;
+                    execute({ type: 'node.remove', payload: { nodeId: selectedNode.id } });
+                    selectNode(null);
+                  }}
+                  onCollapse={() => inspectorPanelRef.current?.collapse()}
+                />
+              )}
             </Panel>
           </Group>
         </Panel>

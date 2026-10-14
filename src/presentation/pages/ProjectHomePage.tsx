@@ -46,10 +46,7 @@ export function ProjectHomePage() {
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-10 lg:px-10">
         <section className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
           <div>
-            <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-              <span className="size-1.5 rounded-full bg-primary" /> Project lifecycle · Phase 1
-            </div>
-            <h1 className="max-w-2xl text-3xl font-semibold tracking-tight md:text-4xl">
+            <h1 className="max-w-3xl text-3xl font-semibold tracking-tight md:text-4xl">
               Build Android automation as a visual system.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -59,10 +56,13 @@ export function ProjectHomePage() {
           </div>
           <div className="flex gap-2">
             <Button variant="outline" onClick={handleOpen} disabled={busy}>
-              <FolderOpen /> {status === 'opening' ? 'Opening…' : 'Open project'}
+              <FolderOpen />{' '}
+              <span className="text-sm font-medium">
+                {status === 'opening' ? 'Opening…' : 'Open project'}{' '}
+              </span>
             </Button>
             <Button onClick={() => setCreateDialogOpen(true)} disabled={busy}>
-              <Plus /> New project
+              <Plus /> <span className="text-sm font-medium">New project</span>
             </Button>
           </div>
         </section>
@@ -79,10 +79,8 @@ export function ProjectHomePage() {
         <section className="grid gap-4 lg:grid-cols-[1.45fr_0.55fr]">
           <article className="overflow-hidden rounded-xl border border-border bg-card shadow-xl shadow-black/10">
             <div className="flex items-center justify-between border-b border-border px-5 py-4">
-              <div>
-                <h2 className="text-sm font-semibold">Recent projects</h2>
-                <p className="mt-1 text-xs text-muted-foreground">Current Studio session</p>
-              </div>
+              <h2 className="text-sm font-semibold">Recent projects</h2>
+
               <span className="rounded-md bg-secondary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
                 {recentProjects.length}
               </span>
@@ -117,7 +115,7 @@ export function ProjectHomePage() {
                     onClick={() => handleRecent(project.location.id)}
                     className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-accent"
                   >
-                    <div className="grid size-9 place-items-center rounded-lg bg-secondary text-primary">
+                    <div className="grid size-9 place-items-center rounded-lg bg-secondary text-cyan-400">
                       <Workflow className="size-4" />
                     </div>
                     <div className="min-w-0 flex-1">
@@ -135,7 +133,7 @@ export function ProjectHomePage() {
             )}
           </article>
           <aside className="rounded-xl border border-border bg-card p-5">
-            <p className="text-xs font-medium uppercase tracking-[0.18em] text-primary">
+            <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-400">
               Project contract
             </p>
             <h2 className="mt-3 text-lg font-semibold">Safe by default</h2>
@@ -149,7 +147,7 @@ export function ProjectHomePage() {
                   key={item}
                   className="flex items-center gap-3 text-xs text-secondary-foreground"
                 >
-                  <span className="grid size-6 place-items-center rounded-md border border-border bg-secondary font-mono text-[10px] text-primary">
+                  <span className="grid size-6 place-items-center rounded-md border border-border bg-secondary font-mono text-[10px] text-cyan-400">
                     {String(index + 1).padStart(2, '0')}
                   </span>
                   {item}

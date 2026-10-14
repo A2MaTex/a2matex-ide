@@ -22,7 +22,7 @@ export function ProblemsPanel({ issues, revision, savedRevision }: ProblemsPanel
 
   return (
     <section className="flex h-full flex-col bg-panel" aria-label="Problems and output panel">
-      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-2">
+      <div className="flex h-9 shrink-0 items-center gap-1 border-b border-border px-2 text-sm font-medium">
         {tabs.map((tab) => (
           <button
             key={tab.id}
