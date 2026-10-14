@@ -104,7 +104,7 @@ export function NodeInspector({
         <p className="mt-3 text-xs leading-4 text-muted-foreground">{definition.description}</p>
         <div className="mt-3 flex gap-1 text-sm">
           <Button size="sm" variant="ghost" onClick={onDuplicate}>
-            <Copy/> Duplicate
+            <Copy /> Duplicate
           </Button>
           <Button size="sm" variant="ghost" onClick={onDelete}>
             <Trash2 /> Delete
@@ -123,7 +123,7 @@ export function NodeInspector({
               'mt-2 w-full rounded-md border bg-background px-2.5 text-xs outline-none focus:border-primary ' +
               (fieldIssues.length > 0 ? 'border-destructive' : 'border-border');
             return (
-              <div key={name} className='text-sm'>
+              <div key={name} className="text-sm">
                 <label htmlFor={'property-' + name} className="text-xs font-medium">
                   {property.title}
                 </label>

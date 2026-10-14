@@ -69,11 +69,13 @@ export function CreateProjectDialog({
             <div className="mt-6 flex justify-end gap-2">
               <Dialog.Close asChild>
                 <Button type="button" variant="ghost" disabled={busy}>
-                  <span className='text-sm font-medium'>Cancel</span>
+                  <span className="text-sm font-medium">Cancel</span>
                 </Button>
               </Dialog.Close>
               <Button type="submit" disabled={busy || !name.trim()}>
-               <span className='text-sm font-medium'>{busy ? 'Creating…' : 'Choose folder & create'}</span> 
+                <span className="text-sm font-medium">
+                  {busy ? 'Creating…' : 'Choose folder & create'}
+                </span>
               </Button>
             </div>
           </form>
