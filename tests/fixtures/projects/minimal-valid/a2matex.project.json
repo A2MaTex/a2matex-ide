@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "projectId": "fixture-minimal-v1",
+  "name": "Minimal automation",
+  "version": "0.1.0",
+  "entryWorkflow": "workflows/main.workflow.json",
+  "minimumRuntimeVersion": "0.1.0",
+  "workflows": ["workflows/main.workflow.json"],
+  "assets": [],
+  "permissions": [],
+  "environment": []
+}

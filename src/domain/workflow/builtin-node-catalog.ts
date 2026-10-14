@@ -1,0 +1,149 @@
+import type { JsonValue } from '../../shared/types/json-value.js';
+import type { NodeDefinition } from './node-definition.js';
+
+const flowInput = {
+  name: 'in',
+  label: 'In',
+  direction: 'input',
+  kind: 'control',
+  valueType: 'flow',
+  cardinality: 'one',
+  required: true,
+} as const;
+
+const flowOutput = {
+  name: 'next',
+  label: 'Next',
+  direction: 'output',
+  kind: 'control',
+  valueType: 'flow',
+  cardinality: 'one',
+} as const;
+
+export const BUILTIN_NODE_CATALOG: readonly NodeDefinition[] = [
+  {
+    type: 'trigger.start',
+    version: 1,
+    displayName: 'Start',
+    description: 'Starts the entry workflow.',
+    category: 'Triggers',
+    icon: 'play',
+    inputs: [],
+    outputs: [flowOutput],
+    properties: { type: 'object', properties: {} },
+    requiredCapabilities: [],
+    requiredPermissions: [],
+    runtimeHandler: 'builtin.trigger.start.v1',
+  },
+  {
+    type: 'flow.delay',
+    version: 1,
+    displayName: 'Delay',
+    description: 'Waits before continuing to the next node.',
+    category: 'Flow',
+    icon: 'timer',
+    inputs: [flowInput],
+    outputs: [flowOutput],
+    properties: {
+      type: 'object',
+      required: ['durationMs'],
+      properties: {
+        durationMs: {
+          type: 'integer',
+          title: 'Duration',
+          description: 'Delay duration in milliseconds.',
+          default: 1000,
+          minimum: 0,
+          maximum: 3_600_000,
+          ui: { control: 'input', group: 'Timing', order: 1, placeholder: '1000' },
+        },
+      },
+    },
+    requiredCapabilities: ['timer'],
+    requiredPermissions: [],
+    runtimeHandler: 'builtin.flow.delay.v1',
+  },
+  {
+    type: 'android.tap',
+    version: 1,
+    displayName: 'Tap',
+    description: 'Taps a screen coordinate on the selected Android device.',
+    category: 'Android',
+    icon: 'mouse-pointer-click',
+    inputs: [flowInput],
+    outputs: [flowOutput],
+    properties: {
+      type: 'object',
+      required: ['x', 'y'],
+      properties: {
+        x: {
+          type: 'integer',
+          title: 'X coordinate',
+          default: 0,
+          minimum: 0,
+          ui: { control: 'input', group: 'Position', order: 1, placeholder: '0' },
+        },
+        y: {
+          type: 'integer',
+          title: 'Y coordinate',
+          default: 0,
+          minimum: 0,
+          ui: { control: 'input', group: 'Position', order: 2, placeholder: '0' },
+        },
+      },
+    },
+    requiredCapabilities: ['android.device', 'android.input'],
+    requiredPermissions: ['android.input'],
+    runtimeHandler: 'builtin.android.tap.v1',
+  },
+  {
+    type: 'debug.log',
+    version: 1,
+    displayName: 'Log',
+    description: 'Writes a structured message to the runtime output.',
+    category: 'Debug',
+    icon: 'message-square-text',
+    inputs: [flowInput],
+    outputs: [flowOutput],
+    properties: {
+      type: 'object',
+      required: ['message', 'level'],
+      properties: {
+        message: {
+          type: 'string',
+          title: 'Message',
+          default: 'Hello from A2MaTeX',
+          ui: { control: 'textarea', group: 'Log', order: 1, placeholder: 'Message' },
+        },
+        level: {
+          type: 'string',
+          title: 'Level',
+          default: 'info',
+          enum: ['info', 'warning', 'error'],
+          ui: { control: 'select', group: 'Log', order: 2 },
+        },
+      },
+    },
+    requiredCapabilities: ['structured-log'],
+    requiredPermissions: [],
+    runtimeHandler: 'builtin.debug.log.v1',
+  },
+];
+
+export function findNodeDefinition(
+  type: string,
+  version: number,
+  catalog: readonly NodeDefinition[] = BUILTIN_NODE_CATALOG,
+) {
+  return catalog.find((definition) => definition.type === type && definition.version === version);
+}
+
+export function defaultParamsFor(definition: NodeDefinition): Record<string, JsonValue> {
+  const params: Record<string, JsonValue> = {};
+  for (const [name, property] of Object.entries(definition.properties.properties)) {
+    if (property.default !== undefined) {
+      params[name] = structuredClone(property.default);
+    }
+  }
+  return params;
+}
