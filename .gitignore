@@ -12,6 +12,9 @@ dist
 dist-ssr
 dist-electron
 *.local
+.env
+.env.*
+!.env.example
 
 # Editor directories and files
 .vscode/*
@@ -24,4 +27,4 @@ dist-electron
 *.sln
 *.sw?
 
-implementation
+test-results

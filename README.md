@@ -87,3 +87,8 @@ Trên Linux headless:
 ```bash
 xvfb-run -a npm run test:e2e:run
 ```
+
+## Tài liệu
+
+- [`docs/`](docs/README.md): requirements, thiết kế, kế hoạch và decision log của project.
+- [`specs/`](specs/README.md): kiến trúc chuẩn tắc và ADR chi phối implementation.
