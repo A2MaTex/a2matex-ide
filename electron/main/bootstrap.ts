@@ -5,6 +5,8 @@ import { app, BrowserWindow, session } from 'electron';
 import { createAuthSessionService } from './auth/create-auth-session-service.js';
 import { registerAuthHandlers } from './ipc/register-auth-handlers.js';
 import { registerProjectHandlers } from './ipc/register-project-handlers.js';
+import { registerNodeCatalogHandlers } from './ipc/register-node-catalog-handlers.js';
+import { createNodeCatalogService } from './catalog/create-node-catalog-service.js';
 import { registerSystemHandlers } from './ipc/register-system-handlers.js';
 import { logMain } from './logger.js';
 
@@ -49,11 +51,20 @@ app.whenReady().then(() => {
     callback(false);
   });
   registerSystemHandlers();
-  registerAuthHandlers(
-    createAuthSessionService({
-      appPath: app.getAppPath(),
-      userDataPath: app.getPath('userData'),
+  const appPath = app.getAppPath();
+  const userDataPath = app.getPath('userData');
+  const auth = createAuthSessionService({
+    appPath,
+    userDataPath,
+    isPackaged: app.isPackaged,
+  });
+  registerAuthHandlers(auth);
+  registerNodeCatalogHandlers(
+    createNodeCatalogService({
+      appPath,
+      userDataPath,
       isPackaged: app.isPackaged,
+      auth,
     }),
   );
   registerProjectHandlers();
