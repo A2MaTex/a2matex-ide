@@ -1,5 +1,4 @@
-import type { JsonValue } from '../../shared/types/json-value.js';
-import type { NodeDefinition } from './node-definition.js';
+import type { NodeDefinition } from '@domain/workflow/node-definition';
 
 const flowInput = {
   name: 'in',
@@ -20,7 +19,7 @@ const flowOutput = {
   cardinality: 'one',
 } as const;
 
-export const BUILTIN_NODE_CATALOG: readonly NodeDefinition[] = [
+export const TEST_NODE_CATALOG: readonly NodeDefinition[] = [
   {
     type: 'trigger.start',
     version: 1,
@@ -129,21 +128,3 @@ export const BUILTIN_NODE_CATALOG: readonly NodeDefinition[] = [
     runtimeHandler: 'builtin.debug.log.v1',
   },
 ];
-
-export function findNodeDefinition(
-  type: string,
-  version: number,
-  catalog: readonly NodeDefinition[] = BUILTIN_NODE_CATALOG,
-) {
-  return catalog.find((definition) => definition.type === type && definition.version === version);
-}
-
-export function defaultParamsFor(definition: NodeDefinition): Record<string, JsonValue> {
-  const params: Record<string, JsonValue> = {};
-  for (const [name, property] of Object.entries(definition.properties.properties)) {
-    if (property.default !== undefined) {
-      params[name] = structuredClone(property.default);
-    }
-  }
-  return params;
-}

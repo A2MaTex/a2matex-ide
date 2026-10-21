@@ -1,8 +1,8 @@
 import { Copy, PanelRightClose, Settings2, Trash2 } from 'lucide-react';
 
 import type { WorkflowNode } from '@domain/project/project';
-import { findNodeDefinition } from '@domain/workflow/builtin-node-catalog';
-import type { PropertyDefinition } from '@domain/workflow/node-definition';
+import { findNodeDefinition } from '@domain/workflow/node-catalog';
+import type { NodeDefinition, PropertyDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import type { JsonValue } from '@shared/types/json-value';
@@ -11,6 +11,7 @@ import { Button } from '@presentation/components/ui/button';
 import { NodeIcon } from './node-icons';
 
 interface NodeInspectorProps {
+  catalog: readonly NodeDefinition[];
   node: WorkflowNode | null;
   issues: WorkflowIssue[];
   execute(command: WorkflowCommand): boolean;
@@ -47,6 +48,7 @@ function normalizeInput(value: string, property: PropertyDefinition): JsonValue 
 }
 
 export function NodeInspector({
+  catalog,
   node,
   issues,
   execute,
@@ -71,7 +73,7 @@ export function NodeInspector({
     );
   }
 
-  const definition = findNodeDefinition(node.type, node.nodeVersion);
+  const definition = findNodeDefinition(node.type, node.nodeVersion, catalog);
   if (!definition) {
     return (
       <section className="h-full bg-panel" aria-label="Node inspector">

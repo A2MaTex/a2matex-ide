@@ -1,10 +1,6 @@
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '../project/project.js';
 import type { JsonValue } from '../../shared/types/json-value.js';
-import {
-  BUILTIN_NODE_CATALOG,
-  defaultParamsFor,
-  findNodeDefinition,
-} from './builtin-node-catalog.js';
+import { defaultParamsFor, findNodeDefinition } from './node-catalog.js';
 import type { NodeDefinition, PortDefinition } from './node-definition.js';
 
 export type WorkflowCommand =
@@ -121,7 +117,7 @@ function wouldCreateCycle(workflow: WorkflowDocument, sourceNodeId: string, targ
 export function assertValidConnection(
   workflow: WorkflowDocument,
   edge: WorkflowEdge,
-  catalog: readonly NodeDefinition[] = BUILTIN_NODE_CATALOG,
+  catalog: readonly NodeDefinition[],
 ) {
   if (
     workflow.edges.some(
@@ -170,7 +166,7 @@ export function assertValidConnection(
 export function applyWorkflowCommand(
   workflow: WorkflowDocument,
   command: WorkflowCommand,
-  catalog: readonly NodeDefinition[] = BUILTIN_NODE_CATALOG,
+  catalog: readonly NodeDefinition[],
 ): WorkflowDocument {
   switch (command.type) {
     case 'node.add': {

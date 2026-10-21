@@ -21,6 +21,7 @@ import {
 } from '@application/project/project-use-cases';
 import { editProjectWorkflow } from '@application/workflow/edit-workflow';
 import type { ProjectDocument } from '@domain/project/project';
+import type { NodeDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 
 export type ProjectOperationStatus = 'creating' | 'idle' | 'opening' | 'ready' | 'saving';
@@ -44,7 +45,11 @@ export interface ProjectStoreState {
   save(): Promise<void>;
   saveAs(): Promise<void>;
   updateProjectName(name: string): void;
-  executeWorkflowCommand(workflowPath: string, command: WorkflowCommand): boolean;
+  executeWorkflowCommand(
+    workflowPath: string,
+    command: WorkflowCommand,
+    catalog: readonly NodeDefinition[],
+  ): boolean;
   undo(): void;
   redo(): void;
   clearCommandError(): void;
@@ -213,7 +218,7 @@ export function createProjectStore(repository: ProjectRepository) {
         };
       });
     },
-    executeWorkflowCommand(workflowPath, command) {
+    executeWorkflowCommand(workflowPath, command, catalog) {
       let applied = false;
       set((state) => {
         if (!state.session) return state;
@@ -222,6 +227,7 @@ export function createProjectStore(repository: ProjectRepository) {
             state.session.snapshot.document,
             workflowPath,
             command,
+            catalog,
           );
           applied = true;
           return { ...commitDocument(state, document), error: null };

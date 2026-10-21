@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import { isProjectDirty } from '@application/project/project-session';
 import { createEmptyProjectDocument } from '@domain/project/project-factory';
+import { TEST_NODE_CATALOG } from '../fixtures/node-catalog';
 import { applyWorkflowCommand } from '@domain/workflow/workflow-commands';
 import { InMemoryProjectRepository } from '@infrastructure/persistence/in-memory-project-repository';
 import {
@@ -16,16 +17,20 @@ describe('React Flow adapter', () => {
     const project = createEmptyProjectDocument('project-1', 'Adapter test');
     const path = project.manifest.entryWorkflow;
     let workflow = project.workflows[path];
-    workflow = applyWorkflowCommand(workflow, {
-      type: 'node.add',
-      payload: {
-        nodeId: 'start',
-        nodeType: 'trigger.start',
-        nodeVersion: 1,
-        position: { x: 10, y: 20 },
+    workflow = applyWorkflowCommand(
+      workflow,
+      {
+        type: 'node.add',
+        payload: {
+          nodeId: 'start',
+          nodeType: 'trigger.start',
+          nodeVersion: 1,
+          position: { x: 10, y: 20 },
+        },
       },
-    });
-    const nodes = toReactFlowNodes(workflow, 'start', []);
+      TEST_NODE_CATALOG,
+    );
+    const nodes = toReactFlowNodes(workflow, 'start', [], TEST_NODE_CATALOG);
     const moved = applyReactFlowPositions(workflow, [
       { ...nodes[0], position: { x: 300, y: 180 } },
     ]);
@@ -51,28 +56,36 @@ describe('workflow history', () => {
     const path = created!.document.manifest.entryWorkflow;
 
     expect(
-      store.getState().executeWorkflowCommand(path, {
-        type: 'node.add',
-        payload: {
-          nodeId: 'start',
-          nodeType: 'trigger.start',
-          nodeVersion: 1,
-          position: { x: 0, y: 0 },
+      store.getState().executeWorkflowCommand(
+        path,
+        {
+          type: 'node.add',
+          payload: {
+            nodeId: 'start',
+            nodeType: 'trigger.start',
+            nodeVersion: 1,
+            position: { x: 0, y: 0 },
+          },
         },
-      }),
+        TEST_NODE_CATALOG,
+      ),
     ).toBe(true);
     await store.getState().save();
     expect(isProjectDirty(store.getState().session!)).toBe(false);
 
-    store.getState().executeWorkflowCommand(path, {
-      type: 'node.add',
-      payload: {
-        nodeId: 'delay',
-        nodeType: 'flow.delay',
-        nodeVersion: 1,
-        position: { x: 220, y: 0 },
+    store.getState().executeWorkflowCommand(
+      path,
+      {
+        type: 'node.add',
+        payload: {
+          nodeId: 'delay',
+          nodeType: 'flow.delay',
+          nodeVersion: 1,
+          position: { x: 220, y: 0 },
+        },
       },
-    });
+      TEST_NODE_CATALOG,
+    );
     expect(isProjectDirty(store.getState().session!)).toBe(true);
 
     store.getState().undo();

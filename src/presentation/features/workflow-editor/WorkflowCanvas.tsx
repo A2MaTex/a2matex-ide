@@ -12,7 +12,8 @@ import {
 import { useCallback, useEffect, useMemo, type DragEvent } from 'react';
 
 import type { WorkflowDocument } from '@domain/project/project';
-import { findNodeDefinition } from '@domain/workflow/builtin-node-catalog';
+import { findNodeDefinition } from '@domain/workflow/node-catalog';
+import type { NodeDefinition } from '@domain/workflow/node-definition';
 import { assertValidConnection, type WorkflowCommand } from '@domain/workflow/workflow-commands';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import { useEditorStore } from '@presentation/stores/editor-store';
@@ -22,6 +23,7 @@ import { NODE_DRAG_MIME } from './NodePalette';
 import { toReactFlowEdges, toReactFlowNodes, type AutomationFlowNode } from './react-flow-adapter';
 
 interface WorkflowCanvasProps {
+  catalog: readonly NodeDefinition[];
   workflow: WorkflowDocument;
   issues: WorkflowIssue[];
   execute(command: WorkflowCommand): boolean;
@@ -33,13 +35,13 @@ function nextNodeId(type: string) {
   return type.replace(/[^a-z0-9]+/gi, '-') + '-' + crypto.randomUUID().slice(0, 8);
 }
 
-export function WorkflowCanvas({ workflow, issues, execute }: WorkflowCanvasProps) {
+export function WorkflowCanvas({ catalog, workflow, issues, execute }: WorkflowCanvasProps) {
   const selectedNodeId = useEditorStore((state) => state.selectedNodeId);
   const selectNode = useEditorStore((state) => state.selectNode);
   const { fitView, screenToFlowPosition } = useReactFlow();
   const nodes = useMemo(
-    () => toReactFlowNodes(workflow, selectedNodeId, issues),
-    [issues, selectedNodeId, workflow],
+    () => toReactFlowNodes(workflow, selectedNodeId, issues, catalog),
+    [catalog, issues, selectedNodeId, workflow],
   );
   const edges = useMemo(() => toReactFlowEdges(workflow), [workflow]);
 
@@ -92,11 +94,15 @@ export function WorkflowCanvas({ workflow, issues, execute }: WorkflowCanvasProp
       return false;
     }
     try {
-      assertValidConnection(workflow, {
-        id: 'connection-preview',
-        source: { nodeId: connection.source, port: connection.sourceHandle },
-        target: { nodeId: connection.target, port: connection.targetHandle },
-      });
+      assertValidConnection(
+        workflow,
+        {
+          id: 'connection-preview',
+          source: { nodeId: connection.source, port: connection.sourceHandle },
+          target: { nodeId: connection.target, port: connection.targetHandle },
+        },
+        catalog,
+      );
       return true;
     } catch {
       return false;
@@ -108,7 +114,7 @@ export function WorkflowCanvas({ workflow, issues, execute }: WorkflowCanvasProp
     const value = event.dataTransfer.getData(NODE_DRAG_MIME);
     if (!value) return;
     const payload = JSON.parse(value) as { type?: string; version?: number };
-    const definition = findNodeDefinition(payload.type ?? '', payload.version ?? 0);
+    const definition = findNodeDefinition(payload.type ?? '', payload.version ?? 0, catalog);
     if (!definition) return;
     const position = screenToFlowPosition({ x: event.clientX, y: event.clientY });
     addNodeAt(definition.type, definition.version, {

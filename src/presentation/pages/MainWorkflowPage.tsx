@@ -16,6 +16,8 @@ import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ReactFlowProvider } from '@xyflow/react';
 
+import { toWorkflowNodeCatalog } from '@application/node-catalog/to-workflow-node-catalog';
+import { DEFAULT_NODE_CATALOG_RUNTIME_VERSION } from '@domain/node-catalog/node-catalog';
 import type { NodeDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import { validateWorkflow } from '@domain/workflow/workflow-validator';
@@ -87,10 +89,55 @@ export function MainWorkflowPage() {
   const [workflowsExpanded, setWorkflowsExpanded] = useState(true);
   const [nodePaletteExpanded, setNodePaletteExpanded] = useState(true);
   const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [nodeCatalog, setNodeCatalog] = useState<NodeDefinition[]>([]);
+  const [nodeCatalogStatus, setNodeCatalogStatus] = useState<'loading' | 'ready' | 'error'>(
+    'loading',
+  );
+  const [nodeCatalogError, setNodeCatalogError] = useState<string | null>(null);
   const explorerPanelRef = usePanelRef();
   const nodePalettePanelRef = usePanelRef();
   const inspectorPanelRef = usePanelRef();
   useProjectCloseGuard(dirty);
+
+  const loadNodeCatalog = useCallback(async (refresh = false) => {
+    await Promise.resolve();
+    setNodeCatalogStatus('loading');
+    setNodeCatalog([]);
+    setNodeCatalogError(null);
+    if (!window.studioHost) {
+      setNodeCatalogStatus('error');
+      setNodeCatalogError('Node catalog is only available in the desktop app.');
+      return;
+    }
+
+    try {
+      const result = refresh
+        ? await window.studioHost.catalog.refresh(DEFAULT_NODE_CATALOG_RUNTIME_VERSION)
+        : await window.studioHost.catalog.load(DEFAULT_NODE_CATALOG_RUNTIME_VERSION);
+      if (!result.ok) {
+        setNodeCatalogStatus('error');
+        setNodeCatalogError(result.error.message);
+        return;
+      }
+
+      setNodeCatalog(toWorkflowNodeCatalog(result.value.nodes));
+      setNodeCatalogStatus('ready');
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Unable to load node catalog.';
+      const needsDesktopRestart = message.includes('No handler registered');
+      setNodeCatalogStatus('error');
+      setNodeCatalogError(
+        needsDesktopRestart
+          ? 'The desktop process is out of date. Restart the desktop app, then retry.'
+          : message,
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => void loadNodeCatalog(), 0);
+    return () => window.clearTimeout(timer);
+  }, [loadNodeCatalog]);
 
   const document = session?.snapshot.document;
   const workflowPath = document?.manifest.entryWorkflow ?? '';
@@ -100,13 +147,16 @@ export function MainWorkflowPage() {
     [document?.manifest.permissions],
   );
   const issues = useMemo(
-    () => (workflow ? validateWorkflow(workflow, undefined, permissionIds) : []),
-    [permissionIds, workflow],
+    () =>
+      workflow && nodeCatalogStatus === 'ready'
+        ? validateWorkflow(workflow, nodeCatalog, permissionIds)
+        : [],
+    [nodeCatalog, nodeCatalogStatus, permissionIds, workflow],
   );
   const execute = useCallback(
     (command: WorkflowCommand) =>
-      workflowPath ? executeWorkflowCommand(workflowPath, command) : false,
-    [executeWorkflowCommand, workflowPath],
+      workflowPath ? executeWorkflowCommand(workflowPath, command, nodeCatalog) : false,
+    [executeWorkflowCommand, nodeCatalog, workflowPath],
   );
 
   const duplicateNode = useCallback(
@@ -386,6 +436,10 @@ export function MainWorkflowPage() {
                     onResize={(size) => setNodePaletteExpanded(size.inPixels > 48)}
                   >
                     <NodePalette
+                      catalog={nodeCatalog}
+                      status={nodeCatalogStatus}
+                      error={nodeCatalogError}
+                      onRetry={() => void loadNodeCatalog(true)}
                       onAdd={addFromPalette}
                       expanded={nodePaletteExpanded}
                       onExpandedChange={(expanded) => {
@@ -421,7 +475,12 @@ export function MainWorkflowPage() {
                 </div>
                 <div className="min-h-0 flex-1">
                   <ReactFlowProvider>
-                    <WorkflowCanvas workflow={workflow} issues={issues} execute={execute} />
+                    <WorkflowCanvas
+                      catalog={nodeCatalog}
+                      workflow={workflow}
+                      issues={issues}
+                      execute={execute}
+                    />
                   </ReactFlowProvider>
                 </div>
               </section>
@@ -449,6 +508,7 @@ export function MainWorkflowPage() {
                 </button>
               ) : (
                 <NodeInspector
+                  catalog={nodeCatalog}
                   node={selectedNode}
                   issues={issues}
                   execute={execute}

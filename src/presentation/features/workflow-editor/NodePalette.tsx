@@ -1,7 +1,6 @@
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 
-import { BUILTIN_NODE_CATALOG } from '@domain/workflow/builtin-node-catalog';
 import type { NodeDefinition } from '@domain/workflow/node-definition';
 import { useEditorStore } from '@presentation/stores/editor-store';
 
@@ -10,21 +9,30 @@ import { NodeIcon } from './node-icons';
 export const NODE_DRAG_MIME = 'application/x-a2matex-node';
 
 interface NodePaletteProps {
+  catalog: readonly NodeDefinition[];
+  status: 'loading' | 'ready' | 'error';
+  error: string | null;
+  onRetry(): void;
   onAdd(definition: NodeDefinition): void;
   expanded: boolean;
   onExpandedChange(expanded: boolean): void;
 }
 
-const categories = [...new Set(BUILTIN_NODE_CATALOG.map((node) => node.category))];
-
-export function NodePalette({ onAdd, expanded, onExpandedChange }: NodePaletteProps) {
+export function NodePalette({
+  catalog,
+  status,
+  error,
+  onRetry,
+  onAdd,
+  expanded,
+  onExpandedChange,
+}: NodePaletteProps) {
   const query = useEditorStore((state) => state.paletteQuery);
   const setQuery = useEditorStore((state) => state.setPaletteQuery);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(
-    () => new Set(categories),
-  );
+  const categories = useMemo(() => [...new Set(catalog.map((node) => node.category))], [catalog]);
+  const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
   const normalizedQuery = query.trim().toLowerCase();
-  const matchingNodes = BUILTIN_NODE_CATALOG.filter(
+  const matchingNodes = catalog.filter(
     (node) =>
       !normalizedQuery ||
       node.displayName.toLowerCase().includes(normalizedQuery) ||
@@ -33,7 +41,7 @@ export function NodePalette({ onAdd, expanded, onExpandedChange }: NodePalettePr
   );
 
   const toggleCategory = (category: string) => {
-    setExpandedCategories((current) => {
+    setCollapsedCategories((current) => {
       const next = new Set(current);
       if (next.has(category)) next.delete(category);
       else next.add(category);
@@ -72,11 +80,28 @@ export function NodePalette({ onAdd, expanded, onExpandedChange }: NodePalettePr
           </label>
 
           <div className="mt-2 space-y-1">
+            {status === 'loading' ? (
+              <p className="px-2 py-4 text-center text-[10px] text-muted-foreground">
+                Loading node catalog…
+              </p>
+            ) : null}
+            {status === 'error' ? (
+              <div className="px-2 py-4 text-center text-[10px]">
+                <p className="text-destructive">{error ?? 'Unable to load node catalog.'}</p>
+                <button
+                  type="button"
+                  onClick={onRetry}
+                  className="mt-2 rounded border border-border px-2 py-1 text-foreground hover:bg-accent"
+                >
+                  Retry
+                </button>
+              </div>
+            ) : null}
             {categories.map((category) => {
               const nodes = matchingNodes.filter((node) => node.category === category);
               if (normalizedQuery && nodes.length === 0) return null;
 
-              const expanded = normalizedQuery ? true : expandedCategories.has(category);
+              const expanded = normalizedQuery ? true : !collapsedCategories.has(category);
               const contentId = `node-category-${category.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
 
               return (
@@ -136,7 +161,7 @@ export function NodePalette({ onAdd, expanded, onExpandedChange }: NodePalettePr
               );
             })}
 
-            {matchingNodes.length === 0 ? (
+            {status === 'ready' && matchingNodes.length === 0 ? (
               <p className="px-2 py-4 text-center text-[10px] text-muted-foreground">
                 No matching nodes
               </p>
