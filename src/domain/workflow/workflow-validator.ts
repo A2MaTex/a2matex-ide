@@ -1,5 +1,5 @@
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '../project/project.js';
-import { BUILTIN_NODE_CATALOG, findNodeDefinition } from './builtin-node-catalog.js';
+import { findNodeDefinition } from './node-catalog.js';
 import type { NodeDefinition, PropertyDefinition } from './node-definition.js';
 
 export interface WorkflowIssue {
@@ -161,7 +161,7 @@ function cycleNodeIds(workflow: WorkflowDocument) {
 
 export function validateWorkflow(
   workflow: WorkflowDocument,
-  catalog: readonly NodeDefinition[] = BUILTIN_NODE_CATALOG,
+  catalog: readonly NodeDefinition[],
   manifestPermissions: readonly string[] = [],
 ): WorkflowIssue[] {
   const issues: WorkflowIssue[] = [];
@@ -293,7 +293,7 @@ export function validateWorkflow(
 
 export function requiredPermissionsForWorkflow(
   workflow: WorkflowDocument,
-  catalog: readonly NodeDefinition[] = BUILTIN_NODE_CATALOG,
+  catalog: readonly NodeDefinition[],
 ) {
   return [
     ...new Set(

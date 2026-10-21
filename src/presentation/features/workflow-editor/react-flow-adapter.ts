@@ -1,8 +1,8 @@
 import type { Edge, Node } from '@xyflow/react';
 
 import type { WorkflowDocument } from '@domain/project/project';
-import { findNodeDefinition } from '@domain/workflow/builtin-node-catalog';
-import type { PortDefinition } from '@domain/workflow/node-definition';
+import { findNodeDefinition } from '@domain/workflow/node-catalog';
+import type { NodeDefinition, PortDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 
 export interface AutomationNodeData extends Record<string, unknown> {
@@ -21,9 +21,10 @@ export function toReactFlowNodes(
   workflow: WorkflowDocument,
   selectedNodeId: string | null,
   issues: readonly WorkflowIssue[],
+  catalog: readonly NodeDefinition[],
 ): AutomationFlowNode[] {
   return workflow.nodes.map((node) => {
-    const definition = findNodeDefinition(node.type, node.nodeVersion);
+    const definition = findNodeDefinition(node.type, node.nodeVersion, catalog);
     return {
       id: node.id,
       type: 'automation',

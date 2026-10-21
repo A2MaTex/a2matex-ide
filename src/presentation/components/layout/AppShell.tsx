@@ -3,11 +3,12 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@presentation/features/auth/use-auth';
 import { cn } from '@shared/utils/cn';
+import URL from '@/app/constants/url';
 
 const navItems = [
-  { to: '/projects', label: 'Projects', icon: FolderKanban },
-  { to: '/workspace/local-sandbox', label: 'Workspace', icon: Workflow },
-  { to: '/settings', label: 'Settings', icon: Settings },
+  { to: URL.ProjectHome, label: 'Projects', icon: FolderKanban },
+  { to: URL.LocalWorkspace, label: 'Workspace', icon: Workflow },
+  { to: URL.Settings, label: 'Settings', icon: Settings },
 ];
 
 export function AppShell() {
@@ -16,7 +17,7 @@ export function AppShell() {
 
   async function handleLogout() {
     await logout();
-    navigate('/login', { replace: true });
+    navigate(URL.Login, { replace: true });
   }
 
   return (
@@ -33,9 +34,9 @@ export function AppShell() {
               title={label}
               className={({ isActive }) =>
                 cn(
-                  'group/nav relative flex h-11 w-full shrink-0 items-center overflow-hidden rounded-lg text-xs font-medium text-muted-foreground outline-none transition-[background-color,border-color,color,box-shadow] hover:bg-accent/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring/70',
+                  'group/nav relative flex h-11 w-full shrink-0 items-center overflow-hidden rounded-lg text-xs font-medium text-muted-foreground outline-none hover:bg-accent/40 hover:text-foreground',
                   isActive
-                    ? 'nav-active text-cyan-300 shadow-[inset_0_0_6px_var(--color-brand-blue)]'
+                    ? 'text-cyan-400 bg-accent/40'
                     : undefined,
                 )
               }

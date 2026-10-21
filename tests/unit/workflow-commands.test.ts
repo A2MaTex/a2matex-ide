@@ -2,9 +2,18 @@ import { describe, expect, it } from 'vitest';
 
 import { editProjectWorkflow } from '@application/workflow/edit-workflow';
 import { createEmptyProjectDocument } from '@domain/project/project-factory';
+import { TEST_NODE_CATALOG } from '../fixtures/node-catalog';
 import type { WorkflowDocument } from '@domain/project/project';
-import { applyWorkflowCommand, WorkflowCommandError } from '@domain/workflow/workflow-commands';
+import {
+  applyWorkflowCommand as applyWorkflowCommandWithCatalog,
+  type WorkflowCommand,
+  WorkflowCommandError,
+} from '@domain/workflow/workflow-commands';
 import { validateWorkflow } from '@domain/workflow/workflow-validator';
+
+function applyWorkflowCommand(workflow: WorkflowDocument, command: WorkflowCommand) {
+  return applyWorkflowCommandWithCatalog(workflow, command, TEST_NODE_CATALOG);
+}
 
 function emptyWorkflow(): WorkflowDocument {
   return createEmptyProjectDocument('project-1', 'Workflow test').workflows[
@@ -49,7 +58,7 @@ describe('workflow commands', () => {
     ]);
     expect(workflow.nodes[1].params).toEqual({ durationMs: 1000 });
     expect(workflow.edges).toHaveLength(3);
-    expect(validateWorkflow(workflow, undefined, ['android.input'])).toEqual([]);
+    expect(validateWorkflow(workflow, TEST_NODE_CATALOG, ['android.input'])).toEqual([]);
   });
 
   it('rejects a connection that would create a cycle', () => {
@@ -85,15 +94,20 @@ describe('workflow commands', () => {
 
   it('derives manifest permissions from edited workflows', () => {
     const project = createEmptyProjectDocument('project-1', 'Permission test');
-    const edited = editProjectWorkflow(project, project.manifest.entryWorkflow, {
-      type: 'node.add',
-      payload: {
-        nodeId: 'tap',
-        nodeType: 'android.tap',
-        nodeVersion: 1,
-        position: { x: 0, y: 0 },
+    const edited = editProjectWorkflow(
+      project,
+      project.manifest.entryWorkflow,
+      {
+        type: 'node.add',
+        payload: {
+          nodeId: 'tap',
+          nodeType: 'android.tap',
+          nodeVersion: 1,
+          position: { x: 0, y: 0 },
+        },
       },
-    });
+      TEST_NODE_CATALOG,
+    );
 
     expect(edited.manifest.permissions).toEqual([
       { id: 'android.input', reason: 'Required by workflow node' },
@@ -109,7 +123,7 @@ describe('workflow validator', () => {
       payload: { nodeId: 'delay', changes: { durationMs: -1 } },
     });
 
-    const issues = validateWorkflow(workflow);
+    const issues = validateWorkflow(workflow, TEST_NODE_CATALOG);
 
     expect(issues.map((entry) => entry.code)).toEqual([
       'ENTRY_TRIGGER_COUNT',
