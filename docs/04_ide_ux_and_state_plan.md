@@ -34,19 +34,20 @@ trước khi redirect để tránh nháy onboarding/login.
 
 ## 3. Feature slices và trách nhiệm
 
-| Feature | Presentation responsibility | Application command/query |
-|---|---|---|
-| Onboarding | stepper, policy consent, workspace selection, finish/review | load/complete/review onboarding |
-| Login/Session | form, pending/error, logout, offline continuation | authenticate/restore/logout |
-| Catalog status | freshness banner, retry, last sync, empty/error | load/refresh catalog |
-| Project Explorer | tree, selection, context menu | create/rename/delete/open resource |
-| Node Palette | search, filter, drag payload | query catalog, create node command |
-| Workflow Canvas | map view, gestures, selection | graph edit commands |
-| Node Inspector | render schema controls | update params, validate node |
-| Code Editor | render generated/restricted source | generate/parse restricted code |
-| Problems | group/filter/navigate | query validation issues |
-| Output/Runtime | virtualized event rendering | subscribe/query run events |
-| Top Bar | command affordances/status | save/build/run/stop/publish use cases |
+| Feature                  | Presentation responsibility                                 | Application command/query             |
+| ------------------------ | ----------------------------------------------------------- | ------------------------------------- |
+| Onboarding               | stepper, policy consent, workspace selection, finish/review | load/complete/review onboarding       |
+| Login/Session            | form, pending/error, logout, offline continuation           | authenticate/restore/logout           |
+| Catalog status           | freshness banner, retry, last sync, empty/error             | load/refresh catalog                  |
+| Project Explorer         | tree, selection, context menu                               | create/rename/delete/open resource    |
+| Node Palette             | search, filter, drag payload                                | query catalog, create node command    |
+| Inputs and Test Profiles | input schema, local values, pin/mock, credential reference  | manage input schema/profile           |
+| Workflow Canvas          | map view, gestures, selection                               | graph edit commands                   |
+| Node Inspector           | render config, binding, retry/error controls từ schema      | update config/binding, validate node  |
+| Code Editor              | render generated/restricted source                          | generate/parse restricted code        |
+| Problems                 | group/filter/navigate                                       | query validation issues               |
+| Output/Runtime           | virtualized event rendering                                 | subscribe/query run events            |
+| Top Bar                  | command affordances/status                                  | save/build/run/stop/publish use cases |
 
 ## 4. State ownership
 
@@ -60,6 +61,7 @@ trước khi redirect để tránh nháy onboarding/login.
 - onboarding state/version và current policy manifest; persisted path authority vẫn ở main;
 - catalog snapshot gồm source/freshness/hash/fetchedAt;
 - run session aggregate;
+- workflow input schema, local test profiles và pinned/mock input references;
 - build/publish job state.
 
 ### Zustand editor session state
@@ -101,6 +103,13 @@ type WorkflowCommand =
 - Sau undo/redo, dirty state tính từ saved revision chứ không phải boolean set thủ công.
 
 ## 6. Interaction flows P0
+
+### Tạo project và test profile
+
+1. Chọn Blank Automation, Android Interaction, Monitor and Notify hoặc Collect Data to Sheet.
+2. Khai báo tên, mô tả, Runtime version, package Android mục tiêu và customer input schema.
+3. Studio tạo main workflow, asset area và test profile local không chứa secret thô.
+4. Credential được chọn bằng reference từ store tin cậy, không ghi vào profile/project.
 
 ### First-run onboarding và re-consent
 
@@ -179,11 +188,11 @@ thúc local session dù revoke request tới server bị timeout.
 2. `ConnectNodes` kiểm port, type, cardinality, duplicate/cycle rule.
 3. Rejected connection hiển thị reason; không tự tạo rồi xóa edge gây flicker.
 
-### Edit params
+### Edit config và binding
 
 1. Inspector resolve exact node definition version.
 2. Schema form giữ draft hợp lệ về UI shape.
-3. Command normalize value và cập nhật domain node.
+3. Command normalize value rồi cập nhật `params.config` hoặc `params.bindings` của domain node.
 4. Validation issue map tới `propertyPath` và form control.
 
 ### Run
@@ -192,6 +201,14 @@ thúc local session dù revoke request tới server bị timeout.
 2. Preflight hiển thị blocking errors/warnings.
 3. Khi running: disable incompatible edit hoặc đánh dấu edits thuộc next revision.
 4. Runtime event highlight node nhưng không override selection của user.
+
+### Chạy node đơn lẻ và Run from here
+
+- `Run selected node` dùng input được pin từ execution trước hoặc mock input đã validate.
+- `Run from here` yêu cầu mọi dependency đầu vào có giá trị và device state phù hợp.
+- UI gắn nhãn development partial run, cảnh báo kết quả có thể khác chạy từ Start và không dùng
+  partial run làm bằng chứng publish duy nhất.
+- Full workflow là luồng authoritative để kiểm tra branch, loop, capability và publish checklist.
 
 ## 7. Node visual states
 
@@ -224,6 +241,12 @@ Thiết kế phải dùng border/icon/badge/text, không chỉ màu. Runtime ove
 - Theo `runId`, sequence number và node execution.
 - Buffer/virtualization; backpressure hoặc truncation marker rõ ràng.
 
+### Execution Inspector
+
+Khi chọn một node execution, panel hiển thị input/output đã redact, duration, retry count, artifact
+hoặc screenshot, biến thay đổi, Runtime/connector error, branch tiếp theo, `sequence` và loop
+`iteration`. Node instance và node execution là hai identity khác nhau.
+
 ### Diagnostics
 
 - IDE/Runtime version, transport status, selected device, capability summary.
@@ -233,15 +256,15 @@ Thiết kế phải dùng border/icon/badge/text, không chỉ màu. Runtime ove
 
 P0 shortcuts:
 
-| Command | Shortcut gợi ý |
-|---|---|
-| Save | `Ctrl/Cmd+S` |
-| Undo/Redo | platform standard |
+| Command          | Shortcut gợi ý                    |
+| ---------------- | --------------------------------- |
+| Save             | `Ctrl/Cmd+S`                      |
+| Undo/Redo        | platform standard                 |
 | Delete selection | `Delete/Backspace` có focus guard |
-| Run | `F5` |
-| Stop | `Shift+F5` |
-| Search palette | `/` hoặc focus-specific shortcut |
-| Command palette | `Ctrl/Cmd+Shift+P` |
+| Run              | `F5`                              |
+| Stop             | `Shift+F5`                        |
+| Search palette   | `/` hoặc focus-specific shortcut  |
+| Command palette  | `Ctrl/Cmd+Shift+P`                |
 
 Shortcut không kích hoạt graph command khi đang gõ trong input/Monaco trừ command global an toàn. Command palette gọi cùng application command với menu/button.
 

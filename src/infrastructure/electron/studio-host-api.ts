@@ -5,30 +5,41 @@ import type {
   ProjectSnapshot,
   SaveProjectResult,
 } from '../../application/project/project-repository.js';
+import type {
+  AuthErrorCode,
+  LoginInput,
+  SessionState,
+} from '../../application/auth/auth-session.js';
 import type { HostInfo } from '../../application/system/host-gateway.js';
 
-export interface HostError {
-  code: ProjectErrorCode;
+export interface HostError<TCode extends string = string> {
+  code: TCode;
   message: string;
   retryable: boolean;
 }
 
-export type HostResult<T> = { ok: true; value: T } | { ok: false; error: HostError };
+export type HostResult<T, TCode extends string = string> =
+  { ok: true; value: T } | { ok: false; error: HostError<TCode> };
 
 export interface StudioHostApi {
   system: {
     getInfo(): Promise<HostInfo>;
   };
+  auth: {
+    restore(): Promise<HostResult<SessionState, AuthErrorCode>>;
+    login(input: LoginInput): Promise<HostResult<SessionState, AuthErrorCode>>;
+    logout(): Promise<HostResult<SessionState, AuthErrorCode>>;
+  };
   project: {
-    chooseCreateParent(): Promise<HostResult<ProjectLocation | null>>;
-    chooseOpenLocation(): Promise<HostResult<ProjectLocation | null>>;
-    chooseSaveAsLocation(): Promise<HostResult<ProjectLocation | null>>;
-    create(input: CreateProjectInput): Promise<HostResult<ProjectSnapshot>>;
-    open(location: ProjectLocation): Promise<HostResult<ProjectSnapshot>>;
-    save(snapshot: ProjectSnapshot): Promise<HostResult<SaveProjectResult>>;
+    chooseCreateParent(): Promise<HostResult<ProjectLocation | null, ProjectErrorCode>>;
+    chooseOpenLocation(): Promise<HostResult<ProjectLocation | null, ProjectErrorCode>>;
+    chooseSaveAsLocation(): Promise<HostResult<ProjectLocation | null, ProjectErrorCode>>;
+    create(input: CreateProjectInput): Promise<HostResult<ProjectSnapshot, ProjectErrorCode>>;
+    open(location: ProjectLocation): Promise<HostResult<ProjectSnapshot, ProjectErrorCode>>;
+    save(snapshot: ProjectSnapshot): Promise<HostResult<SaveProjectResult, ProjectErrorCode>>;
     saveAs(input: {
       snapshot: ProjectSnapshot;
       target: ProjectLocation;
-    }): Promise<HostResult<SaveProjectResult>>;
+    }): Promise<HostResult<SaveProjectResult, ProjectErrorCode>>;
   };
 }

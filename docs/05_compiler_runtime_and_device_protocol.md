@@ -34,12 +34,12 @@ tin rằng file do Studio tạo luôn hợp lệ, và không thực thi field kh
 
 ### 1.2 Ownership boundary
 
-| Studio/compiler | Runtime | ADB/emulator |
-|---|---|---|
-| Validate source và compile executable JSON | Validate IR, resolve handler và quản lý run | Cung cấp device transport/process |
-| Chọn logical `deviceId`, gửi start/stop | Map `deviceId` sang transport identity | Trả state/output/exit code |
-| Hiển thị event/error/source mapping | Discovery, authorization, locking, timeout, retry, cancellation | Không hiểu workflow/project |
-| Không tạo raw ADB command | Sở hữu ADB adapter và process invocation | Không được renderer gọi trực tiếp |
+| Studio/compiler                            | Runtime                                                         | ADB/emulator                      |
+| ------------------------------------------ | --------------------------------------------------------------- | --------------------------------- |
+| Validate source và compile executable JSON | Validate IR, resolve handler và quản lý run                     | Cung cấp device transport/process |
+| Chọn logical `deviceId`, gửi start/stop    | Map `deviceId` sang transport identity                          | Trả state/output/exit code        |
+| Hiển thị event/error/source mapping        | Discovery, authorization, locking, timeout, retry, cancellation | Không hiểu workflow/project       |
+| Không tạo raw ADB command                  | Sở hữu ADB adapter và process invocation                        | Không được renderer gọi trực tiếp |
 
 Studio không gửi chuỗi lệnh shell/cmd trong JSON. Node chỉ mang `handler` đã allow-list và params có
 schema; Runtime quyết định command/argv tương ứng.
@@ -118,7 +118,7 @@ Compatibility là explicit check; không bắt đầu run rồi mới hy vọng 
 
 ```ts
 export interface StartRunRequest {
-  requestId: string;               // idempotency/correlation
+  requestId: string; // idempotency/correlation
   artifact: ExecutableIrReference;
   entrypoint: string;
   deviceId: string;
@@ -131,6 +131,13 @@ export interface StartRunRequest {
 - Runtime cấp `runId`; mọi event mang `runId` + monotonic `sequence`.
 - Retry `start` cùng `requestId` không tạo duplicate run nếu request trước đã được nhận.
 - Credential reference được resolve tại trusted boundary; log/event không chứa secret value.
+
+### 5.1 Development partial run
+
+`Run selected node` và `Run from here` là mode development riêng, không giả thành full workflow.
+Request phải mang immutable compiled revision, selected instruction, pinned/mock inputs đã validate
+và explicit `developmentPartialRun=true`. Runtime vẫn kiểm capability, permission, device lock,
+timeout và handler schema. Full run từ entrypoint là bằng chứng authoritative cho publish.
 
 ## 6. Run state machine
 
@@ -170,6 +177,10 @@ export interface RuntimeEventBase {
 ```
 
 Node event cần `instructionId`; Studio dùng source map để map về node. Payload có size limit, typed encoding và redaction metadata.
+
+Node execution event tối thiểu còn có `nodeExecutionId`, attempt, duration, selected transition,
+`iteration?` và artifact reference. Input/output/variable diff chỉ được gửi theo debug policy,
+có type, truncation và redaction. `sequence` luôn tăng kể cả khi loop quay lại cùng instruction.
 
 ## 8. Error contract
 
@@ -297,14 +308,19 @@ Nếu Studio khởi động Runtime local:
 - crash loop backoff và diagnostics;
 - không để orphan process sau app exit ngoài policy.
 
-## 12. Debug semantics
+## 12. Debug và test semantics
 
-Phase đầu chỉ cần node-level trace/highlight. Pause/step/breakpoint chỉ bật khi handshake báo support.
+Phase đầu cần full run, node-level trace/highlight, chạy node đơn lẻ và `Run from here`. Pause,
+step và breakpoint chỉ bật khi handshake báo support.
 
+- Partial run chỉ dùng pinned output/mock input đã validate và luôn có cảnh báo khác full run.
 - Breakpoint lưu trong workspace/debug config, không đổi production workflow mặc định.
-- Inspect input/output phải có type, truncation và secret redaction.
+- Inspect input/output hiển thị type, duration, retry, selected branch, sequence/iteration,
+  truncation và secret redaction.
 - Edit trong lúc paused không hot-reload trừ khi capability và semantics được đặc tả.
 - Re-run dùng immutable compiled revision; UI hiển thị nếu working copy đã khác.
+- Một device execution chạy control flow tuần tự. Multi-device smoke tạo các run độc lập, mỗi run có
+  device lock, input profile và event sequence riêng.
 
 ## 13. Contract testing
 

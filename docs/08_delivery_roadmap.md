@@ -76,6 +76,10 @@ hardening. Đây là kế hoạch/proposal, không phải trạng thái implemen
 
 - Workflow graph commands + undo/redo.
 - Built-in catalog cho bốn node MVP.
+- Mở rộng theo hai lớp: vertical slice bốn node đã hoàn tất; catalog MVP mục tiêu chọn 27–35
+  system node từ flow/data, Android action, observation, connector và debug theo UAT.
+- If/Switch/error branch/Merge và Repeat/While/For Each qua bounded Loop Controller; không arbitrary
+  cycle hoặc parallel Android action trên cùng device.
 - React Flow mapper/canvas, palette search/category/drag.
 - Connect/delete/move/select/copy/duplicate cơ bản.
 - Schema-driven Inspector.
@@ -85,6 +89,7 @@ hardening. Đây là kế hoạch/proposal, không phải trạng thái implemen
 ### Acceptance gate
 
 - User tạo được `start → delay → tap → log` không sửa JSON.
+- Publisher không biết code tạo được workflow có input mapping, conditional branch và bounded loop bằng system node.
 - Connection/type/property/cycle error hiển thị tại node/field và Problems.
 - Undo/redo đúng sau drag và param edit.
 - Save/reopen không phụ thuộc React Flow serialization.
@@ -184,6 +189,7 @@ remain blocked by Q-011–Q-017.
 - Workspace preferences tách khỏi project source.
 - Project/node schema migrations đầu tiên bằng fixture.
 - Asset declaration/import và path/size policy.
+- Customer input schema, local test profile, pin/mock input và credential reference policy.
 - File watcher/conflict UX nếu hỗ trợ external edits; nếu chưa, explicit limitation.
 
 ### Acceptance gate
@@ -205,11 +211,16 @@ remain blocked by Q-011–Q-017.
   mapping, `shell=false`, timeout/cancel và bounded output.
 - Emulator readiness + device lock/concurrency state machine; capability-gated launch/stop nếu có.
 - Run/stop, ordered event stream và node execution overlay.
+- Development test mode cho selected node và `Run from here` bằng pinned/mock input đã validate;
+  full run vẫn là luồng authoritative.
+- Execution Inspector cho input/output đã redact, duration, retry, artifact, branch, sequence và
+  loop iteration.
 - Runtime crash/disconnect/cancel race handling.
 
 ### Acceptance gate
 
 - Workflow bốn node chạy trên fake Runtime và ít nhất một Android device target.
+- Selected-node/Run-from-here không bỏ qua permission, device lock, timeout hoặc handler validation.
 - Malformed/tampered executable JSON bị Runtime reject trước ADB; project/node không thể truyền raw
   command hoặc executable path.
 - Hai emulator không bị gửi nhầm command; offline/unauthorized/boot-not-ready và concurrent-run
@@ -218,7 +229,7 @@ remain blocked by Q-011–Q-017.
 - Stop chờ acknowledgement và trạng thái cuối chính xác.
 - Cùng IR fixture chạy qua Studio harness và consumer/Desktop harness.
 
-## 9. Phase 5 — Code và debug experience
+## 9. Phase 5 — Debug và restricted code view
 
 ### Deliverables
 
@@ -227,6 +238,7 @@ remain blocked by Q-011–Q-017.
 - Runtime logs virtualized, filtered, redacted.
 - Node-level breakpoint/pause/step chỉ nếu Runtime capabilities hỗ trợ.
 - Command palette và diagnostics/support bundle.
+- Code node không thuộc MVP; nếu mở sau MVP phải là JSON transform trong isolated runner có quota và capability deny-by-default.
 
 ### Acceptance gate
 
@@ -242,6 +254,7 @@ remain blocked by Q-011–Q-017.
 - Permission/capability derivation và release diff.
 - Signing mode đã chốt, dev/production separation.
 - Marketplace auth/profile, create draft, upload progress/retry, submit/status.
+- Cloud draft có thể sửa; submit tạo immutable workflow revision bind editor graph, input schema, IR, node lock, capability manifest, assets và test summary.
 - Developer authorization grant để test package.
 
 ### Acceptance gate
@@ -278,15 +291,15 @@ remain blocked by Q-011–Q-017.
 
 Sau Phase 0, có thể chia:
 
-| Stream | Trọng tâm | Contract chung |
-|---|---|---|
-| Core/Editor | graph, catalog, compiler, validation | project/node/IR schema |
-| Desktop/UI | shell, React Flow, Inspector, state | commands/view models/host API |
-| Onboarding/Release | first-run, policy state, workspace setup, installer | policy versions/userData/NSIS/signing |
-| Identity/Catalog | auth, token vault, remote DTO, cache/sync | session/catalog/Runtime-version contract |
-| Runtime/Device | protocol, process, handlers, ADB | Runtime contract/source map |
-| Platform | Marketplace/package/license/auth | package/API/authorization grant |
-| Quality/Security | fixtures, CI, E2E, threat tests | schemas/error codes/version matrix |
+| Stream             | Trọng tâm                                           | Contract chung                           |
+| ------------------ | --------------------------------------------------- | ---------------------------------------- |
+| Core/Editor        | graph, catalog, compiler, validation                | project/node/IR schema                   |
+| Desktop/UI         | shell, React Flow, Inspector, state                 | commands/view models/host API            |
+| Onboarding/Release | first-run, policy state, workspace setup, installer | policy versions/userData/NSIS/signing    |
+| Identity/Catalog   | auth, token vault, remote DTO, cache/sync           | session/catalog/Runtime-version contract |
+| Runtime/Device     | protocol, process, handlers, ADB                    | Runtime contract/source map              |
+| Platform           | Marketplace/package/license/auth                    | package/API/authorization grant          |
+| Quality/Security   | fixtures, CI, E2E, threat tests                     | schemas/error codes/version matrix       |
 
 Mỗi stream không tự tạo DTO trùng; schemas/contracts có owner và review cross-team.
 
@@ -306,6 +319,8 @@ Không chuyển phase khi:
 ## 14. Definition of MVP complete
 
 - Developer tạo/open/save project và thiết kế workflow bốn node.
+- Publisher cấu hình input/test profile và tạo workflow bằng system node; catalog MVP chọn 27–35 node ứng viên theo UAT.
+- Conditional branch, error policy, bounded loop, selected-node test và Run-from-here có semantics/test rõ ràng.
 - Developer login, nhận remote catalog phù hợp Runtime và tiếp tục authoring bằng last-known-good
   cache khi offline; reconnect bắt buộc revalidate.
 - Fresh install hoàn tất onboarding versioned, policy/workspace recovery hoạt động và local flag

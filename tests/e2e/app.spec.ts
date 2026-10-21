@@ -52,6 +52,20 @@ test('opens the Projects screen through an isolated renderer', async () => {
   });
 });
 
+test('signs out and signs back in through the guarded login route', async () => {
+  if (!electronApp) throw new Error('Electron did not launch');
+  const window = await electronApp.firstWindow();
+
+  await window.getByRole('button', { name: 'Sign out' }).click();
+  await expect(window.getByRole('heading', { name: 'Sign in to A2MaTeX Studio' })).toBeVisible();
+
+  await window.getByLabel('Account').fill('developer@example.com');
+  await window.getByLabel('Password', { exact: true }).fill('secret');
+  await window.getByRole('button', { name: 'Sign in' }).click();
+
+  await expect(window.getByRole('heading', { name: /build android automation/i })).toBeVisible();
+});
+
 test('authors, validates, saves, and reopens the four-node workflow', async () => {
   if (!electronApp) throw new Error('Electron did not launch');
   const window = await electronApp.firstWindow();

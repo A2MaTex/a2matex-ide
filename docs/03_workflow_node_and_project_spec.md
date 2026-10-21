@@ -15,18 +15,22 @@
 sample-automation/
 ├── a2matex.project.json
 ├── workflows/
-│   ├── main.workflow.json
-│   └── login.workflow.json
+│   └── main.workflow.json
+├── inputs/
+│   └── input.schema.json
 ├── assets/
 │   ├── images/
 │   └── data/
-├── src/                    # optional restricted A2MaTeX source
+├── test-profiles/          # local/dev only; không chứa secret thô
+│   ├── default.profile.json
+│   └── smoke.profile.json
 ├── tests/
 │   ├── fixtures/
 │   └── workflows/
 └── .a2matex/
     ├── workspace.json      # local UI state; không đóng gói
     ├── recovery/           # local draft; không đóng gói
+    ├── publish-history.json
     └── cache/              # generated; không commit/đóng gói
 ```
 
@@ -40,8 +44,9 @@ export interface ProjectManifest {
   projectId: string;
   name: string;
   description?: string;
-  version: string;                 // SemVer release version
-  entryWorkflow: string;           // project-relative workflow id/path
+  version: string; // SemVer release version
+  entryWorkflow: string; // project-relative workflow id/path
+  inputSchema: string; // project-relative customer input schema
   minimumRuntimeVersion: string;
   workflows: string[];
   assets: AssetDeclaration[];
@@ -63,18 +68,21 @@ Rules:
 
 ```ts
 export interface NodeDefinition {
-  type: string;                    // ví dụ android.tap
+  type: string; // ví dụ android.tap
   version: number;
   displayName: string;
   description: string;
   category: string;
-  icon: string;                    // catalog icon id, không phải React component
-  inputs: PortDefinition[];
-  outputs: PortDefinition[];
-  properties: PropertySchema;
+  icon: string; // catalog icon id, không phải React component
+  configSchema: JsonSchemaObject;
+  inputSchema: JsonSchemaObject;
+  outputSchema: JsonSchemaObject;
+  outputs: OutputPortDefinition[];
   requiredCapabilities: string[];
   requiredPermissions: string[];
   runtimeHandler: string;
+  defaultTimeoutMs: number;
+  supportedErrorPolicies: ErrorPolicyKind[];
   deprecation?: {
     message: string;
     replacement?: { type: string; version: number };
@@ -132,7 +140,7 @@ Quy tắc normalization:
 
 - `type` là opaque stable identifier; không parse các segment hoặc giới hạn theo ví dụ ngắn như
   `android.tap`.
-- `name → displayName`, `configSchema → properties`, `editorHints.icon → icon`; enum từ server
+- `name → displayName`, `configSchema → configSchema`, `editorHints.icon → icon`; enum từ server
   phải được map explicit, không cast mù.
 - Giữ `inputSchema`, `outputSchema`, timeout, error policies và capability sensitivity trong
   semantic model hoặc extension có type; không silently drop vì model hiện tại chưa có field.
@@ -164,6 +172,7 @@ export interface WorkflowDocument {
   name: string;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
+  variables: VariableDefinition[];
   layout: WorkflowLayout;
   metadata?: Record<string, JsonValue>;
 }
@@ -174,8 +183,23 @@ export interface WorkflowNode {
   nodeVersion: number;
   name?: string;
   disabled?: boolean;
-  params: Record<string, JsonValue>;
+  params: NodeParameters;
 }
+
+export interface NodeParameters {
+  config: Record<string, JsonValue>;
+  bindings: Record<string, DataBinding>;
+  timeoutMs?: number;
+  retryPolicy?: RetryPolicy;
+  errorPolicy?: ErrorPolicy;
+}
+
+export type DataBinding =
+  | { kind: 'literal'; value: JsonValue }
+  | { kind: 'input'; path: string }
+  | { kind: 'nodeOutput'; nodeId: string; path: string }
+  | { kind: 'variable'; name: string }
+  | { kind: 'expression'; expression: string };
 
 export interface WorkflowEdge {
   id: string;
@@ -190,6 +214,35 @@ export interface WorkflowLayout {
 ```
 
 Tách `layout` giúp compiler digest semantic graph mà không đổi khi kéo node. `JsonValue` phải loại `undefined`, function, class instance và cyclic object.
+
+### 5.1 Definition, instance, handler và execution
+
+- **Definition** do A2MaTeX cung cấp qua catalog.
+- **Instance** là node publisher đặt trong workflow.
+- **Handler** là implementation allow-listed trong Runtime.
+- **Execution** là một lần chạy instance trên một device; cùng instance trong loop có nhiều
+  execution với `sequence` và `iteration` khác nhau.
+
+`params.config`, `params.bindings`, execution context và output là bốn phần khác nhau. Ví dụ `Tap` có config
+chọn target mode/timeout, binding cho tọa độ động, context chứa device hiện tại và output chứa kết
+quả/thời gian. `params` chỉ là envelope có schema; không flatten config, binding, context và output vào một JSON tự do.
+
+### 5.2 Execution context
+
+Handler chỉ nhận context do Runtime cấp, không do publisher tự sửa:
+
+```ts
+interface NodeExecutionContext {
+  runGroupId: string;
+  executionId: string;
+  deviceId: string;
+  workflowInputs: Record<string, JsonValue>;
+  variables: Record<string, JsonValue>;
+  nodeOutputs: Record<string, JsonValue>;
+  capabilityGrant: CapabilityGrant;
+  cancellationSignal: CancellationSignal;
+}
+```
 
 ## 6. Port và type system tối thiểu
 
@@ -216,6 +269,39 @@ export interface PortDefinition {
 ```
 
 MVP có thể chỉ render control flow, nhưng format không nên khóa khả năng data edge. Compatibility phải là rule domain dùng chung cho canvas và compiler.
+
+### 6.1 Control edge và conditional branch
+
+Canvas MVP biểu diễn **control edge**. Output port có nhãn ổn định như `success`, `true`,
+`false`, `timeout` hoặc `error`; publisher không tự gõ tên branch tùy ý. If có hai nhánh,
+Switch có case theo thứ tự và luôn nên có `default`. Domain node chỉ có branch riêng khi kết quả đó
+thực sự làm thay đổi control flow.
+
+Error edge là tùy chọn vì mỗi node còn có `errorPolicy`: stop; retry rồi stop; retry rồi đi nhánh
+`error`; hoặc continue với default output nếu definition cho phép.
+
+### 6.2 Data binding
+
+MVP không bắt buộc vẽ data wire cho mọi field. Inspector cung cấp expression picker từ ba nguồn:
+
+```text
+Workflow Inputs
+Previous Node Outputs
+Variables
+```
+
+Binding vẫn được serialize, type-check và compile rõ ràng. Data edge có thể được thêm sau mà không
+đổi semantic model.
+
+### 6.3 Loop, merge và tuần tự trên một device
+
+Không cho arbitrary backward edge. Repeat, While và For Each phải đi qua Loop Controller có
+`maxIterations`, `maxDuration`, điều kiện/count và hành vi khi đạt giới hạn. Runtime luôn tăng
+`sequence`; execution trong loop ghi thêm `iteration`.
+
+Merge chỉ hợp nhất các nhánh loại trừ nhau, không chờ nhiều input. MVP không cho parallel Android
+action tùy ý trên cùng device; tại một thời điểm chỉ một node điều khiển thiết bị. Multi-device
+parallelism nằm ở cấp device execution.
 
 ## 7. Property schema và Inspector
 
@@ -252,7 +338,7 @@ Quy ước:
 
 - `secret: true`: lưu reference tới credential, không lưu value.
 - `expression: true`: chấp nhận literal hoặc expression AST/string theo syntax đã chốt.
-- Inspector update qua command `UpdateNodeParams`; không mutate React Flow node data trực tiếp.
+- Inspector update qua command `UpdateNodeParams` với payload phân biệt `config` và `binding`; không mutate React Flow node data trực tiếp.
 - Form hiển thị cả validation theo field và issue liên node/global.
 
 ## 8. Validation pipeline
@@ -274,7 +360,7 @@ Các rule P0:
 - Đúng một entry trigger cho entry workflow (trừ khi spec cho phép nhiều).
 - Không có required control/data input bị thiếu.
 - Edge type/cardinality hợp lệ; không duplicate edge bất hợp lệ.
-- Node params đúng schema.
+- Node config, binding và output reference đúng schema/type.
 - Cycle chỉ hợp lệ qua control node được catalog cho phép.
 - Node version tồn tại và Runtime hỗ trợ handler tương ứng.
 - Permission manifest bao phủ các permission thực tế được node yêu cầu.
@@ -282,16 +368,85 @@ Các rule P0:
 
 Issue phải có stable `code` và source path để Problems panel điều hướng được.
 
-## 9. Built-in node vertical slice
+## 9. Danh mục node MVP
 
-| Node | Params tối thiểu | Semantics |
-|---|---|---|
-| `trigger.start@1` | không | entry event, một control output |
-| `flow.delay@1` | `durationMs` | đợi có cancellation support |
-| `android.tap@1` | `x`, `y` hoặc selector strategy | cần device + input permission |
-| `debug.log@1` | `message`, `level` | phát structured log |
+Mục tiêu là một bộ primitive node có khả năng kết hợp cao. Vertical slice đầu tiên vẫn là
+`Start → Delay → Tap → Log`; MVP hoàn chỉnh chọn khoảng **27–35 node type** từ catalog dưới đây
+theo khả năng Runtime và UAT, không coi toàn bộ danh sách ứng viên là cam kết cùng lúc.
 
-Mỗi node cần fixture definition, valid/invalid workflow samples, compiler golden output và Runtime contract test.
+### 9.1 Flow-control và data nền tảng
+
+| Node                                     | Chức năng                           |
+| ---------------------------------------- | ----------------------------------- |
+| Start / End / Fail                       | Bắt đầu và kết thúc execution       |
+| Delay                                    | Chờ có hỗ trợ cancel                |
+| If / Switch / Merge                      | Rẽ nhánh và hợp nhất nhánh loại trừ |
+| Repeat / While / For Each                | Loop có giới hạn                    |
+| Set Variable                             | Cập nhật biến                       |
+| Compare                                  | So sánh dữ liệu                     |
+| Text Template                            | Ghép chuỗi từ binding               |
+| Parse JSON / Build Object / Get Property | Biến đổi JSON có schema             |
+| List Operations                          | Lấy, lọc, đếm item                  |
+| Date/Time / Random Value                 | Primitive dữ liệu có giới hạn       |
+
+### 9.2 Android action
+
+| Node                    | Chức năng                                          |
+| ----------------------- | -------------------------------------------------- |
+| Launch App / Stop App   | Quản lý app theo package allow-listed              |
+| Tap / Long Press        | Tương tác theo tọa độ, tỷ lệ, output hoặc selector |
+| Swipe / Scroll          | Điều hướng màn hình                                |
+| Input Text / Clear Text | Nhập và xóa nội dung                               |
+| Key Event               | Back, Home, Enter và key được phép                 |
+| Open URL/Deep Link      | Mở URI theo policy                                 |
+
+### 9.3 Android observation
+
+| Node                              | Chức năng                         |
+| --------------------------------- | --------------------------------- |
+| Screenshot                        | Chụp màn hình                     |
+| Get Current App                   | Đọc package/activity              |
+| Element Exists / Wait For Element | Kiểm tra hoặc chờ UI element      |
+| Get Element Text                  | Đọc text                          |
+| Find Image / Compare Screen       | Nhận diện ảnh/trạng thái màn hình |
+| Read Text/OCR                     | Đọc text từ vùng ảnh              |
+
+Ưu tiên `Element Exists` và `Wait For Element` trước OCR/image matching vì chi phí triển khai và
+tài nguyên thấp hơn.
+
+### 9.4 Connector, debug và test
+
+| Nhóm       | Node ứng viên                                                        |
+| ---------- | -------------------------------------------------------------------- |
+| Connector  | HTTP Request, Telegram Message, Google Sheets Append Row, Send Email |
+| Debug/test | Log, Assert, Save Artifact, Mock Output                              |
+
+Connector chỉ dùng credential reference; URL/domain và capability phải qua policy.
+
+### 9.5 Node Development Kit
+
+Quy trình thêm node:
+
+```text
+1. Khai báo NodeDefinition
+2. Viết Runtime Handler
+3. Khai báo config/input/output schema và branch
+4. Khai báo capability/permission
+5. Viết contract tests
+6. Registry tự nhận node
+7. Studio sinh palette, Inspector và tài liệu
+```
+
+`packages/node-sdk` nên cung cấp definition schema, field types, validation helpers, test harness,
+documentation generator và compatibility checker. Mỗi node có test cho config hợp lệ/sai,
+input-output, timeout, cancel, handler error, capability denied và migration khi có.
+
+### 9.6 Code node
+
+Code node không thuộc MVP. Trước đó phải có Set Variable, Compare, Text Template, Build Object, List
+Operations và Expression Editor. Nếu được bổ sung, Code node chỉ biến đổi JSON trong isolated
+runner có CPU/memory/time quota; không ADB, HTTP, filesystem, process, npm/dynamic import,
+credential hoặc Runtime internals.
 
 ## 10. Serialization, migration và compatibility
 
