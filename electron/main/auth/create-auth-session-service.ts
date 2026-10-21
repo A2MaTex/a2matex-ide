@@ -4,9 +4,14 @@ import {
   type AuthRemoteGateway,
   type SessionState,
 } from '../../../src/application/auth/auth-session.js';
-import { HttpAuthGateway } from '../adapters/auth/http-auth-gateway.js';
+import { createAuthApi } from '../api/auth-api.js';
+import { configureApiRequest } from '../api/request.js';
 import { SecureRefreshTokenVault } from '../adapters/auth/secure-refresh-token-vault.js';
 import { loadApiConfig } from '../config/api-config.js';
+
+export interface MainAuthClient extends AuthClient {
+  getAccessToken(): string | null;
+}
 
 class UnavailableAuthGateway implements AuthRemoteGateway {
   constructor(private readonly configurationError: unknown) {}
@@ -16,7 +21,7 @@ class UnavailableAuthGateway implements AuthRemoteGateway {
   }
 }
 
-class E2EAuthClient implements AuthClient {
+class E2EAuthClient implements MainAuthClient {
   private session: SessionState = {
     status: 'authenticated',
     account: 'E2E developer',
@@ -40,24 +45,25 @@ class E2EAuthClient implements AuthClient {
     this.session = { status: 'signed-out' };
     return Promise.resolve(this.session);
   }
+
+  getAccessToken(): string | null {
+    return this.session.status === 'authenticated' ? 'e2e-access-token' : null;
+  }
 }
 
 export function createAuthSessionService(input: {
   appPath: string;
   userDataPath: string;
   isPackaged: boolean;
-}) {
+}): MainAuthClient {
   if (process.env.A2MATEX_E2E === '1') return new E2EAuthClient();
 
   const vault = new SecureRefreshTokenVault(input.userDataPath);
 
   try {
     const config = loadApiConfig({ appPath: input.appPath, isPackaged: input.isPackaged });
-    return new AuthSessionService(
-      new HttpAuthGateway(config.baseUrl, config.timeoutMs),
-      vault,
-      config.baseUrl,
-    );
+    configureApiRequest(config.baseUrl, config.timeoutMs);
+    return new AuthSessionService(createAuthApi(), vault, config.baseUrl);
   } catch (error) {
     return new AuthSessionService(new UnavailableAuthGateway(error), vault, 'unconfigured');
   }
