@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2 } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import { useEditorStore, type BottomPanelTab } from '@presentation/stores/editor-store';
@@ -43,9 +43,9 @@ export function ProblemsPanel({ issues, revision, savedRevision }: ProblemsPanel
       <div className="min-h-0 flex-1 overflow-y-auto">
         {activeTab === 'problems' ? (
           issues.length === 0 ? (
-            <div className="flex items-center gap-2 px-4 py-3 text-[11px] text-success">
-              <CheckCircle2 className="size-4" /> No workflow problems detected.
-            </div>
+            <pre className="p-4 font-mono text-xs leading-5 text-muted-foreground">
+              No workflow problems detected.
+            </pre>
           ) : (
             <div className="divide-y divide-border">
               {issues.map((entry) => (
@@ -70,13 +70,13 @@ export function ProblemsPanel({ issues, revision, savedRevision }: ProblemsPanel
             </div>
           )
         ) : activeTab === 'output' ? (
-          <pre className="p-4 font-mono text-[10px] leading-5 text-muted-foreground">
+          <pre className="p-4 font-mono text-xs leading-5 text-muted-foreground">
             [editor] workflow revision {revision}
             {'\n'}
             [validator] {issues.length} issue(s)
           </pre>
         ) : (
-          <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 p-4 font-mono text-[10px]">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-5 gap-y-2 p-4 font-mono text-xs">
             <dt className="text-muted-foreground">Working revision</dt>
             <dd>{revision}</dd>
             <dt className="text-muted-foreground">Saved revision</dt>

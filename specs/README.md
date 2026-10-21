@@ -6,8 +6,7 @@ implement code. Requirements, thiết kế, test strategy, roadmap và decision 
 
 ## Implementation guide
 
-- [A2MaTeXStudio_Onboarding_Guide.md](A2MaTeXStudio_Onboarding_Guide.md) — hướng dẫn triển khai
-  download, Windows installer và first-run onboarding.
+- [Desktop onboarding và Windows distribution](adr/ADR-004-desktop-onboarding-and-windows-distribution.md) — ranh giới triển khai download, installer và first-run onboarding.
 
 ## Architecture Decision Records
 
@@ -22,14 +21,14 @@ implement code. Requirements, thiết kế, test strategy, roadmap và decision 
 
 ## Tài liệu hỗ trợ implementation
 
-- [Architecture và boundaries](../docs/02_ARCHITECTURE_AND_BOUNDARIES.md).
-- [Project, workflow và node](../docs/03_WORKFLOW_NODE_AND_PROJECT_SPEC.md).
-- [IDE UX và state](../docs/04_IDE_UX_AND_STATE_PLAN.md).
-- [Compiler, Runtime và device protocol](../docs/05_COMPILER_RUNTIME_AND_DEVICE_PROTOCOL.md).
-- [Package, publish và license](../docs/06_PACKAGE_PUBLISH_AND_LICENSE.md).
-- [Security, testing và observability](../docs/07_SECURITY_TESTING_AND_OBSERVABILITY.md).
-- [Delivery roadmap](../docs/08_DELIVERY_ROADMAP.md).
-- [Decisions và open questions](../docs/09_DECISIONS_AND_OPEN_QUESTIONS.md).
+- [Architecture và boundaries](../docs/02_architecture_and_boundaries.md).
+- [Project, workflow và node](../docs/03_workflow_node_and_project_spec.md).
+- [IDE UX và state](../docs/04_ide_ux_and_state_plan.md).
+- [Compiler, Runtime và device protocol](../docs/05_compiler_runtime_and_device_protocol.md).
+- [Package, publish và license](../docs/06_package_publish_and_license.md).
+- [Security, testing và observability](../docs/07_security_testing_and_observability.md).
+- [Delivery roadmap](../docs/08_delivery_roadmap.md).
+- [Decisions và open questions](../docs/09_decisions_and_open_questions.md).
 
 ## Cách sử dụng
 

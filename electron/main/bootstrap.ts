@@ -2,6 +2,8 @@ import path from 'node:path';
 
 import { app, BrowserWindow, session } from 'electron';
 
+import { createAuthSessionService } from './auth/create-auth-session-service.js';
+import { registerAuthHandlers } from './ipc/register-auth-handlers.js';
 import { registerProjectHandlers } from './ipc/register-project-handlers.js';
 import { registerSystemHandlers } from './ipc/register-system-handlers.js';
 import { logMain } from './logger.js';
@@ -47,6 +49,13 @@ app.whenReady().then(() => {
     callback(false);
   });
   registerSystemHandlers();
+  registerAuthHandlers(
+    createAuthSessionService({
+      appPath: app.getAppPath(),
+      userDataPath: app.getPath('userData'),
+      isPackaged: app.isPackaged,
+    }),
+  );
   registerProjectHandlers();
   createWindow();
   logMain('info', 'app_ready', { packaged: app.isPackaged });

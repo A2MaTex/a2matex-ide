@@ -5,7 +5,7 @@
 
 ## 1. Mục tiêu sản phẩm
 
-A2MaTeX Studio giúp developer xây dựng automation app cho Android bằng workflow trực quan, kiểm thử bằng đúng Runtime sẽ dùng ở môi trường người dùng, rồi đóng gói/publish vào hệ sinh thái A2MaTeX.
+A2MaTeX Studio giúp publisher xây dựng automation app cho Android bằng workflow trực quan, kiểm thử bằng đúng Runtime sẽ dùng ở môi trường người dùng, rồi đóng gói/publish vào hệ sinh thái A2MaTeX.
 
 Giá trị cốt lõi của Studio:
 
@@ -15,18 +15,34 @@ Giá trị cốt lõi của Studio:
 - package tái lập, version hóa và có thể xác minh;
 - giới hạn rõ quyền truy cập thiết bị, filesystem và network.
 
+Đối tượng chính là **publisher/automation builder** hiểu quy trình và màn hình Android cần thao tác
+nhưng không bắt buộc biết JavaScript, ADB hay kiến trúc workflow engine. Định hướng sản phẩm là
+**system-node-first**: ưu tiên node khai báo, form trực quan và expression picker; Code node chỉ là
+phần mở rộng có kiểm soát sau khi các primitive node không còn đáp ứng.
+
 ## 2. Actor và trách nhiệm
 
-| Actor | Mục tiêu | Ngoài phạm vi của Studio |
-|---|---|---|
-| Automation developer | Tạo, test, build, publish app | Mua app như end-user |
-| Identity/Catalog API | Xác thực developer, cấp token và trả node catalog phù hợp Runtime | Giữ editor state hoặc project source |
-| Reviewer/Publisher | Kiểm tra metadata, version, quyền và release | Chỉnh workflow thay developer |
-| Runtime Engine | Validate/execute IR, phát event, điều khiển device | Render editor UI |
-| Marketplace API | Nhận package/metadata, quản lý release | Compile workflow trong IDE |
-| Desktop Client | Kiểm license, tải package, gọi Runtime | Authoring workflow |
-| Android device | Nhận thao tác qua adapter được hỗ trợ | Hiểu workflow/package |
-| Release/Policy owner | Phát hành installer, version EULA/Terms/Privacy và quyết định re-consent | Tự suy diễn consent từ local flag |
+| Actor                        | Mục tiêu                                                                 | Ngoài phạm vi của Studio             |
+| ---------------------------- | ------------------------------------------------------------------------ | ------------------------------------ |
+| Automation publisher/builder | Tạo, test, build và submit automation product                            | Mua app như end-user                 |
+| Identity/Catalog API         | Xác thực developer, cấp token và trả node catalog phù hợp Runtime        | Giữ editor state hoặc project source |
+| Marketplace reviewer         | Kiểm tra metadata, revision, quyền và release                            | Chỉnh workflow thay publisher        |
+| Runtime Agent                | Validate/execute IR, phát event, điều khiển device                       | Render editor UI                     |
+| Marketplace API              | Nhận package/metadata, quản lý release                                   | Compile workflow trong IDE           |
+| Desktop Client               | Kiểm license, tải package, gọi Runtime                                   | Authoring workflow                   |
+| Android device               | Nhận thao tác qua adapter được hỗ trợ                                    | Hiểu workflow/package                |
+| Release/Policy owner         | Phát hành installer, version EULA/Terms/Privacy và quyết định re-consent | Tự suy diễn consent từ local flag    |
+
+### 2.1 Ranh giới trách nhiệm sản phẩm
+
+Studio chịu trách nhiệm quản lý project/draft, graph editor, node palette, input schema, test data,
+assets, validation, capability summary, biên dịch Runtime IR, kết nối Runtime để test và gửi
+revision lên Marketplace.
+
+Studio không quản lý license của customer, entitlement, mã hóa workflow để phân phối, production
+scheduling hoặc số lượng thiết bị được phép chạy. Renderer không thực thi ADB trực tiếp; Code node
+không được gọi ADB, filesystem, process, credential hoặc Internet. Các trách nhiệm đó thuộc Backend,
+Marketplace, Desktop Client hoặc Runtime.
 
 ## 3. User journey mục tiêu
 
@@ -45,13 +61,14 @@ Giá trị cốt lõi của Studio:
 
 ### 3.1 Authoring
 
-1. Developer đăng nhập online bằng account/password.
+1. Publisher đăng nhập online bằng account/password.
 2. Studio lấy danh sách node catalog từ server. Khi offline, Studio chỉ dùng bản cache hợp lệ gần nhất và hiển thị rõ trạng thái stale.
-3. Tạo project từ template hoặc mở project có sẵn.
+3. Tạo hoặc chọn input schema, assets và test profile.
 4. Tạo workflow và kéo node từ palette vào canvas.
-5. Kết nối node, chọn node và chỉnh properties trong inspector.
-6. IDE validate liên tục, hiển thị lỗi tại node và Problems panel.
-7. Lưu project theo thao tác explicit và autosave (dùng debounce để autosave khi user ngừng thao tác một khoảng thời gian) đã cấu hình.
+5. Kết nối control edge; cấu hình data binding bằng expression picker thay vì buộc vẽ data wire.
+6. Chọn node và chỉnh config, input mapping, retry, timeout, error policy trong Inspector.
+7. IDE validate liên tục, hiển thị lỗi tại node và Problems panel.
+8. Lưu project theo thao tác explicit và autosave đã cấu hình.
 
 ### 3.2 Test và debug
 
@@ -64,27 +81,31 @@ Giá trị cốt lõi của Studio:
    Windows), kết nối tới emulator/device đã chọn và kiểm tra device sẵn sàng.
 5. Runtime thực thi script trên device; IDE nhận trạng thái, execution event và log có cấu trúc để
    hiển thị tiến trình chạy.
-6. Người dùng có thể pause/step/stop nếu Runtime capability hỗ trợ.
-7. Chọn execution event để highlight node và xem input/output đã redact.
+6. Người dùng có thể chạy toàn workflow, chạy node đã chọn hoặc `Run from here` khi input
+   phụ thuộc đã được pin/mock; IDE phải cảnh báo partial run không tương đương chạy từ Start.
+7. Người dùng có thể pause/step/stop nếu Runtime capability hỗ trợ.
+8. Chọn execution event để highlight node và xem input/output đã redact, duration, retry, branch,
+   sequence và loop iteration.
 
 ### 3.3 Build và publish
 
 1. Chạy full validation.
-2. Build package deterministic, sinh manifest và checksum.
-3. Ký package bằng cơ chế đã chốt; private key không nằm trong renderer/project.
-4. Upload draft, metadata và assets.
-5. Marketplace validate, scan, review và phát hành release.
+2. Compile Runtime IR, tổng hợp capability/permission và tạo immutable revision từ snapshot đã chọn.
+3. Build package deterministic, sinh manifest và checksum.
+4. Ký package bằng cơ chế đã chốt; private key không nằm trong renderer/project.
+5. Upload draft, revision, metadata và assets.
+6. Marketplace validate, scan, review và phát hành đúng revision bất biến đó.
 
 ## 4. Yêu cầu chức năng theo mức ưu tiên
 
 ### P0 — Authoring foundation
 
 - Tạo, mở, lưu, Save As project cục bộ.
-- Project Explorer cho workflows/assets/manifest.
+- Project Explorer cho workflows, inputs, assets, test profiles và manifest.
 - Canvas add/move/select/delete/connect node; undo/redo.
 - Node palette có search/category và drag/drop.
-- Inspector sinh form từ node property schema.
-- Validation cấu trúc, type, required params và graph rules.
+- Inspector sinh form từ NodeDefinition config/input/output schema.
+- Validation cấu trúc, type, required config/bindings và graph rules.
 - Problems/Output panel liên kết lỗi với node/file.
 - Workflow serialization không phụ thuộc React Flow.
 - Dirty state, recovery draft và cảnh báo khi đóng.
@@ -137,7 +158,7 @@ Giá trị cốt lõi của Studio:
 - Studio compile authoring JSON thành versioned executable JSON; Runtime validate lại artifact trước
   khi dispatch handler.
 - Runtime sở hữu ADB discovery, device authorization/selection, command mapping, timeout và cleanup;
-  Studio/node params không gửi raw ADB command.
+  Studio/executable instruction params không gửi raw ADB command.
 - Run/stop workflow tối thiểu với `trigger.start`, `flow.delay`, `android.tap`, `debug.log`.
 - Streaming execution status/log và highlight node đang chạy.
 - Error có code, message, source node và recoverability.
@@ -151,6 +172,17 @@ Giá trị cốt lõi của Studio:
 - Project settings, Runtime profiles và environment variables không chứa secret thô.
 - Template/example project và import/export project.
 
+### P1 — Node library và test experience
+
+- Mở rộng từ vertical slice bốn node lên mục tiêu 27–35 node type theo nhóm flow/data, Android
+  action, observation, connector và debug; ưu tiên primitive có khả năng kết hợp cao.
+- If/Switch, error branch, Merge và Loop Controller có giới hạn; không cho arbitrary cycle hoặc
+  parallel Android action trên cùng device.
+- Input schema, nhiều test profile, pin/mock input, chạy node đơn lẻ và `Run from here`.
+- Execution Inspector hiển thị input/output, duration, retry, screenshot/artifact, branch, sequence
+  và iteration với redaction.
+- Multi-device smoke test là P1 có feature flag; mặc định một device execution chạy tuần tự.
+
 ### P1 — Distribution
 
 - Package validation/build/checksum/sign.
@@ -163,6 +195,7 @@ Giá trị cốt lõi của Studio:
 - Subworkflow, reusable component/node bundle.
 - Multi-device runs, scheduler, remote execution.
 - Collaboration/realtime editing.
+- Code node sandboxed cho biến đổi dữ liệu nếu primitive/expression không đủ; không phải phạm vi MVP.
 - Marketplace analytics và advanced debugger/profiler.
 
 ## 5. Yêu cầu phi chức năng
@@ -216,7 +249,9 @@ Các con số là budget kỹ thuật ban đầu, phải benchmark và điều c
 
 ## 6. Success criteria
 
-- Developer mới hoàn thành sample automation trên device thật mà không chỉnh JSON thủ công.
+- Publisher mới hoàn thành sample automation trên device thật mà không chỉnh JSON thủ công.
+- Publisher không biết code vẫn cấu hình được input, branch, loop, Android action và test profile bằng node hệ thống.
+- Partial run và full run hiển thị đúng node execution, branch, sequence/iteration và dữ liệu đã redact.
 - Project lưu/mở lại không thay đổi semantic workflow.
 - Cùng artifact chạy qua Studio và Desktop Client bằng cùng Runtime contract.
 - Lỗi validation/runtime dẫn người dùng về đúng node/property.

@@ -2,26 +2,26 @@
 
 ## 1. Threat model tối thiểu
 
-| Threat | Boundary | Mitigation chính |
-|---|---|---|
-| Project/path traversal | open/save/assets/package | canonical path, root policy, symlink handling, schema validation |
-| Malicious package/archive | install/build/verify | size limits, allow-list, zip-slip protection, digest/signature |
-| Renderer compromise | Electron | isolation, no Node integration, narrow IPC, CSP, no remote content |
-| IPC abuse | renderer ↔ main | allow-list channel, validate both ends, authorize operation |
-| Credential/token theft | login/refresh/IPC/log | token ở main, OS credential store, redact, không persist password |
-| Cross-account cache leak | catalog cache | scope theo server/account/Runtime, opaque key, clear/retention policy |
-| Malicious catalog schema | API → Inspector/compiler | response limits, schema subset, full validation, keep last-known-good |
-| Command injection | Runtime/ADB spawn | no shell strings, fixed executable, typed args, allow-listed handler |
-| Device mix-up | Runtime ↔ nhiều emulator | explicit resolved serial, device lock, correlation và concurrency policy |
-| Secret leakage | project/log/telemetry | credential references, OS store, redaction, data minimization |
-| Untrusted node bundle | catalog/compiler/runtime | signed bundle, capability/permission policy, sandbox or reject executable extensions |
-| Marketplace MITM/replay | network/publish | TLS, short-lived token, idempotency, digest binding |
-| License bypass/tamper | client/runtime | signed grant bound to artifact/context, trusted verification boundary |
-| Resource exhaustion | graph/assets/logs | schema size/depth limits, bounded queues, timeouts/cancellation |
-| Onboarding-state tamper | renderer/local config → app guard | main-owned schema validation, atomic state, local flag không thay auth/license/server consent |
-| Workspace authority escalation | onboarding picker → filesystem | native picker, canonicalize/revalidate, opaque capability; raw path không authorize IO |
-| Installer/supply-chain tamper | download/install/update | HTTPS release channel, checksum, Windows code signing, clean-install verification |
-| Misleading/bundled consent | installer/app/website | versioned policy, no pre-check, required và analytics consent tách riêng, server record khi cần |
+| Threat                         | Boundary                          | Mitigation chính                                                                                |
+| ------------------------------ | --------------------------------- | ----------------------------------------------------------------------------------------------- |
+| Project/path traversal         | open/save/assets/package          | canonical path, root policy, symlink handling, schema validation                                |
+| Malicious package/archive      | install/build/verify              | size limits, allow-list, zip-slip protection, digest/signature                                  |
+| Renderer compromise            | Electron                          | isolation, no Node integration, narrow IPC, CSP, no remote content                              |
+| IPC abuse                      | renderer ↔ main                   | allow-list channel, validate both ends, authorize operation                                     |
+| Credential/token theft         | login/refresh/IPC/log             | token ở main, OS credential store, redact, không persist password                               |
+| Cross-account cache leak       | catalog cache                     | scope theo server/account/Runtime, opaque key, clear/retention policy                           |
+| Malicious catalog schema       | API → Inspector/compiler          | response limits, schema subset, full validation, keep last-known-good                           |
+| Command injection              | Runtime/ADB spawn                 | no shell strings, fixed executable, typed args, allow-listed handler                            |
+| Device mix-up                  | Runtime ↔ nhiều emulator          | explicit resolved serial, device lock, correlation và concurrency policy                        |
+| Secret leakage                 | project/log/telemetry             | credential references, OS store, redaction, data minimization                                   |
+| Untrusted node bundle          | catalog/compiler/runtime          | signed bundle, capability/permission policy, sandbox or reject executable extensions            |
+| Marketplace MITM/replay        | network/publish                   | TLS, short-lived token, idempotency, digest binding                                             |
+| License bypass/tamper          | client/runtime                    | signed grant bound to artifact/context, trusted verification boundary                           |
+| Resource exhaustion            | graph/assets/logs                 | schema size/depth limits, bounded queues, timeouts/cancellation                                 |
+| Onboarding-state tamper        | renderer/local config → app guard | main-owned schema validation, atomic state, local flag không thay auth/license/server consent   |
+| Workspace authority escalation | onboarding picker → filesystem    | native picker, canonicalize/revalidate, opaque capability; raw path không authorize IO          |
+| Installer/supply-chain tamper  | download/install/update           | HTTPS release channel, checksum, Windows code signing, clean-install verification               |
+| Misleading/bundled consent     | installer/app/website             | versioned policy, no pre-check, required và analytics consent tách riêng, server record khi cần |
 
 Threat model phải được review lại trước khi cho third-party nodes hoặc arbitrary expressions/code.
 
@@ -44,6 +44,11 @@ Threat model phải được review lại trước khi cho third-party nodes ho�
 
 - Schema đặt giới hạn string, array, nesting, node/edge count và asset size.
 - Expression parser không dùng `eval`/`new Function`.
+- Code node không thuộc MVP. Nếu được bật về sau, phải chạy trong isolated process hoặc
+  WebAssembly runner với CPU/memory/time quota; không ADB, HTTP, filesystem, process, npm/dynamic
+  import, credential hoặc Runtime internals.
+- Test profile chỉ chứa dữ liệu dev không nhạy cảm và credential reference; profile, pinned output
+  và screenshot/artifact phải theo retention/redaction policy.
 - HTML/Markdown output sanitize trước render.
 - Log payload không render như HTML và có truncation.
 - Filename từ project/server không dùng trực tiếp làm OS destination.
@@ -79,7 +84,7 @@ Threat model phải được review lại trước khi cho third-party nodes ho�
 
 - entities/value objects/invariants;
 - graph operations, connection/type/cycle rules;
-- node param/property validation;
+- node config/binding/input-output validation;
 - migrations/canonical serialization/digest;
 - compiler stages/source map;
 - application use cases với fake ports;
@@ -90,6 +95,10 @@ Threat model phải được review lại trước khi cho third-party nodes ho�
 
 ### Contract
 
+- Mỗi NodeDefinition/handler có contract suite cho config hợp lệ/sai, input/output schema, timeout,
+  cancel, Runtime error, capability denied và migration từ version trước khi có.
+- Loop tests chứng minh maxIterations/maxDuration, sequence tăng đơn điệu và cancel không để handler
+  hoặc ADB process mồ côi.
 - `ProjectRepository` adapters cùng một behavior suite;
 - preload/main IPC DTO schemas và error mapping;
 - Runtime handshake/start/event/cancel;
@@ -129,8 +138,8 @@ Threat model phải được review lại trước khi cho third-party nodes ho�
 
 1. Create → add/connect/configure → save → reopen.
 2. Invalid workflow → Problems → navigate/fix → valid.
-3. Fake device → run → node highlights/log → stop.
-4. Runtime crash/disconnect → truthful recovery UX.
+3. Fake device → full run, selected-node, Run-from-here → node highlights/Execution Inspector → stop.
+4. If/Switch/error branch và bounded loop chọn đúng transition; Runtime crash/disconnect có recovery UX trung thực.
 5. Build → verify → publish draft against test server.
 6. Recovery draft after simulated renderer/app crash.
 7. Login → đóng/mở app → silent refresh → vào workspace không hiện login → catalog sync.
@@ -156,7 +165,12 @@ tests/fixtures/
 ├── workflows/
 │   ├── four-node-happy-path.json
 │   ├── invalid-cycle.json
-│   └── incompatible-port.json
+│   ├── incompatible-port.json
+│   ├── conditional-branch.json
+│   └── bounded-loop.json
+├── test-profiles/
+│   ├── valid-local.json
+│   └── rejected-inline-secret.json
 ├── runtime/
 │   ├── event-stream.jsonl
 │   └── capabilities.json
@@ -251,7 +265,7 @@ export interface LogRecord {
   value-pattern; test dùng sentinel secret để chứng minh không lọt qua logger/support bundle.
 - Catalog log chỉ ghi hash/freshness/count/duration/error code; không log toàn response/schema.
 - Local logs có rotation/size/retention limit.
-- User content, node params, path và device ID mặc định không gửi telemetry.
+- User content, node config/binding, test profile, path và device ID mặc định không gửi telemetry.
 
 ## 9. Metrics và diagnostics
 

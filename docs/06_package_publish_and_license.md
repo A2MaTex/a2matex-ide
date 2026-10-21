@@ -28,6 +28,23 @@ Project source
   → Runtime execute
 ```
 
+### 1.1 Local project, cloud draft, revision và release
+
+| Loại dữ liệu      | Có thể sửa? | Vị trí        |
+| ----------------- | ----------: | ------------- |
+| Local project     |          Có | Máy publisher |
+| Cloud draft       |          Có | Backend       |
+| Workflow revision |       Không | Backend       |
+| Published release |       Không | Marketplace   |
+
+Submit tạo một **immutable revision** chứa editor graph, input schema, Runtime IR, node-version lock,
+capability/permission manifest, referenced assets, product metadata và test summary. Marketplace
+review đúng revision đó, không review một mutable draft.
+
+Revision phục vụ review khác với distributable package: editor graph, test profile và review data có
+thể thuộc revision nhưng không được đưa vào package giao customer nếu policy không yêu cầu. Package
+luôn bind tới revision/digest cụ thể.
+
 ## 2. Package layout đề xuất
 
 Extension chính thức còn `OPEN`; dùng tên logic `A2MaTeX Package` trong code/spec.
@@ -140,10 +157,10 @@ idle
 Publish use case:
 
 1. Kiểm authenticated publisher và ownership của `packageId`.
-2. Full validation + clean build từ immutable snapshot.
+2. Full validation + clean build từ immutable snapshot; compile input schema, Runtime IR và capability manifest.
 3. Local verify và permission/release diff.
-4. Create Marketplace draft với idempotency key.
-5. Upload resumable/chunked nếu package size yêu cầu.
+4. Tạo hoặc cập nhật cloud draft, sau đó đóng băng immutable workflow revision với idempotency key.
+5. Upload review bundle và distributable package theo resumable/chunked protocol nếu kích thước yêu cầu.
 6. Server verify digest/signature/schema/policy.
 7. Submit release; lưu remote draft/release ID trong local publish history không nhạy cảm.
 
@@ -196,6 +213,7 @@ Offline duration, device binding, concurrency và revocation là quyết định
 ## 11. Package/publish definition of done
 
 - Package cùng input build reproducibly và local verifier phát hiện mọi file bị sửa.
+- Cloud draft có thể sửa nhưng submitted revision/release bất biến và bind đúng package digest.
 - Secret/workspace/cache không xuất hiện trong artifact fixture.
 - Permission list được derive và diff với release trước.
 - Publish job có progress, cancel/retry/idempotency và server issue rendering.

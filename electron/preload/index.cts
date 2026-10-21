@@ -6,6 +6,11 @@ const studioHost = {
   system: {
     getInfo: () => ipcRenderer.invoke('studio:system:get-info'),
   },
+  auth: {
+    restore: () => ipcRenderer.invoke('studio:auth:restore'),
+    login: (input) => ipcRenderer.invoke('studio:auth:login', input),
+    logout: () => ipcRenderer.invoke('studio:auth:logout'),
+  },
   project: {
     chooseCreateParent: () => ipcRenderer.invoke('studio:project:choose-create-parent'),
     chooseOpenLocation: () => ipcRenderer.invoke('studio:project:choose-open-location'),

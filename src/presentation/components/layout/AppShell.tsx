@@ -1,7 +1,7 @@
-import { FolderKanban, Settings, Workflow } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router-dom';
+import { FolderKanban, LogOut, Settings, UserRound, Workflow } from 'lucide-react';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
-import { HostConnectionBadge } from '@presentation/features/host-status/HostConnectionBadge';
+import { useAuth } from '@presentation/features/auth/use-auth';
 import { cn } from '@shared/utils/cn';
 
 const navItems = [
@@ -11,6 +11,14 @@ const navItems = [
 ];
 
 export function AppShell() {
+  const { logout, session, status } = useAuth();
+  const navigate = useNavigate();
+
+  async function handleLogout() {
+    await logout();
+    navigate('/login', { replace: true });
+  }
+
   return (
     <div className="flex h-screen min-h-130 overflow-hidden bg-background text-foreground">
       <aside
@@ -55,7 +63,24 @@ export function AppShell() {
               Studio
             </div>
           </div>
-          <HostConnectionBadge />
+          <div className="flex items-center gap-2">
+            {session.status === 'authenticated' ? (
+              <div className="hidden items-center gap-2 rounded-full border border-border/70 bg-secondary/60 px-2.5 py-1 text-[11px] text-muted-foreground sm:flex">
+                <UserRound className="size-3.5 text-primary" aria-hidden="true" />
+                <span className="max-w-40 truncate">{session.account}</span>
+              </div>
+            ) : null}
+            <button
+              type="button"
+              title="Sign out"
+              aria-label="Sign out"
+              onClick={() => void handleLogout()}
+              disabled={status === 'submitting'}
+              className="grid size-7 place-items-center rounded-full border border-border/70 bg-secondary/60 text-muted-foreground transition hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+            >
+              <LogOut className="size-3.5" aria-hidden="true" />
+            </button>
+          </div>
         </header>
 
         <main className="min-h-0 flex-1 overflow-auto">

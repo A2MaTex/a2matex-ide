@@ -1,6 +1,7 @@
 import {
   ProjectRepositoryError,
   type CreateProjectInput,
+  type ProjectErrorCode,
   type ProjectLocation,
   type ProjectRepository,
   type ProjectSnapshot,
@@ -9,7 +10,7 @@ import { InMemoryProjectRepository } from '@infrastructure/persistence/in-memory
 
 import type { HostResult } from './studio-host-api';
 
-function unwrap<T>(result: HostResult<T>): T {
+function unwrap<T>(result: HostResult<T, ProjectErrorCode>): T {
   if (result.ok) return result.value;
   throw new ProjectRepositoryError(result.error.code, result.error.message, result.error.retryable);
 }

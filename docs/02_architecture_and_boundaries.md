@@ -36,21 +36,26 @@ Domain/Application không import React, Electron, Axios/fetch implementation, Re
 
 Studio host chịu trách nhiệm privileged IO. Runtime là process/service độc lập hoặc embedded child process phía host; lựa chọn transport không được rò vào Application layer.
 
+Trong bộ tài liệu này, **Runtime** là tên contract; implementation desktop được gọi là
+**Runtime Agent** và ưu tiên chạy như process/service riêng. Studio renderer không trực tiếp gọi ADB.
+
 ## 3. Bounded modules trong Studio
 
-| Module | Sở hữu | Không sở hữu |
-|---|---|---|
-| Identity Session | login/logout, token lifecycle, account scope | render form hoặc lưu password |
-| Catalog Sync | fetch/revalidate/cache/normalize node definitions | workflow node instance hoặc palette state |
-| Project | lifecycle, manifest, file tree, dirty/save | graph execution |
-| Node Catalog | node definition, version, schema, capability | node instance state |
-| Workflow | nodes, ports, edges, layout, validation | React Flow object |
-| Compiler | normalized graph → executable IR + source map | device connection |
-| Runtime Session | preflight, run command, event stream, cancellation | renderer UI state |
-| Device | discovery, selection, readiness/capabilities | ADB UI rendering |
-| Packaging | assemble, digest, sign, verify | Marketplace review policy |
-| Publishing | auth, draft/upload/status | package compilation rules |
-| Workspace UI | tabs, panels, selection, viewport | persistence implementation |
+| Module                 | Sở hữu                                                                | Không sở hữu                                   |
+| ---------------------- | --------------------------------------------------------------------- | ---------------------------------------------- |
+| Identity Session       | login/logout, token lifecycle, account scope                          | render form hoặc lưu password                  |
+| Catalog Sync           | fetch/revalidate/cache/normalize node definitions                     | workflow node instance hoặc palette state      |
+| Project                | lifecycle, manifest, file tree, dirty/save                            | graph execution                                |
+| Node Catalog           | node definition, version, schema, capability                          | node instance state                            |
+| Input and Test Profile | workflow input schema, local test values, pin/mock references         | credential value hoặc production customer data |
+| Workflow               | nodes, ports, edges, layout, validation                               | React Flow object                              |
+| Compiler               | normalized graph → executable IR + source map                         | device connection                              |
+| Runtime Session        | preflight, run command, event stream, cancellation                    | renderer UI state                              |
+| Execution Inspection   | projection input/output, retry, branch, iteration, artifact đã redact | Runtime execution semantics                    |
+| Device                 | discovery, selection, readiness/capabilities                          | ADB UI rendering                               |
+| Packaging              | assemble, digest, sign, verify                                        | Marketplace review policy                      |
+| Publishing             | auth, draft/upload/status                                             | package compilation rules                      |
+| Workspace UI           | tabs, panels, selection, viewport                                     | persistence implementation                     |
 
 ## 4. Electron boundary
 
