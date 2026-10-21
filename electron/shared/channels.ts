@@ -3,6 +3,8 @@ export const IPC_CHANNELS = {
   authRestore: 'studio:auth:restore',
   authLogin: 'studio:auth:login',
   authLogout: 'studio:auth:logout',
+  catalogLoad: 'studio:catalog:load',
+  catalogRefresh: 'studio:catalog:refresh',
   projectChooseCreateParent: 'studio:project:choose-create-parent',
   projectChooseOpenLocation: 'studio:project:choose-open-location',
   projectChooseSaveAsLocation: 'studio:project:choose-save-as-location',

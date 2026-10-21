@@ -11,6 +11,8 @@ import type {
   SessionState,
 } from '../../application/auth/auth-session.js';
 import type { HostInfo } from '../../application/system/host-gateway.js';
+import type { NodeCatalogErrorCode } from '../../application/node-catalog/node-catalog.js';
+import type { NodeCatalogSnapshot } from '../../domain/node-catalog/node-catalog.js';
 
 export interface HostError<TCode extends string = string> {
   code: TCode;
@@ -29,6 +31,10 @@ export interface StudioHostApi {
     restore(): Promise<HostResult<SessionState, AuthErrorCode>>;
     login(input: LoginInput): Promise<HostResult<SessionState, AuthErrorCode>>;
     logout(): Promise<HostResult<SessionState, AuthErrorCode>>;
+  };
+  catalog: {
+    load(runtimeVersion: string): Promise<HostResult<NodeCatalogSnapshot, NodeCatalogErrorCode>>;
+    refresh(runtimeVersion: string): Promise<HostResult<NodeCatalogSnapshot, NodeCatalogErrorCode>>;
   };
   project: {
     chooseCreateParent(): Promise<HostResult<ProjectLocation | null, ProjectErrorCode>>;

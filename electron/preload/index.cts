@@ -11,6 +11,10 @@ const studioHost = {
     login: (input) => ipcRenderer.invoke('studio:auth:login', input),
     logout: () => ipcRenderer.invoke('studio:auth:logout'),
   },
+  catalog: {
+    load: (runtimeVersion) => ipcRenderer.invoke('studio:catalog:load', runtimeVersion),
+    refresh: (runtimeVersion) => ipcRenderer.invoke('studio:catalog:refresh', runtimeVersion),
+  },
   project: {
     chooseCreateParent: () => ipcRenderer.invoke('studio:project:choose-create-parent'),
     chooseOpenLocation: () => ipcRenderer.invoke('studio:project:choose-open-location'),
