@@ -1,9 +1,9 @@
-import { ipcMain, type IpcMainInvokeEvent } from 'electron';
+import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
 
 import {
-  type AuthClient,
   type AuthErrorCode,
   type LoginInput,
+  type MainAuthSession,
   toAuthError,
 } from '@application/auth/auth-session';
 import { IPC_CHANNELS } from '@electron/shared/channels';
@@ -44,8 +44,13 @@ function handle(
   });
 }
 
-export function registerAuthHandlers(auth: AuthClient) {
+export function registerAuthHandlers(auth: MainAuthSession) {
   handle(IPC_CHANNELS.authRestore, () => auth.restore());
   handle(IPC_CHANNELS.authLogin, (_event, input) => auth.login(input as LoginInput));
   handle(IPC_CHANNELS.authLogout, () => auth.logout());
+  auth.subscribe((session) => {
+    for (const window of BrowserWindow.getAllWindows()) {
+      window.webContents.send(IPC_CHANNELS.authSessionChanged, session);
+    }
+  });
 }

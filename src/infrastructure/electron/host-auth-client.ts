@@ -79,6 +79,11 @@ export class HostAuthClient implements AuthClient {
     if (!window.studioHost) return this.fallback.logout();
     return unwrap(await window.studioHost.auth.logout());
   }
+
+  subscribe(listener: (session: SessionState) => void): () => void {
+    if (!window.studioHost) return () => undefined;
+    return window.studioHost.auth.onSessionChanged(listener);
+  }
 }
 
 export const hostAuthClient = new HostAuthClient();

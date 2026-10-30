@@ -1,6 +1,6 @@
 import {
   AuthSessionService,
-  type AuthClient,
+  type MainAuthSession,
   type AuthRemoteGateway,
   type SessionState,
 } from '@application/auth/auth-session';
@@ -9,9 +9,7 @@ import { createAuthApi } from '@electron/main/api/auth.api';
 import { configureApiRequest } from '@electron/main/api/request';
 import { loadApiConfig } from '@electron/main/config/api-config';
 
-export interface MainAuthClient extends AuthClient {
-  getAccessToken(): string | null;
-}
+export type MainAuthClient = MainAuthSession;
 
 class UnavailableAuthGateway implements AuthRemoteGateway {
   constructor(private readonly configurationError: unknown) {}
@@ -19,9 +17,18 @@ class UnavailableAuthGateway implements AuthRemoteGateway {
   login(): Promise<never> {
     return Promise.reject(this.configurationError);
   }
+
+  refresh(): Promise<never> {
+    return Promise.reject(this.configurationError);
+  }
+
+  logout(): Promise<never> {
+    return Promise.reject(this.configurationError);
+  }
 }
 
 class E2EAuthClient implements MainAuthClient {
+  private readonly listeners = new Set<(session: SessionState) => void>();
   private session: SessionState = {
     status: 'authenticated',
     account: 'E2E developer',
@@ -38,16 +45,31 @@ class E2EAuthClient implements MainAuthClient {
       account: 'E2E developer',
       persistence: 'session-only',
     };
+    this.notify();
     return Promise.resolve(this.session);
   }
 
   logout(): Promise<SessionState> {
     this.session = { status: 'signed-out' };
+    this.notify();
     return Promise.resolve(this.session);
   }
 
-  getAccessToken(): string | null {
-    return this.session.status === 'authenticated' ? 'e2e-access-token' : null;
+  getValidAccessToken(): Promise<string | null> {
+    return Promise.resolve(this.session.status === 'authenticated' ? 'e2e-access-token' : null);
+  }
+
+  refreshAccessToken(): Promise<string | null> {
+    return this.getValidAccessToken();
+  }
+
+  subscribe(listener: (session: SessionState) => void): () => void {
+    this.listeners.add(listener);
+    return () => this.listeners.delete(listener);
+  }
+
+  private notify() {
+    for (const listener of this.listeners) listener(this.session);
   }
 }
 
