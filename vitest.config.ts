@@ -11,6 +11,8 @@ export default defineConfig({
       '@infrastructure': path.resolve(import.meta.dirname, './src/infrastructure'),
       '@presentation': path.resolve(import.meta.dirname, './src/presentation'),
       '@shared': path.resolve(import.meta.dirname, './src/shared'),
+      '@electron': path.resolve(import.meta.dirname, './electron'),
+      '@tests': path.resolve(import.meta.dirname, './tests'),
     },
   },
   test: {

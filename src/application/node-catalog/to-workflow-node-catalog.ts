@@ -1,13 +1,10 @@
-import type {
-  CatalogNodeDefinition,
-  CatalogObjectSchema,
-} from '../../domain/node-catalog/node-catalog.js';
+import type { CatalogNodeDefinition, CatalogObjectSchema } from '@domain/node-catalog/node-catalog';
 import type {
   NodeDefinition,
   PortDefinition,
   PropertyDefinition,
-} from '../../domain/workflow/node-definition.js';
-import type { JsonValue } from '../../shared/types/json-value.js';
+} from '@domain/workflow/node-definition';
+import type { JsonValue } from '@shared/types/json-value';
 
 const CATEGORY_LABELS: Record<CatalogNodeDefinition['category'], string> = {
   FLOW: 'Flow',

@@ -1,0 +1,7 @@
+{
+  "extends": "../tsconfig.electron.json",
+  "compilerOptions": {
+    "noEmit": true
+  },
+  "include": ["./**/*.ts", "./**/*.cts", "../src/shared/host/**/*.ts"]
+}

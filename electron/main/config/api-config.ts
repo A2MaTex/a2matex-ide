@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { AuthError } from '../../../src/application/auth/auth-session.js';
+import { AuthError } from '@application/auth/auth-session';
 
 export interface ApiConfig {
   baseUrl: string;

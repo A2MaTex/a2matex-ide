@@ -1,6 +1,6 @@
-import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '../project/project.js';
-import { findNodeDefinition } from './node-catalog.js';
-import type { NodeDefinition, PropertyDefinition } from './node-definition.js';
+import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
+import { findNodeDefinition } from '@domain/workflow/node-catalog';
+import type { NodeDefinition, PropertyDefinition } from '@domain/workflow/node-definition';
 
 export interface WorkflowIssue {
   id: string;

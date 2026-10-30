@@ -9,7 +9,7 @@ import type {
   RefreshTokenVault,
   SessionPersistence,
   StoredRefreshCredential,
-} from '../../../../src/application/auth/auth-session.js';
+} from '@application/auth/auth-session';
 
 const storedCredentialSchema = z.object({
   schemaVersion: z.literal(1),

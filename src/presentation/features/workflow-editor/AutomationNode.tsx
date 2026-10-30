@@ -1,8 +1,8 @@
 import { AlertTriangle } from 'lucide-react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 
-import { NodeIcon } from './node-icons';
-import type { AutomationFlowNode } from './react-flow-adapter';
+import { NodeIcon } from '@presentation/features/workflow-editor/node-icons';
+import type { AutomationFlowNode } from '@presentation/features/workflow-editor/react-flow-adapter';
 
 export function AutomationNode({ data, selected }: NodeProps<AutomationFlowNode>) {
   return (

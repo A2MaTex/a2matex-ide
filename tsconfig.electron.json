@@ -7,13 +7,14 @@
     "types": ["node"],
     "strict": true,
     "paths": {
-      "@/*": ["./src/*"],
-      "@app/*": ["./src/app/*"],
-      "@domain/*": ["./src/domain/*"],
-      "@application/*": ["./src/application/*"],
-      "@infrastructure/*": ["./src/infrastructure/*"],
-      "@presentation/*": ["./src/presentation/*"],
-      "@shared/*": ["./src/shared/*"]
+      "@/*": ["./src/*.ts"],
+      "@app/*": ["./src/app/*.ts"],
+      "@domain/*": ["./src/domain/*.ts"],
+      "@application/*": ["./src/application/*.ts"],
+      "@infrastructure/*": ["./src/infrastructure/*.ts"],
+      "@presentation/*": ["./src/presentation/*.ts"],
+      "@shared/*": ["./src/shared/*.ts"],
+      "@electron/*": ["./electron/*.ts", "./electron/*.cts"]
     },
     "skipLibCheck": true,
     "noUnusedLocals": true,

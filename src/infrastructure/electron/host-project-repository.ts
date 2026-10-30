@@ -8,7 +8,7 @@ import {
 } from '@application/project/project-repository';
 import { InMemoryProjectRepository } from '@infrastructure/persistence/in-memory-project-repository';
 
-import type { HostResult } from './studio-host-api';
+import type { HostResult } from '@infrastructure/electron/studio-host-api';
 
 function unwrap<T>(result: HostResult<T, ProjectErrorCode>): T {
   if (result.ok) return result.value;

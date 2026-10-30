@@ -3,7 +3,7 @@ import {
   CURRENT_WORKFLOW_SCHEMA_VERSION,
   DEFAULT_WORKFLOW_PATH,
   type ProjectDocument,
-} from './project.js';
+} from '@domain/project/project';
 
 export function createEmptyProjectDocument(projectId: string, name: string): ProjectDocument {
   const normalizedName = name.trim();

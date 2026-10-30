@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from 'electron';
 
-import type { StudioHostApi } from '../../src/infrastructure/electron/studio-host-api.js';
+import type { StudioHostApi } from '@infrastructure/electron/studio-host-api';
 
 const studioHost = {
   system: {

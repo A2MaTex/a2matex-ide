@@ -6,8 +6,8 @@ import {
   type AuthRemoteGateway,
   type AuthTokenPair,
   type LoginInput,
-} from '../../../src/application/auth/auth-session.js';
-import request from './request.js';
+} from '@application/auth/auth-session';
+import request from '@electron/main/api/request';
 
 const loginResponseSchema = z
   .union([
@@ -25,7 +25,7 @@ const loginResponseSchema = z
   ])
   .transform((response) => ('data' in response ? response.data : response));
 
-export async function postLogin(data: LoginInput): Promise<AuthTokenPair> {
+export async function login(data: LoginInput): Promise<AuthTokenPair> {
   try {
     const response = await request({
       url: '/api/v1/auth/login',
@@ -76,5 +76,5 @@ export async function postLogin(data: LoginInput): Promise<AuthTokenPair> {
 }
 
 export function createAuthApi(): AuthRemoteGateway {
-  return { login: (data) => postLogin(data) };
+  return { login: (data) => login(data) };
 }

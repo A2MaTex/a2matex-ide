@@ -18,9 +18,13 @@ import { assertValidConnection, type WorkflowCommand } from '@domain/workflow/wo
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import { useEditorStore } from '@presentation/stores/editor-store';
 
-import { AutomationNode } from './AutomationNode';
-import { NODE_DRAG_MIME } from './NodePalette';
-import { toReactFlowEdges, toReactFlowNodes, type AutomationFlowNode } from './react-flow-adapter';
+import { AutomationNode } from '@presentation/features/workflow-editor/AutomationNode';
+import { NODE_DRAG_MIME } from '@presentation/features/workflow-editor/NodePalette';
+import {
+  toReactFlowEdges,
+  toReactFlowNodes,
+  type AutomationFlowNode,
+} from '@presentation/features/workflow-editor/react-flow-adapter';
 
 interface WorkflowCanvasProps {
   catalog: readonly NodeDefinition[];

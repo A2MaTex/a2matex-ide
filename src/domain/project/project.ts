@@ -1,4 +1,4 @@
-import type { JsonValue } from '../../shared/types/json-value.js';
+import type { JsonValue } from '@shared/types/json-value';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 1;
 export const CURRENT_WORKFLOW_SCHEMA_VERSION = 1;

@@ -3,7 +3,7 @@ import { useStore } from 'zustand';
 
 import type { ProjectStoreState } from '@presentation/stores/project-store';
 
-import { ProjectStoreContext } from './project-store-context';
+import { ProjectStoreContext } from '@presentation/features/project-session/project-store-context';
 
 export function useProjectStore<T>(selector: (state: ProjectStoreState) => T): T {
   const store = useContext(ProjectStoreContext);

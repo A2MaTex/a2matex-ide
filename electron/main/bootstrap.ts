@@ -2,13 +2,13 @@ import path from 'node:path';
 
 import { app, BrowserWindow, session } from 'electron';
 
-import { createAuthSessionService } from './auth/create-auth-session-service.js';
-import { registerAuthHandlers } from './ipc/register-auth-handlers.js';
-import { registerProjectHandlers } from './ipc/register-project-handlers.js';
-import { registerNodeCatalogHandlers } from './ipc/register-node-catalog-handlers.js';
-import { createNodeCatalogService } from './catalog/create-node-catalog-service.js';
-import { registerSystemHandlers } from './ipc/register-system-handlers.js';
-import { logMain } from './logger.js';
+import { createAuthSessionService } from '@electron/main/auth/create-auth-session-service';
+import { createNodeCatalogService } from '@electron/main/catalog/create-node-catalog-service';
+import { registerAuthHandlers } from '@electron/main/ipc/register-auth-handlers';
+import { registerNodeCatalogHandlers } from '@electron/main/ipc/register-node-catalog-handlers';
+import { registerProjectHandlers } from '@electron/main/ipc/register-project-handlers';
+import { registerSystemHandlers } from '@electron/main/ipc/register-system-handlers';
+import { logMain } from '@electron/main/logger';
 
 const developmentUrl = process.env.A2MATEX_DEV_SERVER_URL;
 

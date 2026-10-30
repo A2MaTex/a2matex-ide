@@ -2,12 +2,12 @@ import {
   NodeCatalogError,
   NodeCatalogService,
   type NodeCatalogClient,
-} from '../../../src/application/node-catalog/node-catalog.js';
-import type { MainAuthClient } from '../auth/create-auth-session-service.js';
-import { FileNodeCatalogCache } from '../adapters/catalog/file-node-catalog-cache.js';
-import { createNodeCatalogApi } from '../api/node-catalog-api.js';
-import { configureApiRequest } from '../api/request.js';
-import { loadApiConfig } from '../config/api-config.js';
+} from '@application/node-catalog/node-catalog';
+import { FileNodeCatalogCache } from '@electron/main/adapters/catalog/file-node-catalog-cache';
+import { createNodeCatalogApi } from '@electron/main/api/node-catalog.api';
+import { configureApiRequest } from '@electron/main/api/request';
+import type { MainAuthClient } from '@electron/main/auth/create-auth-session-service';
+import { loadApiConfig } from '@electron/main/config/api-config';
 
 class UnavailableNodeCatalogClient implements NodeCatalogClient {
   load(): Promise<never> {

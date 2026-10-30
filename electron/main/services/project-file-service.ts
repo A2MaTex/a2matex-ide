@@ -7,20 +7,20 @@ import type {
   ProjectLocation,
   ProjectSnapshot,
   SaveProjectResult,
-} from '../../../src/application/project/project-repository.js';
+} from '@application/project/project-repository';
 import {
   PROJECT_MANIFEST_FILE,
   type ProjectDocument,
   type WorkflowDocument,
-} from '../../../src/domain/project/project.js';
-import { createEmptyProjectDocument } from '../../../src/domain/project/project-factory.js';
+} from '@domain/project/project';
+import { createEmptyProjectDocument } from '@domain/project/project-factory';
 import {
   migrateProjectManifest,
   parseWorkflowDocument,
   ProjectFormatError,
-} from '../../../src/domain/project/project-migration.js';
-import { projectDocumentSchema } from '../../../src/domain/project/project-schema.js';
-import { LocationGrantError, LocationRegistry } from '../security/location-registry.js';
+} from '@domain/project/project-migration';
+import { projectDocumentSchema } from '@domain/project/project-schema';
+import { LocationGrantError, LocationRegistry } from '@electron/main/security/location-registry';
 
 const MAX_JSON_FILE_BYTES = 5 * 1024 * 1024;
 

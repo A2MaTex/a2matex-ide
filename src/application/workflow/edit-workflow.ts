@@ -1,10 +1,7 @@
-import type { ProjectDocument } from '../../domain/project/project.js';
-import type { NodeDefinition } from '../../domain/workflow/node-definition.js';
-import {
-  applyWorkflowCommand,
-  type WorkflowCommand,
-} from '../../domain/workflow/workflow-commands.js';
-import { requiredPermissionsForWorkflow } from '../../domain/workflow/workflow-validator.js';
+import type { ProjectDocument } from '@domain/project/project';
+import type { NodeDefinition } from '@domain/workflow/node-definition';
+import { applyWorkflowCommand, type WorkflowCommand } from '@domain/workflow/workflow-commands';
+import { requiredPermissionsForWorkflow } from '@domain/workflow/workflow-validator';
 
 export function editProjectWorkflow(
   document: ProjectDocument,
