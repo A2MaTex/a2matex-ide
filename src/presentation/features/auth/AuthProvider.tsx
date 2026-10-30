@@ -42,6 +42,15 @@ export function AuthProvider({ children, client }: AuthProviderProps) {
     };
   }, [client]);
 
+  useEffect(() => {
+    if (!client.subscribe) return;
+    return client.subscribe((nextSession) => {
+      setSession(nextSession);
+      setError(null);
+      setStatus('idle');
+    });
+  }, [client]);
+
   const login = useCallback(
     async (input: LoginInput) => {
       setStatus('submitting');

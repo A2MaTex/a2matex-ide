@@ -1,5 +1,6 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 
+import type { SessionState } from '@application/auth/auth-session';
 import type { StudioHostApi } from '@infrastructure/electron/studio-host-api';
 
 const studioHost = {
@@ -10,6 +11,12 @@ const studioHost = {
     restore: () => ipcRenderer.invoke('studio:auth:restore'),
     login: (input) => ipcRenderer.invoke('studio:auth:login', input),
     logout: () => ipcRenderer.invoke('studio:auth:logout'),
+    onSessionChanged: (listener: (session: SessionState) => void) => {
+      const channel = 'studio:auth:session-changed';
+      const handler = (_event: IpcRendererEvent, session: SessionState) => listener(session);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
   },
   catalog: {
     load: (runtimeVersion) => ipcRenderer.invoke('studio:catalog:load', runtimeVersion),

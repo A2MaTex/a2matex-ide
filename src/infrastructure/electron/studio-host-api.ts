@@ -27,6 +27,7 @@ export interface StudioHostApi {
     restore(): Promise<HostResult<SessionState, AuthErrorCode>>;
     login(input: LoginInput): Promise<HostResult<SessionState, AuthErrorCode>>;
     logout(): Promise<HostResult<SessionState, AuthErrorCode>>;
+    onSessionChanged(listener: (session: SessionState) => void): () => void;
   };
   catalog: {
     load(runtimeVersion: string): Promise<HostResult<NodeCatalogSnapshot, NodeCatalogErrorCode>>;

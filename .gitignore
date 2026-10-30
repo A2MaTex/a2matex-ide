@@ -28,5 +28,4 @@ dist-electron
 *.sw?
 
 test-results
-tests
 implementation

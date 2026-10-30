@@ -1,4 +1,4 @@
-import type { SessionState } from '@application/auth/auth-session';
+import { AuthError, type MainAuthSession } from '@application/auth/auth-session';
 import {
   nodeCatalogScopeSchema,
   type CatalogNodeDefinition,
@@ -46,11 +46,6 @@ export interface NodeCatalogRemoteGateway {
 export interface NodeCatalogCache {
   read(scope: NodeCatalogScope): Promise<NodeCatalogSnapshot | null>;
   write(snapshot: NodeCatalogSnapshot): Promise<void>;
-}
-
-export interface MainAuthSession {
-  restore(): Promise<SessionState>;
-  getAccessToken(): string | null;
 }
 
 export interface NodeCatalogClient {
@@ -105,7 +100,7 @@ export class NodeCatalogService implements NodeCatalogClient {
 
   private async sync(runtimeVersion: string): Promise<NodeCatalogSnapshot> {
     const session = await this.auth.restore();
-    const accessToken = this.auth.getAccessToken();
+    const accessToken = await this.auth.getValidAccessToken();
     if (session.status !== 'authenticated' || !accessToken) {
       throw new NodeCatalogError(
         'CATALOG_UNAUTHENTICATED',
@@ -142,14 +137,14 @@ export class NodeCatalogService implements NodeCatalogClient {
     const cached = await this.cache.read(scope);
 
     try {
-      let result = await this.remote.fetch({
+      let result = await this.fetchWithAuthRetry({
         accessToken,
         runtimeVersion: scope.runtimeVersion,
         ...(cached ? { catalogHash: cached.catalogHash } : {}),
       });
 
       if (result.status === 'not-modified' && !cached) {
-        result = await this.remote.fetch({
+        result = await this.fetchWithAuthRetry({
           accessToken,
           runtimeVersion: scope.runtimeVersion,
         });
@@ -200,6 +195,62 @@ export class NodeCatalogService implements NodeCatalogClient {
         );
       }
       throw mapped;
+    }
+  }
+
+  private async fetchWithAuthRetry(input: {
+    accessToken: string;
+    runtimeVersion: string;
+    catalogHash?: string;
+  }): Promise<RemoteCatalogResult> {
+    try {
+      return await this.remote.fetch(input);
+    } catch (error) {
+      const mapped = asCatalogError(error);
+      if (mapped.code !== 'CATALOG_SESSION_EXPIRED') throw mapped;
+
+      let refreshedToken: string | null;
+      try {
+        refreshedToken = await this.auth.refreshAccessToken();
+      } catch (refreshError) {
+        if (refreshError instanceof AuthError) {
+          if (refreshError.code === 'AUTH_NETWORK_UNAVAILABLE') {
+            throw new NodeCatalogError(
+              'CATALOG_NETWORK_UNAVAILABLE',
+              'Unable to refresh the authenticated session.',
+              true,
+            );
+          }
+          if (refreshError.code === 'AUTH_TIMEOUT') {
+            throw new NodeCatalogError(
+              'CATALOG_TIMEOUT',
+              'Refreshing the authenticated session timed out.',
+              true,
+            );
+          }
+          if (refreshError.code === 'AUTH_SERVER_ERROR') {
+            throw new NodeCatalogError(
+              'CATALOG_SERVER_ERROR',
+              'The authentication service could not refresh the session.',
+              refreshError.retryable,
+            );
+          }
+        }
+        throw new NodeCatalogError(
+          'CATALOG_UNAUTHENTICATED',
+          'Sign in before loading the node catalog.',
+          false,
+        );
+      }
+
+      if (!refreshedToken) {
+        throw new NodeCatalogError(
+          'CATALOG_UNAUTHENTICATED',
+          'Sign in before loading the node catalog.',
+          false,
+        );
+      }
+      return this.remote.fetch({ ...input, accessToken: refreshedToken });
     }
   }
 }
