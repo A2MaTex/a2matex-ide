@@ -8,7 +8,7 @@ import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import type { JsonValue } from '@shared/types/json-value';
 import { Button } from '@presentation/components/ui/button';
 
-import { NodeIcon } from './node-icons';
+import { NodeIcon } from '@presentation/features/workflow-editor/node-icons';
 
 interface NodeInspectorProps {
   catalog: readonly NodeDefinition[];

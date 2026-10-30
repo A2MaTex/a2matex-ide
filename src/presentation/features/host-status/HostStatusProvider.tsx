@@ -3,7 +3,10 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { getHostInfo } from '@application/system/get-host-info';
 import type { HostGateway, HostInfo } from '@application/system/host-gateway';
 
-import { HostStatusContext, type HostStatusValue } from './host-status-context';
+import {
+  HostStatusContext,
+  type HostStatusValue,
+} from '@presentation/features/host-status/host-status-context';
 
 interface HostStatusProviderProps {
   children: ReactNode;

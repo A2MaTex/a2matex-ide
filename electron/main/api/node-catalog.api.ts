@@ -5,13 +5,13 @@ import {
   NodeCatalogError,
   type NodeCatalogRemoteGateway,
   type RemoteCatalogResult,
-} from '../../../src/application/node-catalog/node-catalog.js';
+} from '@application/node-catalog/node-catalog';
 import {
   catalogNodeDefinitionSchema,
   DEFAULT_NODE_CATALOG_RUNTIME_VERSION,
   type CatalogNodeDefinition,
-} from '../../../src/domain/node-catalog/node-catalog.js';
-import request from './request.js';
+} from '@domain/node-catalog/node-catalog';
+import request from '@electron/main/api/request';
 
 const MAX_CATALOG_BYTES = 2 * 1024 * 1024;
 

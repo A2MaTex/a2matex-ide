@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { ProjectLocation } from '../../../src/application/project/project-repository.js';
+import type { ProjectLocation } from '@application/project/project-repository';
 
 export type LocationKind = 'parent' | 'project' | 'target';
 

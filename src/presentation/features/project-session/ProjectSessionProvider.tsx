@@ -4,7 +4,7 @@ import type { StoreApi } from 'zustand/vanilla';
 import type { ProjectRepository } from '@application/project/project-repository';
 import { createProjectStore, type ProjectStoreState } from '@presentation/stores/project-store';
 
-import { ProjectStoreContext } from './project-store-context';
+import { ProjectStoreContext } from '@presentation/features/project-session/project-store-context';
 
 interface ProjectSessionProviderProps {
   children: ReactNode;

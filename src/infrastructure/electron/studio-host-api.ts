@@ -4,15 +4,11 @@ import type {
   ProjectLocation,
   ProjectSnapshot,
   SaveProjectResult,
-} from '../../application/project/project-repository.js';
-import type {
-  AuthErrorCode,
-  LoginInput,
-  SessionState,
-} from '../../application/auth/auth-session.js';
-import type { HostInfo } from '../../application/system/host-gateway.js';
-import type { NodeCatalogErrorCode } from '../../application/node-catalog/node-catalog.js';
-import type { NodeCatalogSnapshot } from '../../domain/node-catalog/node-catalog.js';
+} from '@application/project/project-repository';
+import type { AuthErrorCode, LoginInput, SessionState } from '@application/auth/auth-session';
+import type { NodeCatalogErrorCode } from '@application/node-catalog/node-catalog';
+import type { HostInfo } from '@application/system/host-gateway';
+import type { NodeCatalogSnapshot } from '@domain/node-catalog/node-catalog';
 
 export interface HostError<TCode extends string = string> {
   code: TCode;

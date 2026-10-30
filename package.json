@@ -12,7 +12,7 @@
     "dev:desktop": "npm run build:electron && concurrently -k -s first \"npm:dev:web\" \"npm:dev:electron\"",
     "dev:electron": "wait-on http://127.0.0.1:5173 && cross-env A2MATEX_DEV_SERVER_URL=http://127.0.0.1:5173 electron .",
     "build:web": "tsc -b tsconfig.app.json tsconfig.node.json && vite build",
-    "build:electron": "tsc -p tsconfig.electron.json",
+    "build:electron": "tsc -p tsconfig.electron.json && node scripts/resolve-electron-aliases.mjs",
     "build:desktop": "npm run build:web && npm run build:electron",
     "typecheck": "tsc -b && tsc -p tsconfig.electron.json --noEmit",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"electron/**/*.{ts,cts}\" \"tests/**/*.{ts,tsx}\" \"*.{js,json,ts}\" \".github/**/*.yml\"",

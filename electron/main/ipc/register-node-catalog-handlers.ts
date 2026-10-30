@@ -5,9 +5,9 @@ import {
   type NodeCatalogClient,
   type NodeCatalogErrorCode,
   toNodeCatalogError,
-} from '../../../src/application/node-catalog/node-catalog.js';
-import type { HostResult } from '../../../src/infrastructure/electron/studio-host-api.js';
-import { IPC_CHANNELS } from '../../shared/channels.js';
+} from '@application/node-catalog/node-catalog';
+import { IPC_CHANNELS } from '@electron/shared/channels';
+import type { HostResult } from '@infrastructure/electron/studio-host-api';
 
 function assertTrustedSender(event: IpcMainInvokeEvent) {
   const senderUrl = event.senderFrame?.url ?? event.sender.getURL();

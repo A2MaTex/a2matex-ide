@@ -2,12 +2,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readFile, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { NodeCatalogCache } from '../../../../src/application/node-catalog/node-catalog.js';
+import type { NodeCatalogCache } from '@application/node-catalog/node-catalog';
 import {
   nodeCatalogSnapshotSchema,
   type NodeCatalogScope,
   type NodeCatalogSnapshot,
-} from '../../../../src/domain/node-catalog/node-catalog.js';
+} from '@domain/node-catalog/node-catalog';
 
 const MAX_CACHE_BYTES = 2 * 1024 * 1024;
 

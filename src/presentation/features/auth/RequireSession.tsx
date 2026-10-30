@@ -1,7 +1,7 @@
 import { LoaderCircle } from 'lucide-react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
 
-import { useAuth } from './use-auth';
+import { useAuth } from '@presentation/features/auth/use-auth';
 
 export function RequireSession() {
   const { session, status } = useAuth();

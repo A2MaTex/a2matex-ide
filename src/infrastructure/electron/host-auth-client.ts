@@ -6,7 +6,7 @@ import {
   type SessionState,
 } from '@application/auth/auth-session';
 
-import type { HostResult } from './studio-host-api';
+import type { HostResult } from '@infrastructure/electron/studio-host-api';
 
 function unwrap(result: HostResult<SessionState, AuthErrorCode>): SessionState {
   if (result.ok) return result.value;

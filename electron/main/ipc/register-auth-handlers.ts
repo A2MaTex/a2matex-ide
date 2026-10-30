@@ -5,9 +5,9 @@ import {
   type AuthErrorCode,
   type LoginInput,
   toAuthError,
-} from '../../../src/application/auth/auth-session.js';
-import type { HostResult } from '../../../src/infrastructure/electron/studio-host-api.js';
-import { IPC_CHANNELS } from '../../shared/channels.js';
+} from '@application/auth/auth-session';
+import { IPC_CHANNELS } from '@electron/shared/channels';
+import type { HostResult } from '@infrastructure/electron/studio-host-api';
 
 function assertTrustedSender(event: IpcMainInvokeEvent) {
   const senderUrl = event.senderFrame?.url ?? event.sender.getURL();

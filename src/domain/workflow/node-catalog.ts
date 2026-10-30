@@ -1,5 +1,5 @@
-import type { JsonValue } from '../../shared/types/json-value.js';
-import type { NodeDefinition } from './node-definition.js';
+import type { NodeDefinition } from '@domain/workflow/node-definition';
+import type { JsonValue } from '@shared/types/json-value';
 
 export function findNodeDefinition(
   type: string,

@@ -1,10 +1,10 @@
-import type { SessionState } from '../auth/auth-session.js';
+import type { SessionState } from '@application/auth/auth-session';
 import {
   nodeCatalogScopeSchema,
   type CatalogNodeDefinition,
   type NodeCatalogScope,
   type NodeCatalogSnapshot,
-} from '../../domain/node-catalog/node-catalog.js';
+} from '@domain/node-catalog/node-catalog';
 
 export type NodeCatalogErrorCode =
   | 'CATALOG_INVALID_INPUT'

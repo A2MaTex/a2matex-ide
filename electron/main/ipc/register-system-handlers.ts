@@ -1,7 +1,7 @@
 import { app, ipcMain } from 'electron';
 
-import type { HostInfo } from '../../../src/application/system/host-gateway.js';
-import { IPC_CHANNELS } from '../../shared/channels.js';
+import type { HostInfo } from '@application/system/host-gateway';
+import { IPC_CHANNELS } from '@electron/shared/channels';
 
 export function registerSystemHandlers() {
   ipcMain.removeHandler(IPC_CHANNELS.systemGetInfo);

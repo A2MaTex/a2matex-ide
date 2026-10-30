@@ -2,7 +2,7 @@ import {
   ProjectRepositoryError,
   type ProjectRepository,
   type ProjectSnapshot,
-} from './project-repository';
+} from '@application/project/project-repository';
 
 export async function createProject(repository: ProjectRepository, name: string) {
   const normalizedName = name.trim();

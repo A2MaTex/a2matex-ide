@@ -1,7 +1,7 @@
-import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '../project/project.js';
-import type { JsonValue } from '../../shared/types/json-value.js';
-import { defaultParamsFor, findNodeDefinition } from './node-catalog.js';
-import type { NodeDefinition, PortDefinition } from './node-definition.js';
+import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
+import { defaultParamsFor, findNodeDefinition } from '@domain/workflow/node-catalog';
+import type { NodeDefinition, PortDefinition } from '@domain/workflow/node-definition';
+import type { JsonValue } from '@shared/types/json-value';
 
 export type WorkflowCommand =
   | {

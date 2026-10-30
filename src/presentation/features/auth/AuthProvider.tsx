@@ -8,7 +8,7 @@ import {
   type SessionState,
 } from '@application/auth/auth-session';
 
-import { AuthContext } from './auth-context';
+import { AuthContext } from '@presentation/features/auth/auth-context';
 
 interface AuthProviderProps {
   children: ReactNode;

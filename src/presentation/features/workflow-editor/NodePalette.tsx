@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react';
 import type { NodeDefinition } from '@domain/workflow/node-definition';
 import { useEditorStore } from '@presentation/stores/editor-store';
 
-import { NodeIcon } from './node-icons';
+import { NodeIcon } from '@presentation/features/workflow-editor/node-icons';
 
 export const NODE_DRAG_MIME = 'application/x-a2matex-node';
 

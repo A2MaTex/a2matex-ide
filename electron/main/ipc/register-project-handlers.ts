@@ -1,9 +1,12 @@
 import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
 
-import type { HostResult } from '../../../src/infrastructure/electron/studio-host-api.js';
-import { LocationRegistry, type LocationKind } from '../security/location-registry.js';
-import { mapProjectFileError, ProjectFileService } from '../services/project-file-service.js';
-import { IPC_CHANNELS } from '../../shared/channels.js';
+import { IPC_CHANNELS } from '@electron/shared/channels';
+import { LocationRegistry, type LocationKind } from '@electron/main/security/location-registry';
+import {
+  mapProjectFileError,
+  ProjectFileService,
+} from '@electron/main/services/project-file-service';
+import type { HostResult } from '@infrastructure/electron/studio-host-api';
 
 const locations = new LocationRegistry();
 const projects = new ProjectFileService(locations);

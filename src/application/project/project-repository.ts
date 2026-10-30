@@ -1,4 +1,4 @@
-import type { ProjectDocument } from '../../domain/project/project.js';
+import type { ProjectDocument } from '@domain/project/project';
 
 export interface ProjectLocation {
   id: string;

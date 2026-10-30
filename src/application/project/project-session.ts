@@ -1,6 +1,6 @@
 import type { ProjectDocument } from '@domain/project/project';
 
-import type { ProjectLocation, ProjectSnapshot } from './project-repository';
+import type { ProjectLocation, ProjectSnapshot } from '@application/project/project-repository';
 
 export interface ProjectSession {
   snapshot: ProjectSnapshot;

@@ -1,7 +1,7 @@
 import { z } from 'zod';
 
-import { CURRENT_PROJECT_SCHEMA_VERSION, type ProjectManifest } from './project.js';
-import { projectManifestV1Schema, workflowDocumentV1Schema } from './project-schema.js';
+import { CURRENT_PROJECT_SCHEMA_VERSION, type ProjectManifest } from '@domain/project/project';
+import { projectManifestV1Schema, workflowDocumentV1Schema } from '@domain/project/project-schema';
 
 export class ProjectFormatError extends Error {
   readonly code: 'PROJECT_FORMAT_INVALID' | 'PROJECT_SCHEMA_UNSUPPORTED';

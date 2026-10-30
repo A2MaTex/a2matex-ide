@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-import type { JsonValue } from '../../shared/types/json-value.js';
+import type { JsonValue } from '@shared/types/json-value';
 
 import {
   CURRENT_PROJECT_SCHEMA_VERSION,
@@ -8,7 +8,7 @@ import {
   type ProjectDocument,
   type ProjectManifest,
   type WorkflowDocument,
-} from './project.js';
+} from '@domain/project/project';
 
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([

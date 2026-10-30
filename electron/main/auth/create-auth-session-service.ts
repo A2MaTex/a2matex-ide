@@ -3,11 +3,11 @@ import {
   type AuthClient,
   type AuthRemoteGateway,
   type SessionState,
-} from '../../../src/application/auth/auth-session.js';
-import { createAuthApi } from '../api/auth-api.js';
-import { configureApiRequest } from '../api/request.js';
-import { SecureRefreshTokenVault } from '../adapters/auth/secure-refresh-token-vault.js';
-import { loadApiConfig } from '../config/api-config.js';
+} from '@application/auth/auth-session';
+import { SecureRefreshTokenVault } from '@electron/main/adapters/auth/secure-refresh-token-vault';
+import { createAuthApi } from '@electron/main/api/auth.api';
+import { configureApiRequest } from '@electron/main/api/request';
+import { loadApiConfig } from '@electron/main/config/api-config';
 
 export interface MainAuthClient extends AuthClient {
   getAccessToken(): string | null;
