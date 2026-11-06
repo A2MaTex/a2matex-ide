@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import {
   LocalProjectPersistenceError,
+  type AcknowledgeRemoteDraftInput,
   type CreateLocalProjectInput,
   type LocalDraftArtifacts,
   type LocalProjectDraftState,
@@ -33,6 +34,7 @@ interface ProjectRow {
   metadata_synced_revision: number | null;
   observed_remote_version: number | null;
   remote_project_id: string | null;
+  remote_create_pending: number;
   remote_saved_at: string | null;
   runtime_ir_json: string | null;
   sync_status: LocalProjectSyncStatus;
@@ -63,6 +65,7 @@ const SELECT_PROJECT = `
     d.sync_status,
     d.content_hash,
     d.remote_saved_at,
+    d.remote_create_pending,
     d.input_schema_json,
     d.runtime_ir_json,
     d.validation_summary_json,
@@ -138,6 +141,7 @@ function parseProjectSnapshot(database: DatabaseSync, row: ProjectRow): LocalPro
       metadataSyncedRevision: row.metadata_synced_revision,
       observedRemoteVersion: row.observed_remote_version,
       remoteSavedAt: row.remote_saved_at,
+      remoteCreatePending: row.remote_create_pending === 1,
       runtimeIr:
         row.runtime_ir_json === null
           ? null
@@ -198,6 +202,113 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
     private readonly writes = new SerializedProjectWriteQueue(),
     private readonly now: () => string = () => new Date().toISOString(),
   ) {}
+
+  private updateCheckpoint(
+    accountScope: string,
+    localId: string,
+    operation: (current: LocalProjectSnapshot) => void,
+  ) {
+    const scope = requireIdentifier(accountScope, 'accountScope');
+    const id = requireIdentifier(localId, 'localId');
+    return this.writes.run(projectKey(scope, id), () => {
+      try {
+        return withImmediateTransaction(this.database, () => {
+          const current = readProject(this.database, scope, id);
+          if (!current) {
+            throw new LocalProjectPersistenceError(
+              'PROJECT_NOT_FOUND',
+              `Local project ${id} was not found`,
+            );
+          }
+          operation(current);
+          return readProject(this.database, scope, id)!;
+        });
+      } catch (error) {
+        return mapWriteError(error);
+      }
+    });
+  }
+
+  async beginRemoteCreate(accountScope: string, localId: string) {
+    return this.updateCheckpoint(accountScope, localId, (current) => {
+      this.database
+        .prepare(
+          `UPDATE project_draft_state
+           SET remote_create_pending = 1, sync_status = 'syncing'
+           WHERE local_id = ?`,
+        )
+        .run(current.localId);
+    });
+  }
+
+  async bindRemoteProject(accountScope: string, localId: string, remoteProjectId: string) {
+    const remoteId = requireIdentifier(remoteProjectId, 'remoteProjectId');
+    return this.updateCheckpoint(accountScope, localId, (current) => {
+      this.database
+        .prepare(
+          `UPDATE projects SET remote_project_id = ?
+           WHERE account_scope = ? AND local_id = ?`,
+        )
+        .run(remoteId, current.accountScope, current.localId);
+      this.database
+        .prepare(
+          `UPDATE project_draft_state
+           SET remote_create_pending = 0, sync_status = 'syncing'
+           WHERE local_id = ?`,
+        )
+        .run(current.localId);
+    });
+  }
+
+  async acknowledgeMetadata(accountScope: string, localId: string, revision: number) {
+    if (!Number.isSafeInteger(revision) || revision < 0) {
+      throw new TypeError('revision must be a non-negative safe integer');
+    }
+    return this.updateCheckpoint(accountScope, localId, (current) => {
+      this.database
+        .prepare(`UPDATE project_draft_state SET metadata_synced_revision = ? WHERE local_id = ?`)
+        .run(revision, current.localId);
+    });
+  }
+
+  async acknowledgeRemoteDraft(input: AcknowledgeRemoteDraftInput) {
+    if (!Number.isSafeInteger(input.remoteVersion) || input.remoteVersion < 1) {
+      throw new TypeError('remoteVersion must be a positive safe integer');
+    }
+    if (!Number.isSafeInteger(input.syncedLocalRevision) || input.syncedLocalRevision < 0) {
+      throw new TypeError('syncedLocalRevision must be a non-negative safe integer');
+    }
+    return this.updateCheckpoint(input.accountScope, input.localId, (current) => {
+      const clean =
+        current.draftState.localRevision === input.syncedLocalRevision &&
+        current.draftState.metadataRevision === current.draftState.metadataSyncedRevision;
+      this.database
+        .prepare(
+          `UPDATE project_draft_state
+           SET base_remote_version = ?, observed_remote_version = ?,
+               last_synced_local_revision = ?, content_hash = ?, remote_saved_at = ?,
+               sync_status = ?
+           WHERE local_id = ?`,
+        )
+        .run(
+          input.remoteVersion,
+          input.remoteVersion,
+          input.syncedLocalRevision,
+          requireIdentifier(input.contentHash, 'contentHash'),
+          requireIdentifier(input.remoteSavedAt, 'remoteSavedAt'),
+          clean ? 'synced' : 'local-ahead',
+          current.localId,
+        );
+    });
+  }
+
+  async setSyncStatus(accountScope: string, localId: string, status: LocalProjectSyncStatus) {
+    return this.updateCheckpoint(accountScope, localId, (current) => {
+      this.database
+        .prepare('UPDATE project_draft_state SET sync_status = ? WHERE local_id = ?')
+        .run(status, current.localId);
+    });
+  }
 
   async create(input: CreateLocalProjectInput): Promise<LocalProjectSnapshot> {
     const accountScope = requireIdentifier(input.accountScope, 'accountScope');

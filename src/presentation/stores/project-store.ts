@@ -12,7 +12,12 @@ import {
   updateProjectDocument,
   type ProjectSession,
 } from '@application/project/project-session';
-import type { ProjectRepository, ProjectSnapshot } from '@application/project/project-repository';
+import type {
+  CreateProjectInput,
+  ProjectRepository,
+  ProjectSnapshot,
+} from '@application/project/project-repository';
+import type { CloudProjectIndex, ProjectCloudClient } from '@application/project/project-cloud';
 import {
   createProject,
   exportProject,
@@ -37,6 +42,9 @@ interface ProjectHistoryEntry {
 }
 
 export interface ProjectStoreState {
+  cloudIndex: CloudProjectIndex;
+  cloudStatus: 'idle' | 'loading' | 'refreshing' | 'syncing';
+  cloudError: string | null;
   session: ProjectSession | null;
   recentProjects: ProjectSnapshot[];
   status: ProjectOperationStatus;
@@ -46,12 +54,13 @@ export interface ProjectStoreState {
   undoStack: ProjectHistoryEntry[];
   redoStack: ProjectHistoryEntry[];
   nextRevision: number;
-  create(name: string): Promise<ProjectSnapshot | null>;
+  create(input: CreateProjectInput): Promise<ProjectSnapshot | null>;
   exportProject(): Promise<void>;
   importProject(): Promise<ProjectSnapshot | null>;
   loadRecent(): Promise<void>;
   open(localId: string): Promise<ProjectSnapshot | null>;
   flushLocalSave(): Promise<boolean>;
+  syncFirst(): Promise<boolean>;
   updateProjectName(name: string): void;
   executeWorkflowCommand(
     workflowPath: string,
@@ -103,7 +112,7 @@ function commitDocument(state: ProjectStoreState, document: ProjectDocument) {
 
 export function createProjectStore(
   repository: ProjectRepository,
-  options: { autosave?: AutosaveCoordinatorOptions } = {},
+  options: { autosave?: AutosaveCoordinatorOptions; cloud?: ProjectCloudClient } = {},
 ) {
   return createStore<ProjectStoreState>((set, get) => {
     const persistLocal = async () => {
@@ -162,6 +171,9 @@ export function createProjectStore(
     };
 
     return {
+      cloudIndex: { projects: [], refreshedAt: null, source: 'cache', warning: null },
+      cloudStatus: 'idle',
+      cloudError: null,
       session: null,
       recentProjects: [],
       status: 'idle',
@@ -173,15 +185,30 @@ export function createProjectStore(
         set({ status: 'loading', error: null });
         try {
           set({ recentProjects: await listProjects(repository), status: 'idle' });
+          if (!options.cloud) return;
+          set({ cloudStatus: 'loading', cloudError: null });
+          const cached = await options.cloud.load();
+          set({ cloudIndex: cached, cloudStatus: 'refreshing' });
+          const refreshed = await options.cloud.refresh();
+          set({
+            cloudIndex: refreshed,
+            cloudError: refreshed.warning,
+            cloudStatus: 'idle',
+          });
         } catch (error) {
-          set({ status: 'idle', error: messageOf(error) });
+          const message = messageOf(error);
+          set((state) => ({
+            status: 'idle',
+            cloudStatus: 'idle',
+            ...(state.recentProjects.length > 0 ? { cloudError: message } : { error: message }),
+          }));
         }
       },
-      async create(name) {
+      async create(input) {
         if (!(await prepareForProjectChange())) return null;
         set({ status: 'creating', error: null });
         try {
-          const snapshot = await createProject(repository, name);
+          const snapshot = await createProject(repository, input);
           activateSnapshot(snapshot);
           return snapshot;
         } catch (error) {
@@ -218,6 +245,52 @@ export function createProjectStore(
         }
       },
       flushLocalSave,
+      async syncFirst() {
+        if (!options.cloud || !(await flushLocalSave())) return false;
+        const startingSession = get().session;
+        if (!startingSession) return false;
+        set({ cloudStatus: 'syncing', cloudError: null, error: null });
+        try {
+          const synced = await options.cloud.syncFirst(startingSession.snapshot.localId);
+          set((state) => {
+            if (!state.session || state.session.snapshot.localId !== synced.localId) {
+              return {
+                recentProjects: addRecent(state.recentProjects, synced),
+                cloudStatus: 'idle',
+              };
+            }
+            const session = {
+              ...state.session,
+              snapshot: { ...synced, document: state.session.snapshot.document },
+            };
+            return {
+              session,
+              recentProjects: addRecent(state.recentProjects, session.snapshot),
+              cloudStatus: 'idle',
+            };
+          });
+          return true;
+        } catch (error) {
+          const message = messageOf(error);
+          set({ cloudStatus: 'idle', cloudError: message });
+          try {
+            const persisted = await openProject(repository, startingSession.snapshot.localId);
+            set((state) => ({
+              recentProjects: addRecent(state.recentProjects, persisted),
+              session:
+                state.session?.snapshot.localId === persisted.localId
+                  ? {
+                      ...state.session,
+                      snapshot: { ...persisted, document: state.session.snapshot.document },
+                    }
+                  : state.session,
+            }));
+          } catch {
+            // Preserve the original cloud failure and the current editor working copy.
+          }
+          return false;
+        }
+      },
       async exportProject() {
         if (!(await flushLocalSave())) return;
         const startingSession = get().session;

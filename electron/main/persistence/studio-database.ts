@@ -5,13 +5,17 @@ import { DatabaseSync } from 'node:sqlite';
 import { LocalProjectPersistenceError } from '@application/project/local-project-repository';
 import { LOCAL_PROJECT_NAME_NORMALIZATION_VERSION } from '@domain/project/project-name';
 
-const CURRENT_DATABASE_VERSION = 1;
+const CURRENT_DATABASE_VERSION = 2;
 const DATABASE_FILE_NAME = 'studio.sqlite3';
 
 const migrations = [
   {
     version: 1,
     relativePath: '0001_local_project_foundation/migration.sql',
+  },
+  {
+    version: 2,
+    relativePath: '0002_cloud_sync_checkpoint/migration.sql',
   },
 ] as const;
 

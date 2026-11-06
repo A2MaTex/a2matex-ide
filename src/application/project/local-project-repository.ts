@@ -28,6 +28,7 @@ export interface LocalProjectDraftState extends LocalDraftArtifacts {
   metadataSyncedRevision: number | null;
   observedRemoteVersion: number | null;
   remoteSavedAt: string | null;
+  remoteCreatePending: boolean;
   syncStatus: LocalProjectSyncStatus;
 }
 
@@ -55,11 +56,37 @@ export interface SaveLocalProjectInput {
   localId: string;
 }
 
+export interface AcknowledgeRemoteDraftInput {
+  accountScope: string;
+  contentHash: string;
+  localId: string;
+  remoteSavedAt: string;
+  remoteVersion: number;
+  syncedLocalRevision: number;
+}
+
 export interface LocalProjectRepository {
+  acknowledgeMetadata(
+    accountScope: string,
+    localId: string,
+    revision: number,
+  ): Promise<LocalProjectSnapshot>;
+  acknowledgeRemoteDraft(input: AcknowledgeRemoteDraftInput): Promise<LocalProjectSnapshot>;
+  beginRemoteCreate(accountScope: string, localId: string): Promise<LocalProjectSnapshot>;
+  bindRemoteProject(
+    accountScope: string,
+    localId: string,
+    remoteProjectId: string,
+  ): Promise<LocalProjectSnapshot>;
   create(input: CreateLocalProjectInput): Promise<LocalProjectSnapshot>;
   findById(accountScope: string, localId: string): Promise<LocalProjectSnapshot | null>;
   list(accountScope: string): Promise<LocalProjectSnapshot[]>;
   save(input: SaveLocalProjectInput): Promise<LocalProjectSnapshot>;
+  setSyncStatus(
+    accountScope: string,
+    localId: string,
+    status: LocalProjectSyncStatus,
+  ): Promise<LocalProjectSnapshot>;
 }
 
 export type LocalProjectPersistenceErrorCode =

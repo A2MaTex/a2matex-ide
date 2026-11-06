@@ -302,8 +302,8 @@ Thực hiện theo thứ tự:
 Flow:
 
 1. Làm mới cloud project index của Publisher và kiểm tra tên trước khi gọi `POST /projects`.
-2. Nếu tên đã tồn tại và Studio chưa xác nhận binding, dừng Sync, giữ bản local và yêu cầu user đổi tên. Nếu lần tạo trước bị mất phản hồi, áp dụng cùng quy tắc cho Project trùng tên chưa có binding.
-3. Gọi `POST /projects` với metadata từ SQLite và lưu ID trả về làm binding. Trong MVP một tài khoản dùng một thiết bị tại một thời điểm, Studio serialize bước kiểm tra tên và tạo cloud Project cho cùng Publisher. Backend có thể trả ID của Project trùng tên, kể cả khi Project đó chưa có draft, nên flow này dựa trên danh sách cloud vừa tải và giả định chỉ có một thiết bị ghi.
+2. Nếu tên đã tồn tại và local chưa có `remote_create_pending`, dừng Sync, giữ bản local và yêu cầu user đổi tên; không bind theo tên.
+3. Ngay trước lần POST đầu tiên, persist `remote_create_pending = true`. Gọi `POST /projects` với metadata từ SQLite và lưu ID trả về làm binding. Nếu request có thể đã tới Backend nhưng response bị mất, lần retry được phép gọi lại POST và nhận ID active trùng tên vì checkpoint chứng minh đây là retry của một create attempt trước đó.
 4. Với binding đã xác nhận, kiểm tra Cloud Draft. Khi `draft: null`, gửi PUT với `expectedVersion = 0`.
 5. Lưu version, hash và savedAt do Backend trả về vào SQLite.
 
@@ -338,6 +338,205 @@ Workflow được sync qua ProjectDraft API.
 Không đưa Project name, description, publisher hoặc sync metadata vào `editorGraph`.
 
 Nếu metadata update thành công nhưng Draft PUT thất bại, giữ metadata acknowledgement và retry phần Draft còn pending.
+
+### 6.6. Backend API contract cho Milestone B
+
+Mọi response thành công được bọc trong `{ data, statusCode }`. Các endpoint yêu cầu
+`Authorization: Bearer <access-token>`.
+
+#### Project API
+
+| Method | Endpoint                              | Mục đích                                                                   |
+| ------ | ------------------------------------- | -------------------------------------------------------------------------- |
+| POST   | `/api/v1/projects`                    | Tạo Project hoặc trả ID của Project active trùng tên trong cùng Publisher. |
+| GET    | `/api/v1/projects?page&limit&status`  | Lấy danh sách Project có phân trang. `status` là `ACTIVE` hoặc `ARCHIVED`. |
+| GET    | `/api/v1/projects/:projectId`         | Lấy chi tiết Project có quyền truy cập.                                    |
+| PUT    | `/api/v1/projects/:projectId`         | Cập nhật `name` và/hoặc `description` của Project active.                  |
+| PUT    | `/api/v1/projects/:projectId/archive` | Archive Project; gọi lặp lại có tính idempotent.                           |
+
+Create request:
+
+```json
+{
+  "name": "My workflow",
+  "description": "Project description"
+}
+```
+
+- `name`: trim, bắt buộc, dài 1–255 ký tự.
+- `description`: tùy chọn, tối đa 4.000 ký tự; chuỗi rỗng sau trim trở thành `null`.
+- Không chấp nhận field thừa.
+- Nếu tên trùng không phân biệt hoa thường: Project active trả lại ID hiện có; Project archived trả
+  `409 Error.ProjectArchived`.
+
+Create response (`201`):
+
+```json
+{
+  "data": { "id": "550e8400-e29b-41d4-a716-446655440000" },
+  "statusCode": 201
+}
+```
+
+List query:
+
+| Field    | Bắt buộc | Mặc định | Giá trị                  |
+| -------- | -------- | -------- | ------------------------ |
+| `page`   | Không    | `1`      | Số nguyên dương          |
+| `limit`  | Không    | `10`     | Số nguyên dương          |
+| `status` | Không    | —        | `ACTIVE` hoặc `ARCHIVED` |
+
+Publisher có permission `OWN` nhưng chưa có Publisher account nhận danh sách rỗng.
+
+List response (`200`):
+
+```json
+{
+  "data": {
+    "items": [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "publisherAccountId": "650e8400-e29b-41d4-a716-446655440000",
+        "name": "My workflow",
+        "description": "Project description",
+        "status": "ACTIVE",
+        "createdAt": "2026-11-06T08:00:00.000Z",
+        "updatedAt": null
+      }
+    ],
+    "totalItems": 1,
+    "page": 1,
+    "limit": 10,
+    "totalPages": 1
+  },
+  "statusCode": 200
+}
+```
+
+Detail response (`200`):
+
+```json
+{
+  "data": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "publisherAccountId": "650e8400-e29b-41d4-a716-446655440000",
+    "name": "My workflow",
+    "description": "Project description",
+    "status": "ACTIVE",
+    "createdAt": "2026-11-06T08:00:00.000Z",
+    "updatedAt": "2026-11-06T09:00:00.000Z"
+  },
+  "statusCode": 200
+}
+```
+
+`projectId` phải là UUID. Project không tồn tại hoặc không thuộc phạm vi truy cập trả
+`404 Error.ProjectNotFound`.
+
+Update request phải có ít nhất `name` hoặc `description`, không nhận field thừa và chỉ áp dụng cho
+Project `ACTIVE` thuộc Publisher account active của user:
+
+```json
+{ "name": "Updated workflow", "description": null }
+```
+
+Update và Archive success response (`200`):
+
+```json
+{ "data": { "message": "Success" }, "statusCode": 200 }
+```
+
+Update Project archived trả `409 Error.ProjectArchived`. Archive không có body và có tính
+idempotent nếu Project tồn tại, user có quyền truy cập.
+
+#### ProjectDraft API
+
+| Method | Endpoint                            | Mục đích                                                             |
+| ------ | ----------------------------------- | -------------------------------------------------------------------- |
+| GET    | `/api/v1/projects/:projectId/draft` | Trả `{ projectStatus, draft }`; `draft` là `null` khi chưa từng lưu. |
+| PUT    | `/api/v1/projects/:projectId/draft` | Tạo/cập nhật draft bằng optimistic locking.                          |
+
+GET response khi chưa có draft:
+
+```json
+{
+  "data": { "projectStatus": "ACTIVE", "draft": null },
+  "statusCode": 200
+}
+```
+
+GET response khi đã có draft:
+
+```json
+{
+  "data": {
+    "projectStatus": "ACTIVE",
+    "draft": {
+      "id": "750e8400-e29b-41d4-a716-446655440000",
+      "projectId": "550e8400-e29b-41d4-a716-446655440000",
+      "version": 3,
+      "editorGraph": {},
+      "inputSchema": {},
+      "runtimeIr": null,
+      "validationSummary": {},
+      "testSummary": {},
+      "contentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+      "savedAt": "2026-11-06T09:00:00.000Z"
+    }
+  },
+  "statusCode": 200
+}
+```
+
+Có thể đọc draft của Project `ACTIVE` hoặc `ARCHIVED`.
+
+PUT request:
+
+```json
+{
+  "expectedVersion": 0,
+  "editorGraph": {},
+  "inputSchema": {},
+  "runtimeIr": null,
+  "validationSummary": {},
+  "testSummary": {}
+}
+```
+
+- `expectedVersion = 0` cho lần tạo đầu; số dương phải bằng version hiện tại khi cập nhật.
+- Các JSON field phải là object ở top level; `runtimeIr` được phép `null`.
+- Không chấp nhận field thừa; tổng nội dung tối đa 1.048.576 byte.
+- Chỉ ghi draft của Project `ACTIVE`, với scope `OWN` và Publisher account active.
+- Backend tự tính `contentHash`. Cùng nội dung trả version hiện tại thay vì tăng version.
+
+PUT response (`200`):
+
+```json
+{
+  "data": {
+    "id": "750e8400-e29b-41d4-a716-446655440000",
+    "version": 1,
+    "contentHash": "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    "savedAt": "2026-11-06T09:00:00.000Z"
+  },
+  "statusCode": 200
+}
+```
+
+Version conflict trả HTTP 409:
+
+```json
+{
+  "statusCode": 409,
+  "message": "Error.ProjectDraftVersionConflict",
+  "details": { "currentVersion": 3 }
+}
+```
+
+**Retry contract:** Backend chưa nhận idempotency key riêng cho `POST /projects`. Retry-safe create dựa
+trên unique normalized name và việc POST trả ID của Project active đã tồn tại. Studio chỉ dùng cơ chế
+này khi local checkpoint xác nhận một create attempt trước đó có thể đã mất response; không tự bind
+một local-only project vào cloud project trùng tên trong trường hợp thông thường.
 
 ---
 
@@ -609,7 +808,7 @@ Các điểm cần điều chỉnh hoặc làm rõ:
 
 - Tạo Sync coordinator/application use case; serialize Sync theo `local_id` và expose một progress/error model duy nhất.
 - Khi nhấn Sync: flush autosave, read immutable SQLite snapshot revision N, refresh cloud index và kiểm tra name conflict.
-- Gọi `POST /projects` với idempotency key đã chốt; persist `remote_project_id` ngay sau acknowledgement trong transaction riêng.
+- Persist `remote_create_pending` trước POST; Backend chưa hỗ trợ idempotency key riêng nên chỉ retry/bind theo normalized name khi checkpoint chứng minh một create attempt trước đó có thể đã mất response. Persist `remote_project_id` ngay sau acknowledgement trong transaction riêng.
 - Sync metadata riêng và lưu `metadata_synced_revision` theo acknowledgement.
 - GET Draft/baseline nếu contract yêu cầu; khi chưa có draft, PUT payload với `expectedVersion = 0`.
 - Chỉ lấy `base_remote_version`, `observed_remote_version`, `contentHash` và `savedAt` từ backend response.

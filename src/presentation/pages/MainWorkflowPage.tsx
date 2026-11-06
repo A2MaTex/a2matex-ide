@@ -2,6 +2,7 @@ import {
   ChevronDown,
   ChevronRight,
   CirclePlay,
+  CloudUpload,
   FileJson2,
   Folder,
   PanelRightOpen,
@@ -78,6 +79,9 @@ export function MainWorkflowPage() {
   const open = useProjectStore((state) => state.open);
   const flushLocalSave = useProjectStore((state) => state.flushLocalSave);
   const exportProject = useProjectStore((state) => state.exportProject);
+  const syncFirst = useProjectStore((state) => state.syncFirst);
+  const cloudStatus = useProjectStore((state) => state.cloudStatus);
+  const cloudError = useProjectStore((state) => state.cloudError);
   const close = useProjectStore((state) => state.close);
   const discard = useProjectStore((state) => state.discard);
   const executeWorkflowCommand = useProjectStore((state) => state.executeWorkflowCommand);
@@ -270,6 +274,7 @@ export function MainWorkflowPage() {
   const { manifest } = document;
   const saving = localSaveStatus === 'saving-local';
   const exporting = status === 'exporting';
+  const syncing = cloudStatus === 'syncing';
   const selectedNode = workflow.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const localSaveLabel = {
     dirty: 'Unsaved changes',
@@ -364,10 +369,23 @@ export function MainWorkflowPage() {
           <Button
             size="sm"
             variant="secondary"
+            onClick={() => void syncFirst()}
+            disabled={saving || syncing || session.snapshot.draftState.baseRemoteVersion !== null}
+            title={
+              session.snapshot.draftState.baseRemoteVersion === null
+                ? 'Back up this local project to cloud'
+                : 'Cloud re-sync is implemented in Milestone C'
+            }
+          >
+            <CloudUpload /> {syncing ? 'Syncing…' : 'Sync'}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
             onClick={() => void flushLocalSave()}
             disabled={saving || !dirty}
           >
-            <Save /> {saving ? 'Saving…' : 'Save now'}
+            <Save /> {saving ? 'Saving…' : 'Save'}
           </Button>
           <Button size="sm" variant="ghost" disabled title="Runtime integration begins in Phase 4">
             <CirclePlay /> Run
@@ -381,6 +399,14 @@ export function MainWorkflowPage() {
           className="border-b border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive"
         >
           {error}
+        </div>
+      ) : null}
+      {cloudError ? (
+        <div
+          role="alert"
+          className="border-b border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+        >
+          {cloudError}
         </div>
       ) : null}
 

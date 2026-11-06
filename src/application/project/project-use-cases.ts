@@ -1,18 +1,26 @@
 import {
   ProjectRepositoryError,
+  type CreateProjectInput,
   type ProjectRepository,
   type ProjectSnapshot,
 } from '@application/project/project-repository';
 
-export async function createProject(repository: ProjectRepository, name: string) {
-  const normalizedName = name.trim();
-  if (!normalizedName || normalizedName.length > 100) {
+export async function createProject(repository: ProjectRepository, input: CreateProjectInput) {
+  const normalizedName = input.name.trim();
+  const normalizedDescription = input.description?.trim() || undefined;
+  if (!normalizedName || normalizedName.length > 255) {
     throw new ProjectRepositoryError(
       'PROJECT_NAME_INVALID',
-      'Project name must contain between 1 and 100 characters.',
+      'Project name must contain between 1 and 255 characters.',
     );
   }
-  return repository.create(normalizedName);
+  if (normalizedDescription && normalizedDescription.length > 4_000) {
+    throw new ProjectRepositoryError(
+      'PROJECT_DESCRIPTION_INVALID',
+      'Project description must not exceed 4,000 characters.',
+    );
+  }
+  return repository.create({ name: normalizedName, description: normalizedDescription });
 }
 
 export function listProjects(repository: ProjectRepository) {

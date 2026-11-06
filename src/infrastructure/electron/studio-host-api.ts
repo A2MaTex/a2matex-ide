@@ -1,12 +1,14 @@
 import type {
   ExportProjectInput,
   ExportProjectResult,
+  CreateProjectInput,
   ProjectErrorCode,
   ProjectSnapshot,
   SaveProjectInput,
 } from '@application/project/project-repository';
 import type { AuthErrorCode, LoginInput, SessionState } from '@application/auth/auth-session';
 import type { NodeCatalogErrorCode } from '@application/node-catalog/node-catalog';
+import type { CloudProjectErrorCode, CloudProjectIndex } from '@application/project/project-cloud';
 import type { HostInfo } from '@application/system/host-gateway';
 import type { NodeCatalogSnapshot } from '@domain/node-catalog/node-catalog';
 
@@ -33,9 +35,16 @@ export interface StudioHostApi {
     load(runtimeVersion: string): Promise<HostResult<NodeCatalogSnapshot, NodeCatalogErrorCode>>;
     refresh(runtimeVersion: string): Promise<HostResult<NodeCatalogSnapshot, NodeCatalogErrorCode>>;
   };
+  cloudProject: {
+    load(): Promise<HostResult<CloudProjectIndex, CloudProjectErrorCode>>;
+    refresh(): Promise<HostResult<CloudProjectIndex, CloudProjectErrorCode>>;
+    syncFirst(localId: string): Promise<HostResult<ProjectSnapshot, CloudProjectErrorCode>>;
+  };
   project: {
-    create(name: string): Promise<HostResult<ProjectSnapshot, ProjectErrorCode>>;
-    exportProject(input: ExportProjectInput): Promise<HostResult<ExportProjectResult | null, ProjectErrorCode>>;
+    create(input: CreateProjectInput): Promise<HostResult<ProjectSnapshot, ProjectErrorCode>>;
+    exportProject(
+      input: ExportProjectInput,
+    ): Promise<HostResult<ExportProjectResult | null, ProjectErrorCode>>;
     importProject(): Promise<HostResult<ProjectSnapshot | null, ProjectErrorCode>>;
     list(): Promise<HostResult<ProjectSnapshot[], ProjectErrorCode>>;
     open(localId: string): Promise<HostResult<ProjectSnapshot, ProjectErrorCode>>;

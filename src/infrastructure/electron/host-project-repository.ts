@@ -1,5 +1,6 @@
 import {
   ProjectRepositoryError,
+  type CreateProjectInput,
   type ExportProjectInput,
   type ProjectErrorCode,
   type ProjectRepository,
@@ -22,9 +23,9 @@ export class HostProjectRepository implements ProjectRepository {
     return unwrap(await window.studioHost.project.list());
   }
 
-  async create(name: string) {
-    if (!window.studioHost) return this.fallback.create(name);
-    return unwrap(await window.studioHost.project.create(name));
+  async create(input: CreateProjectInput) {
+    if (!window.studioHost) return this.fallback.create(input);
+    return unwrap(await window.studioHost.project.create(input));
   }
 
   async open(localId: string) {

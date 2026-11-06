@@ -58,7 +58,10 @@ afterEach(() => {
 describe('LocalProjectService', () => {
   it('creates, lists and opens a SQLite project by local identity', async () => {
     const { service } = createHarness(['local-1', 'local-2']);
-    const created = await service.create('Offline Project');
+    const created = await service.create({
+      name: 'Offline Project',
+      description: 'Runs without a network connection',
+    });
 
     expect(created).toMatchObject({
       localId: 'local-1',
@@ -66,10 +69,11 @@ describe('LocalProjectService', () => {
       draftState: { localRevision: 0, metadataRevision: 0, syncStatus: 'local-only' },
     });
     expect(created.document.manifest.projectId).toBe('local-1');
+    expect(created.document.manifest.description).toBe('Runs without a network connection');
     await expect(service.list()).resolves.toMatchObject([{ localId: 'local-1' }]);
     await expect(service.open('local-1')).resolves.toMatchObject({ localId: 'local-1' });
 
-    await expect(service.create('  OFFLINE   PROJECT ')).rejects.toMatchObject({
+    await expect(service.create({ name: '  OFFLINE   PROJECT ' })).rejects.toMatchObject({
       code: 'DUPLICATE_PROJECT_NAME',
     });
     await expect(service.list()).resolves.toHaveLength(1);

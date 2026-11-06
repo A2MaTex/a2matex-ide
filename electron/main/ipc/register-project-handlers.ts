@@ -1,16 +1,17 @@
-import type { DatabaseSync } from 'node:sqlite';
-
 import { BrowserWindow, dialog, ipcMain, type IpcMainInvokeEvent } from 'electron';
 
+import { accountScopeFromName } from '@application/auth/account-scope';
 import type { MainAuthSession } from '@application/auth/auth-session';
-import { LocalProjectPersistenceError } from '@application/project/local-project-repository';
+import {
+  LocalProjectPersistenceError,
+  type LocalProjectRepository,
+} from '@application/project/local-project-repository';
 import {
   ProjectRepositoryError,
   type ExportProjectInput,
   type ProjectErrorCode,
   type SaveProjectInput,
 } from '@application/project/project-repository';
-import { SqliteLocalProjectRepository } from '@electron/main/adapters/project/sqlite-local-project-repository';
 import { IPC_CHANNELS } from '@electron/shared/channels';
 import { LocationRegistry, type LocationKind } from '@electron/main/security/location-registry';
 import {
@@ -82,10 +83,6 @@ function handle(channel: string, handler: (event: IpcMainInvokeEvent, input: unk
   });
 }
 
-function accountScopeFromName(account: string) {
-  return `login:${account.normalize('NFC').trim().toLowerCase()}`;
-}
-
 async function requireAccountScope(auth: MainAuthSession) {
   const session = await auth.restore();
   if (session.status !== 'authenticated') {
@@ -97,17 +94,19 @@ async function requireAccountScope(auth: MainAuthSession) {
   return accountScopeFromName(session.account);
 }
 
-export function registerProjectHandlers(input: { auth: MainAuthSession; database: DatabaseSync }) {
+export function registerProjectHandlers(input: {
+  auth: MainAuthSession;
+  projects: LocalProjectRepository;
+}) {
   const locations = new LocationRegistry();
-  const projects = new SqliteLocalProjectRepository(input.database);
   const archives = new ProjectArchiveService(locations);
-  const service = new LocalProjectService(projects, archives, () =>
+  const service = new LocalProjectService(input.projects, archives, () =>
     requireAccountScope(input.auth),
   );
 
   handle(IPC_CHANNELS.projectList, async () => success(await service.list()));
-  handle(IPC_CHANNELS.projectCreate, async (_event, rawName) =>
-    success(await service.create(rawName)),
+  handle(IPC_CHANNELS.projectCreate, async (_event, rawInput) =>
+    success(await service.create(rawInput)),
   );
   handle(IPC_CHANNELS.projectOpen, async (_event, rawLocalId) =>
     success(await service.open(rawLocalId)),

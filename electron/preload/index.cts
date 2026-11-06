@@ -22,9 +22,14 @@ const studioHost = {
     load: (runtimeVersion) => ipcRenderer.invoke('studio:catalog:load', runtimeVersion),
     refresh: (runtimeVersion) => ipcRenderer.invoke('studio:catalog:refresh', runtimeVersion),
   },
+  cloudProject: {
+    load: () => ipcRenderer.invoke('studio:cloud-project:load'),
+    refresh: () => ipcRenderer.invoke('studio:cloud-project:refresh'),
+    syncFirst: (localId) => ipcRenderer.invoke('studio:cloud-project:sync-first', localId),
+  },
   project: {
     list: () => ipcRenderer.invoke('studio:project:list'),
-    create: (name) => ipcRenderer.invoke('studio:project:create', name),
+    create: (input) => ipcRenderer.invoke('studio:project:create', input),
     open: (localId) => ipcRenderer.invoke('studio:project:open', localId),
     save: (input) => ipcRenderer.invoke('studio:project:save', input),
     importProject: () => ipcRenderer.invoke('studio:project:import'),

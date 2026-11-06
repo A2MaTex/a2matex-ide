@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@presentation/components/ui/button';
+import { mergeRecentProjects } from '@application/project/recent-projects';
 import { CreateProjectDialog } from '@presentation/features/project-session/CreateProjectDialog';
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
 
@@ -20,17 +21,21 @@ export function ProjectHomePage() {
   const loadRecent = useProjectStore((state) => state.loadRecent);
   const open = useProjectStore((state) => state.open);
   const recentProjects = useProjectStore((state) => state.recentProjects);
+  const cloudIndex = useProjectStore((state) => state.cloudIndex);
+  const cloudStatus = useProjectStore((state) => state.cloudStatus);
+  const cloudError = useProjectStore((state) => state.cloudError);
   const status = useProjectStore((state) => state.status);
   const error = useProjectStore((state) => state.error);
   const busy = ['creating', 'importing', 'loading', 'opening'].includes(status);
+  const recentItems = mergeRecentProjects(recentProjects, cloudIndex.projects);
 
   useEffect(() => {
     void loadRecent();
   }, [loadRecent]);
 
   const enterWorkspace = (projectId: string) => navigate(`/workspace/${projectId}`);
-  const handleCreate = async (name: string) => {
-    const snapshot = await create(name);
+  const handleCreate = async (input: { description?: string; name: string }) => {
+    const snapshot = await create(input);
     if (!snapshot) return false;
     enterWorkspace(snapshot.localId);
     return true;
@@ -78,6 +83,11 @@ export function ProjectHomePage() {
             {error}
           </div>
         ) : null}
+        {cloudError ? (
+          <div className="rounded-lg border border-warning/35 bg-warning/10 px-4 py-3 text-xs text-warning">
+            Cloud refresh: {cloudError}. Showing the last cached index when available.
+          </div>
+        ) : null}
 
         <section className="grid gap-4 lg:grid-cols-[1.45fr_0.55fr]">
           <article className="overflow-hidden rounded-xl border border-border bg-card shadow-xl shadow-black/10">
@@ -85,10 +95,10 @@ export function ProjectHomePage() {
               <h2 className="text-sm font-semibold">Recent projects</h2>
 
               <span className="rounded-md bg-secondary px-2 py-1 text-[10px] font-medium uppercase tracking-wider text-muted-foreground">
-                {recentProjects.length}
+                {cloudStatus === 'refreshing' ? 'syncing…' : recentItems.length}
               </span>
             </div>
-            {recentProjects.length === 0 ? (
+            {recentItems.length === 0 ? (
               <div className="grid min-h-64 place-items-center p-8 text-center">
                 <div>
                   <div className="mx-auto grid size-12 place-items-center rounded-xl border border-border bg-secondary text-muted-foreground">
@@ -111,23 +121,22 @@ export function ProjectHomePage() {
               </div>
             ) : (
               <div className="divide-y divide-border">
-                {recentProjects.map((project) => (
+                {recentItems.map((project) => (
                   <button
-                    key={project.localId}
+                    key={project.key}
                     type="button"
-                    onClick={() => handleRecent(project.localId)}
-                    className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-accent"
+                    onClick={() => project.local && handleRecent(project.local.localId)}
+                    disabled={!project.local}
+                    className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors enabled:hover:bg-accent disabled:cursor-default disabled:opacity-70"
                   >
                     <div className="grid size-9 place-items-center rounded-lg bg-secondary text-cyan-400">
                       <Workflow className="size-4" />
                     </div>
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">
-                        {project.document.manifest.name}
-                      </div>
+                      <div className="truncate text-sm font-medium">{project.name}</div>
                       <div className="truncate text-[11px] text-muted-foreground">
-                        Updated {new Date(project.updatedAt).toLocaleString()} ·{' '}
-                        {project.draftState.syncStatus}
+                        Updated {new Date(project.effectiveUpdatedAt).toLocaleString()} ·{' '}
+                        {project.state}
                       </div>
                     </div>
                     <ArrowRight className="size-4 text-muted-foreground" />

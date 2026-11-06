@@ -2,11 +2,12 @@ import * as Dialog from '@radix-ui/react-dialog';
 import { FolderPlus, X } from 'lucide-react';
 import { useState, type FormEvent } from 'react';
 
+import type { CreateProjectInput } from '@application/project/project-repository';
 import { Button } from '@presentation/components/ui/button';
 
 interface CreateProjectDialogProps {
   busy: boolean;
-  onCreate(name: string): Promise<boolean>;
+  onCreate(input: CreateProjectInput): Promise<boolean>;
   onOpenChange(open: boolean): void;
   open: boolean;
 }
@@ -18,10 +19,12 @@ export function CreateProjectDialog({
   open,
 }: CreateProjectDialogProps) {
   const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
   const submit = async (event: FormEvent) => {
     event.preventDefault();
-    if (await onCreate(name)) {
+    if (await onCreate({ name, description })) {
       setName('');
+      setDescription('');
       onOpenChange(false);
     }
   };
@@ -30,7 +33,7 @@ export function CreateProjectDialog({
     <Dialog.Root open={open} onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-40 bg-black/65 backdrop-blur-sm" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 w-[min(92vw,460px)] -translate-x-1/2 -translate-y-1/2 rounded-xl border border-border bg-card p-6 shadow-2xl outline-none">
+        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 max-h-[90vh] w-[min(92vw,460px)] -translate-x-1/2 -translate-y-1/2 overflow-y-auto rounded-xl border border-border bg-card p-6 shadow-2xl outline-none">
           <div className="flex items-start gap-3">
             <div className="grid size-10 place-items-center rounded-lg bg-primary/10 text-cyan-400">
               <FolderPlus className="size-5" />
@@ -60,11 +63,29 @@ export function CreateProjectDialog({
               value={name}
               onChange={(event) => setName(event.target.value)}
               placeholder="Android onboarding"
-              maxLength={100}
+              maxLength={255}
               className="mt-2 h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
             />
             <p className="mt-2 text-[11px] text-muted-foreground">
               Project names must be unique within your local account scope.
+            </p>
+            <label
+              htmlFor="project-description"
+              className="mt-5 block text-xs font-medium text-secondary-foreground"
+            >
+              Description <span className="text-muted-foreground">(optional)</span>
+            </label>
+            <textarea
+              id="project-description"
+              value={description}
+              onChange={(event) => setDescription(event.target.value)}
+              placeholder="Describe what this automation does"
+              maxLength={4_000}
+              rows={4}
+              className="mt-2 min-h-24 max-h-48 w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
+            />
+            <p className="mt-1 text-right text-[10px] text-muted-foreground">
+              {description.length.toLocaleString()} / 4,000
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <Dialog.Close asChild>

@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { LocalProjectRepository } from '@application/project/local-project-repository';
 import {
   ProjectRepositoryError,
+  type CreateProjectInput,
   type ExportProjectInput,
   type SaveProjectInput,
 } from '@application/project/project-repository';
@@ -22,18 +23,26 @@ export class LocalProjectService {
     return this.projects.list(await this.accountScope());
   }
 
-  async create(rawName: unknown) {
-    const name = typeof rawName === 'string' ? rawName.trim() : '';
-    if (!name || name.length > 100) {
+  async create(rawInput: unknown) {
+    const input = isCreateProjectInput(rawInput) ? rawInput : null;
+    const name = input?.name.trim() ?? '';
+    const description = input?.description?.trim() || undefined;
+    if (!name || name.length > 255) {
       throw new ProjectRepositoryError(
         'PROJECT_NAME_INVALID',
-        'Project name must contain between 1 and 100 characters.',
+        'Project name must contain between 1 and 255 characters.',
+      );
+    }
+    if (description && description.length > 4_000) {
+      throw new ProjectRepositoryError(
+        'PROJECT_DESCRIPTION_INVALID',
+        'Project description must not exceed 4,000 characters.',
       );
     }
     const localId = this.createId();
     return this.projects.create({
       accountScope: await this.accountScope(),
-      document: createEmptyProjectDocument(localId, name),
+      document: createEmptyProjectDocument(localId, name, description),
       localId,
     });
   }
@@ -65,4 +74,15 @@ export class LocalProjectService {
   exportProject(input: ExportProjectInput, target: ArchiveLocation) {
     return this.archives.exportProject(input.document, target);
   }
+}
+
+function isCreateProjectInput(value: unknown): value is CreateProjectInput {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const keys = Object.keys(value);
+  return (
+    keys.every((key) => key === 'name' || key === 'description') &&
+    typeof Reflect.get(value, 'name') === 'string' &&
+    (Reflect.get(value, 'description') === undefined ||
+      typeof Reflect.get(value, 'description') === 'string')
+  );
 }

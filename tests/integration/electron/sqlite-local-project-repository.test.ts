@@ -32,10 +32,10 @@ afterEach(() => {
 });
 
 describe('studio database', () => {
-  it('applies migration version 1 and rolls back failed transactions', () => {
+  it('applies migration version 2 and rolls back failed transactions', () => {
     const database = openMemoryDatabase();
     expect(getStudioDatabaseMetadata(database.connection)).toEqual({
-      databaseVersion: 1,
+      databaseVersion: 2,
       nameNormalizationVersion: 1,
     });
     database.connection.exec('CREATE TABLE transaction_probe (value TEXT) STRICT');
@@ -74,7 +74,7 @@ describe('studio database', () => {
       'local-1',
     );
     expect(snapshot?.document.manifest.name).toBe('Persistent Project');
-    expect(getStudioDatabaseMetadata(second.connection).databaseVersion).toBe(1);
+    expect(getStudioDatabaseMetadata(second.connection).databaseVersion).toBe(2);
   });
 });
 

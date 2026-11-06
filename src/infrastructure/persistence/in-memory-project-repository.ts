@@ -4,6 +4,7 @@ import type {
 } from '@application/project/local-project-repository';
 import {
   ProjectRepositoryError,
+  type CreateProjectInput,
   type ExportProjectInput,
   type ProjectRepository,
   type SaveProjectInput,
@@ -27,6 +28,7 @@ function initialDraftState(): LocalProjectDraftState {
     metadataSyncedRevision: null,
     observedRemoteVersion: null,
     remoteSavedAt: null,
+    remoteCreatePending: false,
     runtimeIr: null,
     syncStatus: 'local-only',
     testSummary: {},
@@ -37,8 +39,8 @@ function initialDraftState(): LocalProjectDraftState {
 export class InMemoryProjectRepository implements ProjectRepository {
   private readonly projects = new Map<string, LocalProjectSnapshot>();
 
-  async create(name: string) {
-    const normalizedName = normalizeProjectName(name);
+  async create(input: CreateProjectInput) {
+    const normalizedName = normalizeProjectName(input.name);
     if (
       [...this.projects.values()].some(
         (project) => normalizeProjectName(project.document.manifest.name) === normalizedName,
@@ -54,7 +56,7 @@ export class InMemoryProjectRepository implements ProjectRepository {
     const snapshot: LocalProjectSnapshot = {
       accountScope: 'memory',
       createdAt: timestamp,
-      document: createEmptyProjectDocument(localId, name),
+      document: createEmptyProjectDocument(localId, input.name, input.description),
       draftState: initialDraftState(),
       localId,
       remoteProjectId: null,

@@ -34,8 +34,8 @@ export const projectManifestV1Schema: z.ZodType<ProjectManifest> = z
   .object({
     schemaVersion: z.literal(CURRENT_PROJECT_SCHEMA_VERSION),
     projectId: z.string().min(1).max(128),
-    name: z.string().trim().min(1).max(100),
-    description: z.string().max(2_000).optional(),
+    name: z.string().trim().min(1).max(255),
+    description: z.string().max(4_000).optional(),
     version: z.string().regex(/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/),
     entryWorkflow: workflowPathSchema,
     minimumRuntimeVersion: z.string().min(1).max(64),

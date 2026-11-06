@@ -3,6 +3,11 @@ import type { ProjectDocument } from '@domain/project/project';
 
 export type ProjectSnapshot = LocalProjectSnapshot;
 
+export interface CreateProjectInput {
+  description?: string;
+  name: string;
+}
+
 export interface SaveProjectInput {
   document: ProjectDocument;
   expectedLocalRevision: number;
@@ -19,7 +24,7 @@ export interface ExportProjectResult {
 }
 
 export interface ProjectRepository {
-  create(name: string): Promise<ProjectSnapshot>;
+  create(input: CreateProjectInput): Promise<ProjectSnapshot>;
   exportProject(input: ExportProjectInput): Promise<ExportProjectResult | null>;
   importProject(): Promise<ProjectSnapshot | null>;
   list(): Promise<ProjectSnapshot[]>;
@@ -34,6 +39,7 @@ export type ProjectErrorCode =
   | 'LOCAL_REVISION_CONFLICT'
   | 'PROJECT_ACCOUNT_UNAVAILABLE'
   | 'PROJECT_ALREADY_EXISTS'
+  | 'PROJECT_DESCRIPTION_INVALID'
   | 'PROJECT_FORMAT_INVALID'
   | 'PROJECT_LOCATION_INVALID'
   | 'PROJECT_NAME_INVALID'

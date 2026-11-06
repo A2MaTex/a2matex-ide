@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SaveProjectInput } from '@application/project/project-repository';
+import type { ProjectCloudClient } from '@application/project/project-cloud';
 import { InMemoryProjectRepository } from '@infrastructure/persistence/in-memory-project-repository';
 import { createProjectStore, projectStoreIsDirty } from '@presentation/stores/project-store';
 
@@ -9,7 +10,7 @@ afterEach(() => vi.useRealTimers());
 describe('project store local-first lifecycle', () => {
   it('loads recent projects and reopens them by local ID', async () => {
     const repository = new InMemoryProjectRepository();
-    const created = await repository.create('Recent Project');
+    const created = await repository.create({ name: 'Recent Project' });
     const store = createProjectStore(repository);
 
     await store.getState().loadRecent();
@@ -22,7 +23,7 @@ describe('project store local-first lifecycle', () => {
 
   it('flushes locally before export without changing the project identity', async () => {
     const store = createProjectStore(new InMemoryProjectRepository());
-    const created = await store.getState().create('Editable Project');
+    const created = await store.getState().create({ name: 'Editable Project' });
     expect(created).not.toBeNull();
 
     store.getState().updateProjectName('Edited Project');
@@ -38,7 +39,7 @@ describe('project store local-first lifecycle', () => {
     vi.useFakeTimers();
     const repository = new InMemoryProjectRepository();
     const store = createProjectStore(repository);
-    const created = await store.getState().create('Autosave Project');
+    const created = await store.getState().create({ name: 'Autosave Project' });
 
     store.getState().updateProjectName('Autosaved Project');
     expect(store.getState().localSaveStatus).toBe('dirty');
@@ -80,7 +81,7 @@ describe('project store local-first lifecycle', () => {
 
     const repository = new BlockingRepository();
     const store = createProjectStore(repository);
-    const created = await store.getState().create('Race Project');
+    const created = await store.getState().create({ name: 'Race Project' });
     store.getState().updateProjectName('Revision One');
     await vi.advanceTimersByTimeAsync(3_000);
     await firstSaveStarted;
@@ -100,14 +101,49 @@ describe('project store local-first lifecycle', () => {
     vi.useFakeTimers();
     const repository = new InMemoryProjectRepository();
     const store = createProjectStore(repository);
-    const first = await store.getState().create('First Project');
+    const first = await store.getState().create({ name: 'First Project' });
     store.getState().updateProjectName('First Project Updated');
 
-    const second = await store.getState().create('Second Project');
+    const second = await store.getState().create({ name: 'Second Project' });
     expect(second?.document.manifest.name).toBe('Second Project');
     expect((await repository.open(first!.localId)).document.manifest.name).toBe(
       'First Project Updated',
     );
+  });
+
+  it('flushes the editor to SQLite before starting first cloud sync', async () => {
+    const repository = new InMemoryProjectRepository();
+    let uploadedName = '';
+    const cloud: ProjectCloudClient = {
+      load: async () => ({ projects: [], refreshedAt: null, source: 'cache', warning: null }),
+      refresh: async () => ({ projects: [], refreshedAt: null, source: 'network', warning: null }),
+      syncFirst: async (localId) => {
+        const snapshot = await repository.open(localId);
+        uploadedName = snapshot.document.manifest.name;
+        return {
+          ...snapshot,
+          remoteProjectId: 'remote-1',
+          draftState: {
+            ...snapshot.draftState,
+            baseRemoteVersion: 1,
+            observedRemoteVersion: 1,
+            lastSyncedLocalRevision: snapshot.draftState.localRevision,
+            syncStatus: 'synced',
+          },
+        };
+      },
+    };
+    const store = createProjectStore(repository, { cloud });
+    await store.getState().create({ name: 'Before edit' });
+    store.getState().updateProjectName('Durable before sync');
+
+    await expect(store.getState().syncFirst()).resolves.toBe(true);
+
+    expect(uploadedName).toBe('Durable before sync');
+    expect(store.getState().session?.snapshot).toMatchObject({
+      remoteProjectId: 'remote-1',
+      draftState: { localRevision: 1, syncStatus: 'synced' },
+    });
   });
 
   it('keeps the editor dirty after a local failure and retries on flush', async () => {
@@ -126,7 +162,7 @@ describe('project store local-first lifecycle', () => {
 
     const repository = new FailOnceRepository();
     const store = createProjectStore(repository);
-    const created = await store.getState().create('Retry Project');
+    const created = await store.getState().create({ name: 'Retry Project' });
     store.getState().updateProjectName('Retry Project Updated');
     await vi.advanceTimersByTimeAsync(3_000);
 

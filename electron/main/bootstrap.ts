@@ -3,12 +3,16 @@ import path from 'node:path';
 import { app, BrowserWindow, session } from 'electron';
 
 import { createAuthSessionService } from '@electron/main/auth/create-auth-session-service';
+import { SqliteCloudProjectCache } from '@electron/main/adapters/project/sqlite-cloud-project-cache';
+import { SqliteLocalProjectRepository } from '@electron/main/adapters/project/sqlite-local-project-repository';
 import { createNodeCatalogService } from '@electron/main/catalog/create-node-catalog-service';
 import { registerAuthHandlers } from '@electron/main/ipc/register-auth-handlers';
+import { registerCloudProjectHandlers } from '@electron/main/ipc/register-cloud-project-handlers';
 import { registerNodeCatalogHandlers } from '@electron/main/ipc/register-node-catalog-handlers';
 import { registerProjectHandlers } from '@electron/main/ipc/register-project-handlers';
 import { registerSystemHandlers } from '@electron/main/ipc/register-system-handlers';
 import { logMain } from '@electron/main/logger';
+import { createProjectCloudService } from '@electron/main/project/create-project-cloud-service';
 import {
   openStudioDatabase,
   type StudioDatabase,
@@ -84,7 +88,10 @@ app.whenReady().then(() => {
       auth,
     }),
   );
-  registerProjectHandlers({ auth, database: studioDatabase.connection });
+  const projects = new SqliteLocalProjectRepository(studioDatabase.connection);
+  const cloudCache = new SqliteCloudProjectCache(studioDatabase.connection);
+  registerProjectHandlers({ auth, projects });
+  registerCloudProjectHandlers(createProjectCloudService({ auth, cache: cloudCache, projects }));
   createWindow();
   logMain('info', 'app_ready', { packaged: app.isPackaged });
 

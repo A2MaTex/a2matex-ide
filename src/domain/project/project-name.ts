@@ -7,3 +7,8 @@ export const LOCAL_PROJECT_NAME_NORMALIZATION_VERSION = 1;
 export function normalizeProjectName(name: string) {
   return name.normalize('NFC').trim().replace(/\s+/gu, ' ').toLowerCase();
 }
+
+/** Mirrors the backend unique index: lower(btrim(name)). */
+export function normalizeCloudProjectName(name: string) {
+  return name.trim().toLowerCase();
+}
