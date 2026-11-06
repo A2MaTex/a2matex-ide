@@ -2,25 +2,22 @@ import { randomUUID } from 'node:crypto';
 import { lstat, mkdir, open, readFile, readdir, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 
-import type {
-  CreateProjectInput,
-  ProjectLocation,
-  ProjectSnapshot,
-  SaveProjectResult,
-} from '@application/project/project-repository';
 import {
   PROJECT_MANIFEST_FILE,
   type ProjectDocument,
   type WorkflowDocument,
 } from '@domain/project/project';
-import { createEmptyProjectDocument } from '@domain/project/project-factory';
 import {
   migrateProjectManifest,
   parseWorkflowDocument,
   ProjectFormatError,
 } from '@domain/project/project-migration';
 import { projectDocumentSchema } from '@domain/project/project-schema';
-import { LocationGrantError, LocationRegistry } from '@electron/main/security/location-registry';
+import {
+  type ArchiveLocation,
+  LocationGrantError,
+  LocationRegistry,
+} from '@electron/main/security/location-registry';
 
 const MAX_JSON_FILE_BYTES = 5 * 1024 * 1024;
 
@@ -40,17 +37,6 @@ export class ProjectFileError extends Error {
     super(message);
     this.name = 'ProjectFileError';
   }
-}
-
-function directoryNameFromProject(name: string) {
-  const normalized = name
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 64);
-  return normalized || 'a2matex-project';
 }
 
 function resolveInside(root: string, relativePath: string) {
@@ -132,45 +118,13 @@ async function readDocument(root: string): Promise<{
   return { document, ...(migratedFrom === undefined ? {} : { migratedFrom }) };
 }
 
-export class ProjectFileService {
+export class ProjectArchiveService {
   constructor(private readonly locations: LocationRegistry) {}
 
-  async create(input: CreateProjectInput): Promise<ProjectSnapshot> {
-    const normalizedName = typeof input?.name === 'string' ? input.name.trim() : '';
-    if (!normalizedName || normalizedName.length > 100) {
-      throw new ProjectFileError(
-        'PROJECT_NAME_INVALID',
-        'Project name must contain between 1 and 100 characters',
-      );
-    }
-
-    const parent = this.locations.resolve(input.parent, ['parent']);
-    const target = resolveInside(parent, directoryNameFromProject(normalizedName));
-    try {
-      await mkdir(target, { recursive: false });
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code === 'EEXIST') {
-        throw new ProjectFileError('PROJECT_ALREADY_EXISTS', 'A project folder already exists');
-      }
-      throw error;
-    }
-
-    const document = createEmptyProjectDocument(randomUUID(), normalizedName);
-    try {
-      await writeDocument(target, document);
-    } catch (error) {
-      await rm(target, { recursive: true, force: true }).catch(() => undefined);
-      throw error;
-    }
-    const location = await this.locations.register(target, 'project');
-    return { location, document };
-  }
-
-  async open(location: ProjectLocation): Promise<ProjectSnapshot> {
+  async importProject(location: ArchiveLocation) {
     const root = this.locations.resolve(location, ['project']);
     const { document, migratedFrom } = await readDocument(root);
     return {
-      location,
       document,
       ...(migratedFrom === undefined
         ? {}
@@ -178,21 +132,14 @@ export class ProjectFileService {
     };
   }
 
-  async save(snapshot: ProjectSnapshot): Promise<SaveProjectResult> {
-    const root = this.locations.resolve(snapshot.location, ['project']);
-    await writeDocument(root, snapshot.document);
-    return { location: snapshot.location, savedAt: new Date().toISOString() };
-  }
-
-  async saveAs(snapshot: ProjectSnapshot, target: ProjectLocation): Promise<SaveProjectResult> {
+  async exportProject(document: ProjectDocument, target: ArchiveLocation) {
     const root = this.locations.resolve(target, ['target']);
     const files = await readdir(root);
     if (files.length > 0) {
-      throw new ProjectFileError('PROJECT_ALREADY_EXISTS', 'Save As destination must be empty');
+      throw new ProjectFileError('PROJECT_ALREADY_EXISTS', 'Export destination must be empty');
     }
-    await writeDocument(root, snapshot.document);
-    const location = await this.locations.register(root, 'project');
-    return { location, savedAt: new Date().toISOString() };
+    await writeDocument(root, document);
+    return { displayPath: root, savedAt: new Date().toISOString() };
   }
 }
 

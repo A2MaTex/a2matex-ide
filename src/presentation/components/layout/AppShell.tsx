@@ -1,21 +1,41 @@
 import { FolderKanban, LogOut, Settings, UserRound, Workflow } from 'lucide-react';
+import type { MouseEvent } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@presentation/features/auth/use-auth';
+import { useProjectStore } from '@presentation/features/project-session/use-project-store';
 import { cn } from '@shared/utils/cn';
 import URL from '@/app/constants/url';
 
-const navItems = [
-  { to: URL.ProjectHome, label: 'Projects', icon: FolderKanban },
-  { to: URL.LocalWorkspace, label: 'Workspace', icon: Workflow },
-  { to: URL.Settings, label: 'Settings', icon: Settings },
-];
-
 export function AppShell() {
   const { logout, session, status } = useAuth();
+  const projectSession = useProjectStore((state) => state.session);
+  const flushLocalSave = useProjectStore((state) => state.flushLocalSave);
+  const discardProject = useProjectStore((state) => state.discard);
   const navigate = useNavigate();
+  
+  const navItems = [
+    { to: URL.ProjectHome, label: 'Projects', icon: FolderKanban },
+    {
+      to: projectSession ? `/workspace/${projectSession.snapshot.localId}` : URL.ProjectHome,
+      label: 'Workspace',
+      icon: Workflow,
+    },
+    { to: URL.Settings, label: 'Settings', icon: Settings },
+  ];
+
+  function handleNavigation(event: MouseEvent<HTMLAnchorElement>, to: string) {
+    event.preventDefault();
+    void flushLocalSave().then((saved) => {
+      if (saved) navigate(to);
+    });
+  }
 
   async function handleLogout() {
+    if (!(await flushLocalSave())) {
+      if (!window.confirm('Local save failed. Sign out and discard unsaved changes?')) return;
+    }
+    discardProject();
     await logout();
     navigate(URL.Login, { replace: true });
   }
@@ -29,15 +49,14 @@ export function AppShell() {
         <nav className="flex w-full flex-col gap-2 px-2" aria-label="Primary">
           {navItems.map(({ icon: Icon, label, to }) => (
             <NavLink
-              key={to}
+              key={label}
               to={to}
               title={label}
+              onClick={(event) => handleNavigation(event, to)}
               className={({ isActive }) =>
                 cn(
                   'group/nav relative flex h-11 w-full shrink-0 items-center overflow-hidden rounded-lg text-xs font-medium text-muted-foreground outline-none hover:bg-accent/40 hover:text-foreground',
-                  isActive
-                    ? 'text-cyan-400 bg-accent/40'
-                    : undefined,
+                  isActive ? 'text-cyan-400 bg-accent/40' : undefined,
                 )
               }
             >

@@ -40,8 +40,8 @@ export function CreateProjectDialog({
                 Create automation project
               </Dialog.Title>
               <Dialog.Description className="mt-1 text-xs leading-5 text-muted-foreground">
-                Enter a name, then choose a parent folder. Studio creates a versioned manifest and
-                an empty main workflow.
+                Studio creates a local working copy and an empty main workflow immediately. No
+                folder or network connection is required.
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
@@ -64,7 +64,7 @@ export function CreateProjectDialog({
               className="mt-2 h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
             />
             <p className="mt-2 text-[11px] text-muted-foreground">
-              A folder-safe name is generated inside the parent directory you select.
+              Project names must be unique within your local account scope.
             </p>
             <div className="mt-6 flex justify-end gap-2">
               <Dialog.Close asChild>
@@ -73,9 +73,7 @@ export function CreateProjectDialog({
                 </Button>
               </Dialog.Close>
               <Button type="submit" disabled={busy || !name.trim()}>
-                <span className="text-sm font-medium">
-                  {busy ? 'Creating…' : 'Choose folder & create'}
-                </span>
+                <span className="text-sm font-medium">{busy ? 'Creating…' : 'Create project'}</span>
               </Button>
             </div>
           </form>

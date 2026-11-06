@@ -11,7 +11,7 @@ import {
   Undo2,
   X,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
 import { useNavigate, useParams } from 'react-router-dom';
 import { ReactFlowProvider } from '@xyflow/react';
@@ -74,9 +74,12 @@ export function MainWorkflowPage() {
   const undoStack = useProjectStore((state) => state.undoStack);
   const redoStack = useProjectStore((state) => state.redoStack);
   const dirty = useProjectStore(projectStoreIsDirty);
-  const save = useProjectStore((state) => state.save);
-  const saveAs = useProjectStore((state) => state.saveAs);
+  const localSaveStatus = useProjectStore((state) => state.localSaveStatus);
+  const open = useProjectStore((state) => state.open);
+  const flushLocalSave = useProjectStore((state) => state.flushLocalSave);
+  const exportProject = useProjectStore((state) => state.exportProject);
   const close = useProjectStore((state) => state.close);
+  const discard = useProjectStore((state) => state.discard);
   const executeWorkflowCommand = useProjectStore((state) => state.executeWorkflowCommand);
   const undo = useProjectStore((state) => state.undo);
   const redo = useProjectStore((state) => state.redo);
@@ -97,7 +100,15 @@ export function MainWorkflowPage() {
   const explorerPanelRef = usePanelRef();
   const nodePalettePanelRef = usePanelRef();
   const inspectorPanelRef = usePanelRef();
-  useProjectCloseGuard(dirty);
+  const attemptedProjectId = useRef<string | null>(null);
+  useProjectCloseGuard(dirty, flushLocalSave);
+
+  useEffect(() => {
+    if (!session && projectId && status === 'idle' && attemptedProjectId.current !== projectId) {
+      attemptedProjectId.current = projectId;
+      void open(projectId);
+    }
+  }, [open, projectId, session, status]);
 
   const loadNodeCatalog = useCallback(async (refresh = false) => {
     await Promise.resolve();
@@ -180,7 +191,7 @@ export function MainWorkflowPage() {
       const key = event.key.toLowerCase();
       if (modifier && key === 's') {
         event.preventDefault();
-        if (session && status !== 'saving') void save();
+        if (session && localSaveStatus !== 'saving-local') void flushLocalSave();
         return;
       }
       if (isTextInput(event.target)) return;
@@ -218,7 +229,8 @@ export function MainWorkflowPage() {
     duplicateNode,
     execute,
     redo,
-    save,
+    flushLocalSave,
+    localSaveStatus,
     selectNode,
     selectedNodeId,
     session,
@@ -230,7 +242,15 @@ export function MainWorkflowPage() {
     return () => resetWorkflowSession();
   }, [resetWorkflowSession]);
 
-  if (!session || !document || !workflow || document.manifest.projectId !== projectId) {
+  if (!session && status === 'opening') {
+    return (
+      <div className="grid h-full place-items-center bg-editor-canvas text-sm text-muted-foreground">
+        Opening local project…
+      </div>
+    );
+  }
+
+  if (!session || !document || !workflow || session.snapshot.localId !== projectId) {
     return (
       <div className="grid h-full place-items-center bg-editor-canvas p-8 text-center">
         <div className="max-w-md rounded-xl border border-border bg-card p-7 shadow-xl">
@@ -248,13 +268,36 @@ export function MainWorkflowPage() {
   }
 
   const { manifest } = document;
-  const saving = status === 'saving';
+  const saving = localSaveStatus === 'saving-local';
+  const exporting = status === 'exporting';
   const selectedNode = workflow.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const localSaveLabel = {
+    dirty: 'Unsaved changes',
+    'local-save-error': 'Local save failed',
+    'saved-local': 'Saved locally',
+    'saving-local': 'Saving locally…',
+  }[localSaveStatus];
+  const localSaveTone =
+    localSaveStatus === 'local-save-error'
+      ? 'bg-destructive/15 text-destructive'
+      : dirty || saving
+        ? 'bg-warning/15 text-warning'
+        : 'bg-success/15 text-success';
+  const cloudSyncLabel =
+    session.snapshot.draftState.syncStatus === 'local-only'
+      ? 'Not synced'
+      : session.snapshot.draftState.syncStatus.replaceAll('-', ' ');
 
-  const closeProject = () => {
-    if (dirty && !window.confirm('Close this project and discard unsaved changes?')) return;
+  const returnToProjects = async () => {
+    if (!(await flushLocalSave())) return;
+    navigate('/projects');
+  };
+  const closeProject = async () => {
+    if (!(await close())) {
+      if (!window.confirm('Local save failed. Close and discard unsaved changes?')) return;
+      discard();
+    }
     resetWorkflowSession();
-    close();
     navigate('/projects');
   };
   const addFromPalette = (definition: NodeDefinition) => {
@@ -281,7 +324,7 @@ export function MainWorkflowPage() {
         <div className="flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
           <button
             type="button"
-            onClick={() => navigate('/projects')}
+            onClick={() => void returnToProjects()}
             className="hover:text-foreground"
           >
             Projects
@@ -289,12 +332,12 @@ export function MainWorkflowPage() {
           <ChevronRight className="size-3" />
           <span className="truncate font-medium text-foreground">{manifest.name}</span>
           <span
-            className={
-              'ml-2 rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ' +
-              (dirty ? 'bg-warning/15 text-warning' : 'bg-success/15 text-success')
-            }
+            className={`ml-2 rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${localSaveTone}`}
           >
-            {dirty ? 'unsaved' : 'saved'}
+            {localSaveLabel}
+          </span>
+          <span className="ml-1 rounded bg-secondary px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider">
+            {cloudSyncLabel}
           </span>
           <span className="ml-2 text-[10px]">
             {workflow.nodes.length} nodes · {issues.length} problems
@@ -307,19 +350,24 @@ export function MainWorkflowPage() {
           <Button size="sm" variant="ghost" onClick={redo} disabled={redoStack.length === 0}>
             <Redo2 /> Redo
           </Button>
-          <Button size="sm" variant="ghost" onClick={closeProject}>
+          <Button size="sm" variant="ghost" onClick={() => void closeProject()}>
             <X /> Close
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => void saveAs()} disabled={saving}>
-            <SaveAll /> Save As
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void exportProject()}
+            disabled={saving || exporting}
+          >
+            <SaveAll /> {exporting ? 'Exporting…' : 'Export'}
           </Button>
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => void save()}
+            onClick={() => void flushLocalSave()}
             disabled={saving || !dirty}
           >
-            <Save /> {saving ? 'Saving…' : 'Save'}
+            <Save /> {saving ? 'Saving…' : 'Save now'}
           </Button>
           <Button size="sm" variant="ghost" disabled title="Runtime integration begins in Phase 4">
             <CirclePlay /> Run

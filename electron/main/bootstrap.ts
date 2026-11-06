@@ -9,8 +9,13 @@ import { registerNodeCatalogHandlers } from '@electron/main/ipc/register-node-ca
 import { registerProjectHandlers } from '@electron/main/ipc/register-project-handlers';
 import { registerSystemHandlers } from '@electron/main/ipc/register-system-handlers';
 import { logMain } from '@electron/main/logger';
+import {
+  openStudioDatabase,
+  type StudioDatabase,
+} from '@electron/main/persistence/studio-database';
 
 const developmentUrl = process.env.A2MATEX_DEV_SERVER_URL;
+let studioDatabase: StudioDatabase | null = null;
 
 export function createWindow() {
   const window = new BrowserWindow({
@@ -59,6 +64,18 @@ app.whenReady().then(() => {
     isPackaged: app.isPackaged,
   });
   registerAuthHandlers(auth);
+  try {
+    studioDatabase = openStudioDatabase({
+      migrationsPath: path.join(appPath, 'prisma', 'migration'),
+      userDataPath,
+    });
+  } catch (error) {
+    logMain('error', 'local_database_initialization_failed', {
+      name: error instanceof Error ? error.name : 'UnknownError',
+    });
+    app.quit();
+    return;
+  }
   registerNodeCatalogHandlers(
     createNodeCatalogService({
       appPath,
@@ -67,7 +84,7 @@ app.whenReady().then(() => {
       auth,
     }),
   );
-  registerProjectHandlers();
+  registerProjectHandlers({ auth, database: studioDatabase.connection });
   createWindow();
   logMain('info', 'app_ready', { packaged: app.isPackaged });
 
@@ -78,6 +95,11 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('will-quit', () => {
+  studioDatabase?.close();
+  studioDatabase = null;
 });
 
 process.on('uncaughtException', (error) => {

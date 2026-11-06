@@ -23,13 +23,12 @@ const studioHost = {
     refresh: (runtimeVersion) => ipcRenderer.invoke('studio:catalog:refresh', runtimeVersion),
   },
   project: {
-    chooseCreateParent: () => ipcRenderer.invoke('studio:project:choose-create-parent'),
-    chooseOpenLocation: () => ipcRenderer.invoke('studio:project:choose-open-location'),
-    chooseSaveAsLocation: () => ipcRenderer.invoke('studio:project:choose-save-as-location'),
-    create: (input) => ipcRenderer.invoke('studio:project:create', input),
-    open: (location) => ipcRenderer.invoke('studio:project:open', location),
-    save: (snapshot) => ipcRenderer.invoke('studio:project:save', snapshot),
-    saveAs: (input) => ipcRenderer.invoke('studio:project:save-as', input),
+    list: () => ipcRenderer.invoke('studio:project:list'),
+    create: (name) => ipcRenderer.invoke('studio:project:create', name),
+    open: (localId) => ipcRenderer.invoke('studio:project:open', localId),
+    save: (input) => ipcRenderer.invoke('studio:project:save', input),
+    importProject: () => ipcRenderer.invoke('studio:project:import'),
+    exportProject: (input) => ipcRenderer.invoke('studio:project:export', input),
   },
 } satisfies StudioHostApi;
 

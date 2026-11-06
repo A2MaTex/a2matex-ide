@@ -1,9 +1,9 @@
 import type {
-  CreateProjectInput,
+  ExportProjectInput,
+  ExportProjectResult,
   ProjectErrorCode,
-  ProjectLocation,
   ProjectSnapshot,
-  SaveProjectResult,
+  SaveProjectInput,
 } from '@application/project/project-repository';
 import type { AuthErrorCode, LoginInput, SessionState } from '@application/auth/auth-session';
 import type { NodeCatalogErrorCode } from '@application/node-catalog/node-catalog';
@@ -34,15 +34,11 @@ export interface StudioHostApi {
     refresh(runtimeVersion: string): Promise<HostResult<NodeCatalogSnapshot, NodeCatalogErrorCode>>;
   };
   project: {
-    chooseCreateParent(): Promise<HostResult<ProjectLocation | null, ProjectErrorCode>>;
-    chooseOpenLocation(): Promise<HostResult<ProjectLocation | null, ProjectErrorCode>>;
-    chooseSaveAsLocation(): Promise<HostResult<ProjectLocation | null, ProjectErrorCode>>;
-    create(input: CreateProjectInput): Promise<HostResult<ProjectSnapshot, ProjectErrorCode>>;
-    open(location: ProjectLocation): Promise<HostResult<ProjectSnapshot, ProjectErrorCode>>;
-    save(snapshot: ProjectSnapshot): Promise<HostResult<SaveProjectResult, ProjectErrorCode>>;
-    saveAs(input: {
-      snapshot: ProjectSnapshot;
-      target: ProjectLocation;
-    }): Promise<HostResult<SaveProjectResult, ProjectErrorCode>>;
+    create(name: string): Promise<HostResult<ProjectSnapshot, ProjectErrorCode>>;
+    exportProject(input: ExportProjectInput): Promise<HostResult<ExportProjectResult | null, ProjectErrorCode>>;
+    importProject(): Promise<HostResult<ProjectSnapshot | null, ProjectErrorCode>>;
+    list(): Promise<HostResult<ProjectSnapshot[], ProjectErrorCode>>;
+    open(localId: string): Promise<HostResult<ProjectSnapshot, ProjectErrorCode>>;
+    save(input: SaveProjectInput): Promise<HostResult<ProjectSnapshot, ProjectErrorCode>>;
   };
 }

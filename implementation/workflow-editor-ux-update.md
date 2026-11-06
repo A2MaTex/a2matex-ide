@@ -1,0 +1,306 @@
+# Workflow Editor UX Update — Palette, Node Detail, Variables, and Connections
+
+Status: Proposed  
+Date: 2026-10-26  
+Owners: Product, Core/Editor, Catalog, Runtime  
+Related: ADR-001, ADR-002, ADR-003; docs/03_workflow_node_and_project_spec.md; docs/04_ide_ux_and_state_plan.md
+
+## 1. Objectives
+
+This document specifies an update to the workflow authoring experience across four areas:
+
+1. Make the Node Palette easier to search, categorize, and explore.
+2. Open a full editor on node double-click, separating configuration from rich-text description.
+3. Allow properties to reference variables in two scopes: **flow.** and **global.**.
+4. Allow unlimited connections on input/output ports, with node suggestions, reconnection, and independent deletion when dragging connections.
+
+This is a change specification, not a description of the current implementation. Once approved, the requirements here take precedence over the corresponding cardinality and interaction provisions of ADR-002, document 03, and document 04. Because ADR-002 is currently Accepted, it must be amended or superseded before merging an implementation that changes graph policy.
+
+## 2. Scope and Terminology
+
+- **Node definition**: Metadata, version, and schema provided by the Node Catalog.
+- **Node instance**: A specific node added to a workflow.
+- **Function name**: The default `displayName` in the node definition, such as Delay or Tap.
+- **Custom name**: A user-defined name for a node instance.
+- **Connection/edge**: A directed link from an output port to an input port.
+- **Node detail**: A dialog or drawer for editing a node instance, distinct from the quick-view Inspector.
+- **Help**: Documentation for a node definition, not the user-authored rich-text description of a node instance.
+
+Out of scope: arbitrary cycles, a complete data-wire UI, variable synchronization across machines/tenants, and allowing rich text to execute scripts or embed uncontrolled HTML.
+
+## 3. Gaps Compared with the Current Implementation
+
+| Area | Current | Requirements after update |
+| --- | --- | --- |
+| Palette | Search, categories, and per-category collapse are available | Sticky search; collapse/expand all; compact icon + name items; descriptions on hover; Help |
+| Canvas node | Shows icon, name, type/version, and port counts | Name is primary; colors; icon-only or icon + name |
+| Node editing | Single-click selects; Inspector edits params | Double-click opens Node detail with Config and Description |
+| Instance metadata | Optional name exists, but no editing UI | Rename, label mode, and description persist in the workflow |
+| Enable/disable | Model has optional `disabled`, but UI does not expose it | Node detail toggles state; disabled nodes are dimmed and use bypass semantics |
+| Variables | No scopes in model/editor | Typed `flow.name` and `global.name` references |
+| Connections | Cardinality `one` blocks fan-in/fan-out | Unlimited edges on compatible input/output ports |
+| Drag onto empty canvas | No node suggestions | Show compatible-node suggestions and atomically add + connect |
+| Deletion | Separate edge deletion; node deletion cascades to edges | Retain both behaviors with clear wording and appropriate confirmation |
+
+## 4. Node Palette
+
+### 4.1 Categorization and Ordering
+
+- Group nodes by `NodeDefinition.category`; do not infer categories from the `type` string.
+- Use ordering supplied by the catalog/editor hints for categories and nodes. If the catalog does not specify an order, sort categories and `displayName` by locale with stable ordering across renders.
+- Hide categories that have no nodes after filtering.
+- Give each category its own collapse/expand control and a count of nodes matching the filter.
+- The Palette header provides **Collapse all / Expand all**. This affects categories only, not the entire Palette panel.
+- While searching, temporarily expand categories containing matches. Clearing the query must restore the pre-search collapse state without overwriting user preferences.
+
+### 4.2 Sticky Search
+
+- Place the search field directly below the header and keep it sticky within the Palette scroll area; scrolling the list must not hide it.
+- Search is case-insensitive and trims leading/trailing whitespace.
+- Search at least `displayName`, description, type, category, and property names.
+- The `/` key focuses search unless focus is already in another input/editor. The first Escape clears the query; the next returns focus to the canvas.
+- Loading, error, empty, and no-results states appear below search; these states must not replace the search field.
+
+### 4.3 Items, Colors, and Hover
+
+- Each list item displays only the icon and node name; the description does not occupy a permanent line.
+- Hover or keyboard focus opens a popover/tooltip showing at least the definition's name and description.
+- The tooltip has a short delay, does not cover the targeted item, and closes when pointer/focus leaves it.
+- A node's color comes exclusively from its exact node definition via a semantic color token. Users cannot change or override colors per node instance.
+- The catalog must not supply raw CSS, class names, or arbitrary styles. Missing/invalid color tokens fall back to a safe neutral color and generate a catalog diagnostic; the UI must not infer colors from categories.
+- Color must not be the only indicator: icons, names, and focus/selection states remain readable in high-contrast mode.
+- The same type always uses the same color in the Palette, canvas, Help, and Node detail.
+
+### 4.4 Per-Node Help
+
+- Every item has a **Help** action accessible by mouse and keyboard. The action must not initiate dragging or add a node.
+- Canvas nodes and Node detail also provide Help, opening documentation for the exact `type@version`.
+- The Help view displays at least:
+  - node name, category, version, and description/definition;
+  - each input/output with its name, kind/type, and description;
+  - each property with label, key, type, required/optional status, default/constraints, and description;
+  - related capabilities/permissions, if any;
+  - deprecation and replacement information for deprecated definitions.
+- Generate Help from catalog/schema data; do not hard-code it in React components. If required documentation is missing from the catalog, show **Documentation unavailable** rather than inventing content.
+- Render remote catalog content as sanitized text/Markdown; do not render raw HTML.
+
+## 5. Canvas Nodes and Node Detail
+
+### 5.1 Node Display
+
+- Compute the effective label in this order: non-empty custom name → function name → type if the definition is unavailable.
+- Compact nodes need to display only the effective label. Type/version and description are not permanent card content; they remain available in Help/Inspector and the accessible name.
+- Each instance has a `labelMode`:
+  - **icon**: show only the icon, while retaining the effective label as the accessible name;
+  - **icon-and-name**: show the icon and effective label; this is the default.
+- Card/stripe/port colors come from the definition's semantic color token. Selected, invalid, deprecated, and runtime states use borders/icons/badges, not merely background-color changes.
+- Disabled nodes retain their position, label, ports, and connections, but the entire card is dimmed. The node must also have a **Disabled** badge/text and corresponding accessible state; opacity or color alone is insufficient.
+- Disabling does not change the original color from the definition.
+- Disabled nodes remain selectable, double-clickable, editable, and able to open Help, just like enabled nodes. Dimming must not disable pointer or keyboard interaction.
+- Single-click continues to select a node. Double-click selects the node and opens Node detail. Double-click must not create two history entries or unintentionally start a drag.
+
+### 5.2 Node Detail Contents
+
+The common section always includes:
+
+- **Name**: Maximum 100 characters. Whitespace-only values normalize to no custom name; the canvas then uses the function name.
+- **Display**: Choose Icon only or Icon and name.
+- **Enabled/Disabled**: A toggle button that always indicates the current state. Switching to Disabled is allowed only when the node definition has valid disable semantics; Start/entry triggers cannot be disabled.
+- The Enabled/Disabled button is in the fixed footer of Node detail and remains visible in both Config and Description tabs. It has an accessible pressed/state label. Clicking only updates the draft; **Done** commits it.
+- **Help**: Opens documentation for the exact definition version.
+- **Delete**: Deletes the node according to section 7.4.
+- **Cancel/Close** and **Done**: Have explicit focus management and an unsaved-draft policy.
+
+Node detail has two tabs/modes:
+
+1. **Config**: A form generated from the node definition's schema. Each node displays only properties declared by that exact version; required status, type, enum, min/max, pattern, secret/reference handling, and validation issues still apply.
+2. **Description**: A rich-text editor for recording the node instance's purpose, assumptions, or operating instructions. Its toolbar supports only the agreed Markdown subset: H1/H2/H3 headings, bold, italic, inline code/code blocks, ordered lists, unordered lists, blockquotes, horizontal rules, and links. Images, tables, attachments, raw HTML, and arbitrary rich-text plugins are not supported.
+
+Store descriptions as normalized Markdown, not rendered HTML. Links use an allow-list of protocols, and previews must be sanitized. A proposed limit is 20,000 UTF-8 characters per node to prevent uncontrolled project growth.
+
+### 5.3 Commit, Validation, and History
+
+- Dialog drafts live in component-local state. **Done** creates one combined metadata/config command so one editing session corresponds to one undo step; **Cancel** does not change domain state.
+- Show field validation directly in Config. Blocking errors keep the dialog open and focus the first invalid field.
+- The compiler/Runtime must not interpret descriptions, and descriptions must not affect the executable graph's semantic digest. They remain part of the authoring source and must be saved and round-tripped.
+- Name, label mode, and description must not be placed in `params`; `params` contains execution configuration only.
+- Enabled/disabled changes are part of the same draft. **Done** commits `node.disabled` together with other changes as one undo step; **Cancel** preserves the state from before Node detail was opened.
+
+### 5.4 Enable/Disable Semantics
+
+- New nodes are enabled by default; an absent `disabled` field and `disabled: false` both mean enabled.
+- Disabled nodes remain in the workflow source and graph. The editor must not delete or automatically reconnect edges in the file.
+- Incoming/outgoing edges of disabled nodes retain their IDs, positions in ordered edges, and selection/editing capabilities. The UI may dim them or render them dashed but must not hide them.
+- At compile/run time, a disabled node with exactly one control input and one control output is bypassed: an incoming control event goes directly to the output without invoking the node's runtime handler.
+- If the disabled node's output has multiple outgoing edges, the event fans out according to the execution order specified in section 7.1.
+- Entry triggers/Start cannot be disabled.
+- Nodes with no inputs, no outputs, multiple control inputs, or multiple control outputs may only be disabled if the exact definition declares `disabledBehavior` with an explicit input → output mapping. Otherwise, the Disabled button is unavailable and Help/tooltip explains why.
+- Disabled nodes do not require the Runtime capabilities/permissions of their handlers because handlers do not execute. However, definition/version, ports, edges, cycles, and `disabledBehavior` must still be validated.
+- Configuration errors on disabled nodes remain visible in the editor so they can be fixed before re-enabling, but do not block Run when `disabledBehavior` is valid. Such issues have warning severity; structural graph issues remain errors.
+- Re-enabling restores normal execution with the original config, description, and connections intact.
+
+## 6. `flow.` and `global.` Variables
+
+### 6.1 Scopes
+
+| Prefix | Read/write scope | Default lifetime |
+| --- | --- | --- |
+| `flow.` | Nodes within the same workflow invocation | From the beginning to the end of that workflow invocation |
+| `global.` | All workflow invocations within the same project run/run group | From the start of the project run until the run group ends |
+
+- Both scopes are isolated by run group; they are not implicitly shared across users, projects, devices, or separate Runs.
+- Persistence across Runs or application restarts is out of scope. If needed, it requires a separate storage/secret policy rather than silently redefining `global.`.
+- For multiple devices in one run group, `flow.` is always isolated by workflow invocation. `global.` may be shared across devices only when the Runtime provides atomic/deterministic updates. Otherwise, the compiler must report unsupported behavior rather than introduce race conditions.
+
+### 6.2 Syntax and Binding
+
+- The UI presents `flow.` and `global.` as two choices in the variable picker for properties supporting bindings.
+- Variable names follow the pattern `^[A-Za-z_][A-Za-z0-9_.-]{0,127}$`; the scope prefix is not part of the serialized name.
+- The domain model uses a typed representation rather than storing only a concatenated string.
+- The UI may render a binding as `flow.orderId` or `global.token`, but the compiler receives an object with separate `scope` and `name` fields.
+- Only properties explicitly marked by the definition as supporting expressions/bindings may select variables.
+- The validator checks names, scopes, declarations/types when declaration contracts are available, and node read/write permissions. Secrets must not be converted into plaintext global variables.
+
+## 7. Connections
+
+### 7.1 Unlimited Connections per Port
+
+- Each input and output port accepts multiple edges. Authoring must not reject an edge merely because the port already has a connection.
+- There is no business-level limit per node or port. The existing document-wide safety limit of 10,000 edges remains in place to protect the parser/UI and must not be characterized as cardinality.
+- Exact duplicate edges with the same source node/port and target node/port are still rejected.
+- Source and target ports must exist and have valid direction, kind, and value type.
+- Self-edges and cycles without clear loop/control-node semantics remain prohibited.
+- `PortDefinition.cardinality` is no longer used to block control connections. The adapter must not default it to `one`, and the validator must not issue `INPUT_CARDINALITY`/`OUTPUT_CARDINALITY` under the new policy. If the field remains necessary for future data ports, rename or clarify its semantics, or explicitly version the contract.
+
+Runtime semantics for control fan-out/fan-in:
+
+- The order of entries in `WorkflowDocument.edges` is the authoritative execution order and must remain stable across save/reopen, undo/redo, migration, and adapter projection.
+- An output event is delivered to every outgoing edge of that port in the order they appear in `edges`.
+- Newly connected edges are appended after existing edges. Reconnection retains the edge's position in the array; deletion removes only that edge without reordering others.
+- On the same device, targets are scheduled sequentially in execution order unless a control node/definition explicitly declares parallel semantics.
+- A node with multiple incoming edges executes once per incoming control event. Join/wait-all behavior belongs only to dedicated nodes with explicit semantics and must not be inferred from the number of edges.
+- If the UI supports changing execution order, edge reordering must be an explicit, undoable command and must not depend on React Flow rendering order.
+
+### 7.2 Dragging a Connection and Suggesting the Next Node
+
+- When a user drags from an output handle and releases on empty canvas, open an **Add connected node** panel at the drop position.
+- The list contains only node definitions with at least one input compatible with the dragged output, while respecting catalog availability/deprecation policy.
+- The panel supports search, categories, keyboard navigation, and name + icon display; hover/focus uses the same description tooltip as the Palette.
+- Selecting a node atomically creates the node at the drop location, chooses a compatible input, creates the edge, and selects the new node. The entire operation is one undo step.
+- If multiple compatible inputs exist, the UI asks the user to choose or applies `preferredInput` from the catalog; it must not choose based on unstable object ordering.
+- Escape, clicking outside, or dropping from an invalid input/handle closes the panel without modifying the workflow.
+- If adding or connecting fails, no orphan nodes/edges remain; show an actionable reason.
+
+### 7.3 Reconnect
+
+- Users can drag an existing edge endpoint to another port.
+- Reconnection follows the same validation rules as connection and commits atomically. If canceled or the new target is invalid, the original edge remains intact.
+- A successful reconnection is one undo step; it must not be implemented as a visible delete-and-add sequence that disrupts history or causes canvas flicker.
+
+### 7.4 Delete Connection or Connection + Node
+
+- Selecting an edge and pressing Delete/Backspace, or using **Delete connection**, removes only that edge; both endpoint nodes remain.
+- **Delete node and connections** removes the selected node and all its incoming/outgoing edges. It does not automatically delete other downstream/upstream nodes.
+- When the node has at least one edge, confirm the action and show the number of connections to be removed. Nodes without edges may be deleted directly according to general editor preferences.
+- Deleting a node and its related edges is one command/undo step. Undo restores the node, layout, and all edges with their original IDs.
+- Context menus/Node detail must use full labels to distinguish the two actions.
+
+## 8. Proposed Contract Changes
+
+The fields described below are additive and optional so older v1 workflows remain openable.
+
+`NodeColorToken` is an enum/token from the Studio allow-list, such as `blue`, `green`, `amber`, `red`, `violet`, `cyan`, and `neutral`. The remote catalog must not provide arbitrary CSS values.
+
+The command model needs additions or clearer separation.
+
+A workflow schema bump is not required solely for adding optional fields if the old parser genuinely round-trips unknown fields. Before rollout, compatibility tests must verify open → edit another field → save using supported older versions. If any adapter drops appearance or description, the schema must be bumped and a migration added rather than relying only on parser passthrough.
+
+The remote catalog currently lacks color, complete property Help, input ports, port descriptions, `preferredInput`, and ordering. The Catalog/API contract must add these fields or define official fallbacks; the renderer must not guess execution ports from screenshots or example UI.
+
+## 9. State Ownership
+
+- **Workflow source**: Custom name, appearance, description, enabled/disabled state, node config, variable bindings, and ordered edges.
+- **Catalog snapshot**: Category, icon/color token, function description, property/port Help, and compatibility metadata.
+- **Zustand editor session**: Category collapse state, search query, Help target, Node detail open state, pending connection suggestion, and selected edge/node.
+- **Component-local**: Hover tooltip, rich-text draft before commit, and menu/popover focus.
+- **React Flow** is a projection only; all add/update/reconnect/delete operations still go through application/domain commands.
+
+## 10. Errors, Accessibility, and Security
+
+- All new controls must work with a keyboard, show visible focus, and have accessible names.
+- Icon-only nodes use the effective name as their screen-reader label; color is not the sole indicator.
+- Hover tooltips also open on keyboard focus; important content must not be available only on hover.
+- Dialogs trap focus, return focus to the node when closed, and warn about discarding uncommitted drafts if the policy requires explicit Done.
+- Search/Help/Config errors must have appropriate persistent states rather than relying solely on toasts.
+- Markdown, links, and catalog text must be sanitized in the Electron renderer. Scripts, iframes, inline event handlers, `javascript:` URLs, and remote styles are not supported.
+- Node/edge command failures must not cause domain state and React Flow state to diverge.
+
+## 11. Acceptance Criteria
+
+### Palette and Help
+
+- Search remains visible and usable while scrolling long lists.
+- Collapse all closes every category; Expand all opens them; search temporarily expands matching groups and then restores the previous state.
+- Normal items show only icon + name; both mouse hover and keyboard focus reveal descriptions.
+- Help opened from the Palette, canvas, and Node detail shows the same data for the same `type@version`.
+- Nodes with invalid color tokens use a safe fallback and never inject styles.
+- There is no per-instance color control; a given type has the same color on every editor surface.
+
+### Node Detail
+
+- Double-click opens the correct node; single-click only selects it.
+- An empty name displays the function name; a custom name replaces the function name on the canvas.
+- Switching between Icon only/Icon and name survives save, reload, and undo/redo.
+- Config shows only properties from the exact definition version; Description round-trips Markdown without executing HTML/scripts.
+- The Description toolbar contains only H1/H2/H3, bold, italic, code, ordered/unordered lists, blockquote, horizontal rule, and link; no image/table/attachment/raw HTML.
+- Toggling Disabled and clicking Done dims the node, retains its connections, and creates exactly one undo step. Re-enabling restores the config and normal execution.
+- Start nodes and nodes without valid `disabledBehavior` cannot be disabled.
+- Cancel does not change the revision; a valid Done creates only one undo step.
+
+### Variables
+
+- The picker shows exactly `flow.` and `global.` for binding-capable fields.
+- Serialization separates scope and name; save/reopen must not turn bindings into literal strings.
+- Two run groups cannot see each other's variables; the validator rejects plaintext secrets.
+
+### Connections
+
+- An input and an output can each hold at least three compatible edges without cardinality errors.
+- Duplicate edges, incompatible ports, and unsupported cycles are rejected with stable error codes.
+- Dropping a connection onto empty canvas opens filtered suggestions; selecting a node creates node + edge in one undo step.
+- Canceling suggestions does not change the revision; failure leaves no orphan node or edge.
+- Invalid reconnection retains the original edge; valid reconnection can be undone in one step.
+- Delete connection keeps both nodes. Delete node and connections removes exactly one node and all incident edges; undo restores the correct IDs, layout, and edges.
+
+## 12. Minimum Test Ownership
+
+- **Domain unit**: Metadata normalization, variable binding validation, unlimited fan-in/fan-out, ordered-edge execution, disabled bypass/unsupported topology, duplicate/type/cycle rules, atomic add-and-connect, reconnect, and cascade delete/undo.
+- **Adapter unit**: Catalog color/order/Help/input mapping; workflow ↔ React Flow projection; unknown-definition fallback.
+- **Component**: Sticky search, collapse all, hover/focus tooltip, Help, double-click dialog, Markdown toolbar, enable/disable button, dimmed disabled state, validation, delete confirmation, and accessible icon-only nodes.
+- **Integration**: Save/reopen appearance, Markdown description, disabled state, ordered edges, and scoped bindings; catalog refresh must not lose Help or instance metadata.
+- **E2E Electron**: Drag connection onto canvas → select suggested node → verify execution order → disable/enable node → reconnect → delete edge → delete node → undo/redo → save/reopen.
+
+## 13. Impact on the Current Implementation
+
+Key areas to update during implementation:
+
+- `src/domain/project/project.ts` and `project-schema.ts`: New metadata/description/bindings.
+- `src/domain/workflow/node-definition.ts`: Editor hints, required color token, Help metadata, port contract, and `disabledBehavior`.
+- `src/application/node-catalog/to-workflow-node-catalog.ts`: Remove default cardinality `one`; map color/order/input/Help when the API contract becomes available.
+- `src/domain/workflow/workflow-commands.ts`: Remove cardinality rejection under the new policy; add metadata, enable/disable, add-and-connect, explicit edge reorder, and atomic reconnect commands.
+- `src/domain/workflow/workflow-validator.ts`: Remove cardinality issues; add variable/metadata, `disabledBehavior`, and disabled-config severity validation.
+- `NodePalette.tsx`: Sticky search, global collapse/expand, compact items, tooltip, and Help action.
+- `AutomationNode.tsx`/`react-flow-adapter.ts`: Label mode, effective name, definition color, and dimmed disabled state.
+- `WorkflowCanvas.tsx`: Double-click, connection suggestions, reconnect, and selected-edge behavior.
+- `NodeInspector.tsx` or a new Node detail component: Common fields, Config/Description, Help, and enable/disable button.
+- Unit/component/E2E fixtures must include nodes with multiple ordered incoming/outgoing edges, catalog definitions with Help/color/`disabledBehavior`, and workflows containing disabled nodes.
+
+## 14. Finalized Decisions and Open Questions
+
+### 14.1 Finalized Decisions
+
+1. Rich-text descriptions support only the Markdown subset in section 5.2; no images, tables, attachments, or raw HTML.
+2. The order of elements in `WorkflowDocument.edges` is the execution order and a durable contract of the workflow source.
+3. Node colors come exclusively from the exact node definition. Users cannot change or override an individual node instance's color.
+4. Node detail has an Enabled/Disabled button. Disabled nodes are dimmed on the canvas and use the semantics specified in section 5.4.
+5. `global.` can be shared across devices within the same run group.

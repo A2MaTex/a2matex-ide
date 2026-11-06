@@ -2,9 +2,12 @@ import { randomUUID } from 'node:crypto';
 import { realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
 
-import type { ProjectLocation } from '@application/project/project-repository';
+export type LocationKind = 'project' | 'target';
 
-export type LocationKind = 'parent' | 'project' | 'target';
+export interface ArchiveLocation {
+  displayPath: string;
+  id: string;
+}
 
 interface LocationGrant {
   kind: LocationKind;
@@ -18,7 +21,7 @@ export class LocationGrantError extends Error {
 export class LocationRegistry {
   private readonly grants = new Map<string, LocationGrant>();
 
-  async register(directory: string, kind: LocationKind): Promise<ProjectLocation> {
+  async register(directory: string, kind: LocationKind): Promise<ArchiveLocation> {
     const canonicalPath = await realpath(path.resolve(directory));
     const metadata = await stat(canonicalPath);
     if (!metadata.isDirectory() || canonicalPath === path.parse(canonicalPath).root) {
@@ -30,7 +33,7 @@ export class LocationRegistry {
     return { id, displayPath: canonicalPath };
   }
 
-  resolve(location: ProjectLocation, allowedKinds: LocationKind[]): string {
+  resolve(location: ArchiveLocation, allowedKinds: LocationKind[]): string {
     if (!location || typeof location.id !== 'string') {
       throw new LocationGrantError('Project location is malformed');
     }

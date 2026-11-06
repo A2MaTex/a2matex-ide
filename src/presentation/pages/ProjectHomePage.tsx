@@ -1,5 +1,5 @@
 import { ArrowRight, FolderOpen, Plus, Workflow } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@presentation/components/ui/button';
@@ -16,29 +16,32 @@ export function ProjectHomePage() {
   const navigate = useNavigate();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const create = useProjectStore((state) => state.create);
+  const importProject = useProjectStore((state) => state.importProject);
+  const loadRecent = useProjectStore((state) => state.loadRecent);
   const open = useProjectStore((state) => state.open);
-  const reopen = useProjectStore((state) => state.reopen);
   const recentProjects = useProjectStore((state) => state.recentProjects);
   const status = useProjectStore((state) => state.status);
   const error = useProjectStore((state) => state.error);
-  const busy = status === 'creating' || status === 'opening';
+  const busy = ['creating', 'importing', 'loading', 'opening'].includes(status);
+
+  useEffect(() => {
+    void loadRecent();
+  }, [loadRecent]);
 
   const enterWorkspace = (projectId: string) => navigate(`/workspace/${projectId}`);
   const handleCreate = async (name: string) => {
     const snapshot = await create(name);
     if (!snapshot) return false;
-    enterWorkspace(snapshot.document.manifest.projectId);
+    enterWorkspace(snapshot.localId);
     return true;
   };
-  const handleOpen = async () => {
-    const snapshot = await open();
-    if (snapshot) enterWorkspace(snapshot.document.manifest.projectId);
+  const handleImport = async () => {
+    const snapshot = await importProject();
+    if (snapshot) enterWorkspace(snapshot.localId);
   };
-  const handleRecent = async (locationId: string) => {
-    const recent = recentProjects.find((item) => item.location.id === locationId);
-    if (!recent) return;
-    const snapshot = await reopen(recent.location);
-    if (snapshot) enterWorkspace(snapshot.document.manifest.projectId);
+  const handleRecent = async (localId: string) => {
+    const snapshot = await open(localId);
+    if (snapshot) enterWorkspace(snapshot.localId);
   };
 
   return (
@@ -50,15 +53,15 @@ export function ProjectHomePage() {
               Build Android automation as a visual system.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Create or open a local project folder. Studio validates its schema before the editor
-              can change or save it.
+              Create projects instantly in the local Studio database, or import an existing project
+              folder as a local working copy.
             </p>
           </div>
           <div className="flex gap-2">
-            <Button variant="outline" onClick={handleOpen} disabled={busy}>
+            <Button variant="outline" onClick={handleImport} disabled={busy}>
               <FolderOpen />{' '}
               <span className="text-sm font-medium">
-                {status === 'opening' ? 'Opening…' : 'Open project'}{' '}
+                {status === 'importing' ? 'Importing…' : 'Import project'}{' '}
               </span>
             </Button>
             <Button onClick={() => setCreateDialogOpen(true)} disabled={busy}>
@@ -93,8 +96,8 @@ export function ProjectHomePage() {
                   </div>
                   <h3 className="mt-4 text-sm font-medium">No local projects yet</h3>
                   <p className="mx-auto mt-2 max-w-sm text-xs leading-5 text-muted-foreground">
-                    Create a versioned project or open an existing folder. Recent capability grants
-                    remain available during this session.
+                    Create a local-first project or import an existing project folder. Your working
+                    copy remains available after Studio restarts.
                   </p>
                   <Button
                     className="mt-5"
@@ -110,9 +113,9 @@ export function ProjectHomePage() {
               <div className="divide-y divide-border">
                 {recentProjects.map((project) => (
                   <button
-                    key={project.location.id}
+                    key={project.localId}
                     type="button"
-                    onClick={() => handleRecent(project.location.id)}
+                    onClick={() => handleRecent(project.localId)}
                     className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors hover:bg-accent"
                   >
                     <div className="grid size-9 place-items-center rounded-lg bg-secondary text-cyan-400">
@@ -123,7 +126,8 @@ export function ProjectHomePage() {
                         {project.document.manifest.name}
                       </div>
                       <div className="truncate text-[11px] text-muted-foreground">
-                        {project.location.displayPath}
+                        Updated {new Date(project.updatedAt).toLocaleString()} ·{' '}
+                        {project.draftState.syncStatus}
                       </div>
                     </div>
                     <ArrowRight className="size-4 text-muted-foreground" />
@@ -138,8 +142,8 @@ export function ProjectHomePage() {
             </p>
             <h2 className="mt-3 text-lg font-semibold">Safe by default</h2>
             <p className="mt-2 text-xs leading-5 text-muted-foreground">
-              Renderer operations use short-lived location grants rather than arbitrary filesystem
-              paths.
+              SQLite is the working source of truth. Folder access is limited to explicit import and
+              export actions.
             </p>
             <ul className="mt-5 space-y-3">
               {capabilityItems.map((item, index) => (

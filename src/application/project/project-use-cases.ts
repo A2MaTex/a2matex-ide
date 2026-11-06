@@ -6,30 +6,38 @@ import {
 
 export async function createProject(repository: ProjectRepository, name: string) {
   const normalizedName = name.trim();
-  if (!normalizedName || normalizedName.length > 100 || /[\\/\0]/.test(normalizedName)) {
+  if (!normalizedName || normalizedName.length > 100) {
     throw new ProjectRepositoryError(
       'PROJECT_NAME_INVALID',
-      'Project name must contain 1–100 characters and may not contain path separators.',
+      'Project name must contain between 1 and 100 characters.',
     );
   }
-
-  const parent = await repository.chooseCreateParent();
-  if (!parent) return null;
-  return repository.create({ name: normalizedName, parent });
+  return repository.create(normalizedName);
 }
 
-export async function openProject(repository: ProjectRepository) {
-  const location = await repository.chooseOpenLocation();
-  if (!location) return null;
-  return repository.open(location);
+export function listProjects(repository: ProjectRepository) {
+  return repository.list();
 }
 
-export async function saveProject(repository: ProjectRepository, snapshot: ProjectSnapshot) {
-  return repository.save(snapshot);
+export function openProject(repository: ProjectRepository, localId: string) {
+  if (!localId.trim()) {
+    throw new ProjectRepositoryError('PROJECT_NOT_FOUND', 'Local project ID is required.');
+  }
+  return repository.open(localId);
 }
 
-export async function saveProjectAs(repository: ProjectRepository, snapshot: ProjectSnapshot) {
-  const target = await repository.chooseSaveAsLocation();
-  if (!target) return null;
-  return repository.saveAs(snapshot, target);
+export function importProject(repository: ProjectRepository) {
+  return repository.importProject();
+}
+
+export function saveProject(repository: ProjectRepository, snapshot: ProjectSnapshot) {
+  return repository.save({
+    document: snapshot.document,
+    expectedLocalRevision: snapshot.draftState.localRevision,
+    localId: snapshot.localId,
+  });
+}
+
+export function exportProject(repository: ProjectRepository, snapshot: ProjectSnapshot) {
+  return repository.exportProject({ document: snapshot.document });
 }

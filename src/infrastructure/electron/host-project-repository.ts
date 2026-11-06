@@ -1,10 +1,9 @@
 import {
   ProjectRepositoryError,
-  type CreateProjectInput,
+  type ExportProjectInput,
   type ProjectErrorCode,
-  type ProjectLocation,
   type ProjectRepository,
-  type ProjectSnapshot,
+  type SaveProjectInput,
 } from '@application/project/project-repository';
 import { InMemoryProjectRepository } from '@infrastructure/persistence/in-memory-project-repository';
 
@@ -18,39 +17,34 @@ function unwrap<T>(result: HostResult<T, ProjectErrorCode>): T {
 export class HostProjectRepository implements ProjectRepository {
   private readonly fallback = new InMemoryProjectRepository();
 
-  async chooseCreateParent() {
-    if (!window.studioHost) return this.fallback.chooseCreateParent();
-    return unwrap(await window.studioHost.project.chooseCreateParent());
+  async list() {
+    if (!window.studioHost) return this.fallback.list();
+    return unwrap(await window.studioHost.project.list());
   }
 
-  async chooseOpenLocation() {
-    if (!window.studioHost) return this.fallback.chooseOpenLocation();
-    return unwrap(await window.studioHost.project.chooseOpenLocation());
+  async create(name: string) {
+    if (!window.studioHost) return this.fallback.create(name);
+    return unwrap(await window.studioHost.project.create(name));
   }
 
-  async chooseSaveAsLocation() {
-    if (!window.studioHost) return this.fallback.chooseSaveAsLocation();
-    return unwrap(await window.studioHost.project.chooseSaveAsLocation());
+  async open(localId: string) {
+    if (!window.studioHost) return this.fallback.open(localId);
+    return unwrap(await window.studioHost.project.open(localId));
   }
 
-  async create(input: CreateProjectInput) {
-    if (!window.studioHost) return this.fallback.create(input);
-    return unwrap(await window.studioHost.project.create(input));
+  async save(input: SaveProjectInput) {
+    if (!window.studioHost) return this.fallback.save(input);
+    return unwrap(await window.studioHost.project.save(input));
   }
 
-  async open(location: ProjectLocation) {
-    if (!window.studioHost) return this.fallback.open(location);
-    return unwrap(await window.studioHost.project.open(location));
+  async importProject() {
+    if (!window.studioHost) return this.fallback.importProject();
+    return unwrap(await window.studioHost.project.importProject());
   }
 
-  async save(snapshot: ProjectSnapshot) {
-    if (!window.studioHost) return this.fallback.save(snapshot);
-    return unwrap(await window.studioHost.project.save(snapshot));
-  }
-
-  async saveAs(snapshot: ProjectSnapshot, target: ProjectLocation) {
-    if (!window.studioHost) return this.fallback.saveAs(snapshot, target);
-    return unwrap(await window.studioHost.project.saveAs({ snapshot, target }));
+  async exportProject(input: ExportProjectInput) {
+    if (!window.studioHost) return this.fallback.exportProject(input);
+    return unwrap(await window.studioHost.project.exportProject(input));
   }
 }
 

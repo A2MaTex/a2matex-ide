@@ -1,6 +1,6 @@
 import type { ProjectDocument } from '@domain/project/project';
 
-import type { ProjectLocation, ProjectSnapshot } from '@application/project/project-repository';
+import type { ProjectSnapshot } from '@application/project/project-repository';
 
 export interface ProjectSession {
   snapshot: ProjectSnapshot;
@@ -11,8 +11,8 @@ export interface ProjectSession {
 export function createProjectSession(snapshot: ProjectSnapshot): ProjectSession {
   return {
     snapshot,
-    workingRevision: snapshot.migration ? 1 : 0,
-    savedRevision: 0,
+    workingRevision: snapshot.draftState.localRevision,
+    savedRevision: snapshot.draftState.localRevision,
   };
 }
 
@@ -52,14 +52,13 @@ export function replaceProjectDocument(
 export function completeProjectSave(
   session: ProjectSession,
   savedRevision: number,
-  location: ProjectLocation,
+  persistedSnapshot: ProjectSnapshot,
 ): ProjectSession {
   return {
     ...session,
     snapshot: {
-      ...session.snapshot,
-      location,
-      migration: undefined,
+      ...persistedSnapshot,
+      document: session.snapshot.document,
     },
     savedRevision,
   };

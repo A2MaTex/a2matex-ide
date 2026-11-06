@@ -1,74 +1,118 @@
-import { createEmptyProjectDocument } from '@domain/project/project-factory';
-import { projectDocumentSchema } from '@domain/project/project-schema';
 import type {
-  CreateProjectInput,
-  ProjectLocation,
-  ProjectRepository,
-  ProjectSnapshot,
-  SaveProjectResult,
+  LocalProjectDraftState,
+  LocalProjectSnapshot,
+} from '@application/project/local-project-repository';
+import {
+  ProjectRepositoryError,
+  type ExportProjectInput,
+  type ProjectRepository,
+  type SaveProjectInput,
 } from '@application/project/project-repository';
+import { createEmptyProjectDocument } from '@domain/project/project-factory';
+import { normalizeProjectName } from '@domain/project/project-name';
+import { projectDocumentSchema } from '@domain/project/project-schema';
 
-function cloneSnapshot(snapshot: ProjectSnapshot): ProjectSnapshot {
-  return structuredClone(snapshot);
+function clone<T>(value: T): T {
+  return structuredClone(value);
+}
+
+function initialDraftState(): LocalProjectDraftState {
+  return {
+    baseRemoteVersion: null,
+    contentHash: null,
+    inputSchema: {},
+    lastSyncedLocalRevision: null,
+    localRevision: 0,
+    metadataRevision: 0,
+    metadataSyncedRevision: null,
+    observedRemoteVersion: null,
+    remoteSavedAt: null,
+    runtimeIr: null,
+    syncStatus: 'local-only',
+    testSummary: {},
+    validationSummary: {},
+  };
 }
 
 export class InMemoryProjectRepository implements ProjectRepository {
-  private readonly projects = new Map<string, ProjectSnapshot>();
-  private nextOpenLocation: ProjectLocation | null = null;
+  private readonly projects = new Map<string, LocalProjectSnapshot>();
 
-  async chooseCreateParent() {
-    return { id: 'memory-parent', displayPath: 'Memory projects' };
-  }
-
-  async chooseOpenLocation() {
-    return this.nextOpenLocation;
-  }
-
-  async chooseSaveAsLocation() {
-    return { id: `memory-save-as-${crypto.randomUUID()}`, displayPath: 'Memory copy' };
-  }
-
-  async create(input: CreateProjectInput) {
-    const projectId = crypto.randomUUID();
-    const location = { id: projectId, displayPath: `Memory projects/${input.name}` };
-    const snapshot = {
-      location,
-      document: createEmptyProjectDocument(projectId, input.name),
-    } satisfies ProjectSnapshot;
-    this.projects.set(location.id, cloneSnapshot(snapshot));
-    this.nextOpenLocation = location;
-    return cloneSnapshot(snapshot);
-  }
-
-  async open(location: ProjectLocation) {
-    const snapshot = this.projects.get(location.id);
-    if (!snapshot) throw new Error(`Memory project not found: ${location.id}`);
-    return cloneSnapshot(snapshot);
-  }
-
-  async save(snapshot: ProjectSnapshot) {
-    projectDocumentSchema.parse(snapshot.document);
-    this.projects.set(snapshot.location.id, cloneSnapshot(snapshot));
-    this.nextOpenLocation = snapshot.location;
-    return this.saveResult(snapshot.location);
-  }
-
-  async saveAs(snapshot: ProjectSnapshot, target: ProjectLocation) {
-    projectDocumentSchema.parse(snapshot.document);
-    const location = {
-      id: crypto.randomUUID(),
-      displayPath: `${target.displayPath}/${snapshot.document.manifest.name}`,
+  async create(name: string) {
+    const normalizedName = normalizeProjectName(name);
+    if (
+      [...this.projects.values()].some(
+        (project) => normalizeProjectName(project.document.manifest.name) === normalizedName,
+      )
+    ) {
+      throw new ProjectRepositoryError(
+        'DUPLICATE_PROJECT_NAME',
+        'A local project with this name already exists.',
+      );
+    }
+    const localId = crypto.randomUUID();
+    const timestamp = new Date().toISOString();
+    const snapshot: LocalProjectSnapshot = {
+      accountScope: 'memory',
+      createdAt: timestamp,
+      document: createEmptyProjectDocument(localId, name),
+      draftState: initialDraftState(),
+      localId,
+      remoteProjectId: null,
+      updatedAt: timestamp,
     };
-    this.projects.set(location.id, cloneSnapshot({ ...snapshot, location }));
-    this.nextOpenLocation = location;
-    return this.saveResult(location);
+    this.projects.set(localId, clone(snapshot));
+    return clone(snapshot);
   }
 
-  setNextOpenLocation(location: ProjectLocation | null) {
-    this.nextOpenLocation = location;
+  async list() {
+    return [...this.projects.values()]
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt))
+      .map(clone);
   }
 
-  private saveResult(location: ProjectLocation): SaveProjectResult {
-    return { location, savedAt: new Date().toISOString() };
+  async open(localId: string) {
+    const snapshot = this.projects.get(localId);
+    if (!snapshot) throw new ProjectRepositoryError('PROJECT_NOT_FOUND', 'Project not found.');
+    return clone(snapshot);
+  }
+
+  async save(input: SaveProjectInput) {
+    const current = this.projects.get(input.localId);
+    if (!current) throw new ProjectRepositoryError('PROJECT_NOT_FOUND', 'Project not found.');
+    if (current.draftState.localRevision !== input.expectedLocalRevision) {
+      throw new ProjectRepositoryError(
+        'LOCAL_REVISION_CONFLICT',
+        'The local project changed before it could be saved.',
+        true,
+      );
+    }
+    const document = projectDocumentSchema.parse(input.document);
+    const metadataChanged =
+      JSON.stringify(current.document.manifest) !== JSON.stringify(document.manifest);
+    const workflowsChanged =
+      JSON.stringify(current.document.workflows) !== JSON.stringify(document.workflows);
+    if (!metadataChanged && !workflowsChanged) return clone(current);
+    const snapshot: LocalProjectSnapshot = {
+      ...current,
+      document,
+      draftState: {
+        ...current.draftState,
+        localRevision: current.draftState.localRevision + 1,
+        metadataRevision: current.draftState.metadataRevision + (metadataChanged ? 1 : 0),
+        ...(workflowsChanged ? { runtimeIr: null, testSummary: {}, validationSummary: {} } : {}),
+      },
+      updatedAt: new Date().toISOString(),
+    };
+    this.projects.set(input.localId, clone(snapshot));
+    return clone(snapshot);
+  }
+
+  async importProject() {
+    return null;
+  }
+
+  async exportProject(_input: ExportProjectInput) {
+    void _input;
+    return { displayPath: 'Memory export', savedAt: new Date().toISOString() };
   }
 }
