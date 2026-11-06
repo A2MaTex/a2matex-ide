@@ -115,9 +115,15 @@ describe('project store local-first lifecycle', () => {
     const repository = new InMemoryProjectRepository();
     let uploadedName = '';
     const cloud: ProjectCloudClient = {
+      archive: async () => {
+        throw new Error('Not used');
+      },
+      getDetail: async () => {
+        throw new Error('Not used');
+      },
       load: async () => ({ projects: [], refreshedAt: null, source: 'cache', warning: null }),
       refresh: async () => ({ projects: [], refreshedAt: null, source: 'network', warning: null }),
-      syncFirst: async (localId) => {
+      sync: async (localId) => {
         const snapshot = await repository.open(localId);
         uploadedName = snapshot.document.manifest.name;
         return {
@@ -132,12 +138,15 @@ describe('project store local-first lifecycle', () => {
           },
         };
       },
+      update: async () => {
+        throw new Error('Not used');
+      },
     };
     const store = createProjectStore(repository, { cloud });
     await store.getState().create({ name: 'Before edit' });
     store.getState().updateProjectName('Durable before sync');
 
-    await expect(store.getState().syncFirst()).resolves.toBe(true);
+    await expect(store.getState().syncCloud()).resolves.toBe(true);
 
     expect(uploadedName).toBe('Durable before sync');
     expect(store.getState().session?.snapshot).toMatchObject({

@@ -53,7 +53,7 @@ export function CreateProjectDialog({
               </Button>
             </Dialog.Close>
           </div>
-          <form className="mt-6" onSubmit={submit}>
+          <form className="mt-6 text-xs" onSubmit={submit}>
             <label htmlFor="project-name" className="text-xs font-medium text-secondary-foreground">
               Project name
             </label>
@@ -64,7 +64,7 @@ export function CreateProjectDialog({
               onChange={(event) => setName(event.target.value)}
               placeholder="Android onboarding"
               maxLength={255}
-              className="mt-2 h-10 w-full rounded-md border border-border bg-background px-3 text-sm outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
+              className="mt-2 h-10 w-full rounded-md border border-border bg-background px-3 text-xs outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
             />
             <p className="mt-2 text-[11px] text-muted-foreground">
               Project names must be unique within your local account scope.
@@ -82,7 +82,7 @@ export function CreateProjectDialog({
               placeholder="Describe what this automation does"
               maxLength={4_000}
               rows={4}
-              className="mt-2 min-h-24 max-h-48 w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
+              className="mt-2 min-h-24 max-h-48 w-full resize-y rounded-md border border-border bg-background px-3 py-2 text-xs outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-primary/15"
             />
             <p className="mt-1 text-right text-[10px] text-muted-foreground">
               {description.length.toLocaleString()} / 4,000

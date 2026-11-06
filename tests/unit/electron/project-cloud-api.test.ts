@@ -10,6 +10,16 @@ const mockedRequest = vi.mocked(request);
 beforeEach(() => mockedRequest.mockReset());
 
 describe('project cloud API contract', () => {
+  const project = {
+    id: '550e8400-e29b-41d4-a716-446655440000',
+    publisherAccountId: '650e8400-e29b-41d4-a716-446655440000',
+    name: 'My workflow',
+    description: null,
+    status: 'ACTIVE',
+    createdAt: '2026-11-06T08:00:00.000Z',
+    updatedAt: null,
+  } as const;
+
   it('reads the paginated success envelope and sends bearer authentication', async () => {
     mockedRequest.mockResolvedValueOnce({
       data: {
@@ -71,6 +81,47 @@ describe('project cloud API contract', () => {
       createProjectCloudApi().putDraft('token', '550e8400-e29b-41d4-a716-446655440000', payload),
     ).rejects.toMatchObject({ code: 'CLOUD_INVALID_RESPONSE' });
     expect(mockedRequest).toHaveBeenCalledWith(expect.objectContaining({ data: payload }));
+  });
+
+  it('uses the exact detail, metadata update and archive routes', async () => {
+    mockedRequest
+      .mockResolvedValueOnce({ data: { data: project, statusCode: 200 } } as never)
+      .mockResolvedValueOnce({
+        data: { data: { message: 'Success' }, statusCode: 200 },
+      } as never)
+      .mockResolvedValueOnce({
+        data: { data: { message: 'Success' }, statusCode: 200 },
+      } as never);
+    const api = createProjectCloudApi();
+
+    await expect(api.get('token', project.id)).resolves.toMatchObject({ id: project.id });
+    await api.update('token', project.id, { name: 'Renamed', description: 'Updated' });
+    await api.archive('token', project.id);
+
+    expect(mockedRequest.mock.calls).toEqual([
+      [
+        {
+          method: 'GET',
+          url: `/api/v1/projects/${project.id}`,
+          headers: { Authorization: 'Bearer token' },
+        },
+      ],
+      [
+        {
+          method: 'PUT',
+          url: `/api/v1/projects/${project.id}`,
+          headers: { Authorization: 'Bearer token' },
+          data: { name: 'Renamed', description: 'Updated' },
+        },
+      ],
+      [
+        {
+          method: 'PUT',
+          url: `/api/v1/projects/${project.id}/archive`,
+          headers: { Authorization: 'Bearer token' },
+        },
+      ],
+    ]);
   });
 
   it('maps the backend version-conflict details', () => {

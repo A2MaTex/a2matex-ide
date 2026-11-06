@@ -4,6 +4,8 @@ import type { MainAuthSession } from '@application/auth/auth-session';
 import {
   CloudProjectError,
   ProjectCloudService,
+  type CloudProjectDraft,
+  type CloudProjectDraftPayload,
   type CloudProject,
   type CloudProjectGateway,
   type CloudProjectPage,
@@ -68,6 +70,57 @@ function gateway(overrides: Partial<CloudProjectGateway> = {}): CloudProjectGate
   };
 }
 
+function statefulGateway(name: string) {
+  const state: { draft: CloudProjectDraft | null; project: CloudProject } = {
+    draft: null,
+    project: cloudProject(name),
+  };
+  const putDraft = vi.fn(
+    async (_token: string, _projectId: string, input: CloudProjectDraftPayload) => {
+      const version = (state.draft?.version ?? 0) + 1;
+      const contentHash = String(version).repeat(64);
+      const savedAt = `2026-11-06T09:00:0${version}.000Z`;
+      state.draft = {
+        id: DRAFT_ID,
+        projectId: REMOTE_ID,
+        version,
+        editorGraph: input.editorGraph,
+        inputSchema: input.inputSchema,
+        runtimeIr: input.runtimeIr,
+        validationSummary: input.validationSummary,
+        testSummary: input.testSummary,
+        contentHash,
+        savedAt,
+      };
+      return { id: DRAFT_ID, version, contentHash, savedAt };
+    },
+  );
+  const update = vi.fn(
+    async (
+      _token: string,
+      _projectId: string,
+      input: { name?: string; description?: string | null },
+    ) => {
+      state.project = {
+        ...state.project,
+        ...(input.name !== undefined ? { name: input.name } : {}),
+        ...(input.description !== undefined ? { description: input.description } : {}),
+      };
+    },
+  );
+  return {
+    state,
+    putDraft,
+    update,
+    remote: gateway({
+      get: async () => state.project,
+      getDraft: async () => ({ projectStatus: state.project.status, draft: state.draft }),
+      putDraft,
+      update,
+    }),
+  };
+}
+
 function setup(remote: CloudProjectGateway) {
   const database = openStudioDatabase({ filePath: ':memory:' });
   databases.push(database);
@@ -97,7 +150,7 @@ describe('ProjectCloudService', () => {
     const { projects, service } = setup(gateway({ create }));
     await createLocal(projects, 'Described Project', 'Automates Android onboarding');
 
-    await service.syncFirst('local-1');
+    await service.sync('local-1');
 
     expect(create).toHaveBeenCalledWith('access-token', {
       name: 'Described Project',
@@ -130,7 +183,7 @@ describe('ProjectCloudService', () => {
     );
     await createLocal(projects, 'Same Name');
 
-    await expect(service.syncFirst('local-1')).rejects.toMatchObject({
+    await expect(service.sync('local-1')).rejects.toMatchObject({
       code: 'CLOUD_NAME_CONFLICT',
     });
     expect(create).not.toHaveBeenCalled();
@@ -157,7 +210,7 @@ describe('ProjectCloudService', () => {
     const { projects, service } = setup(gateway({ create, list }));
     await createLocal(projects, 'Retry Project');
 
-    await expect(service.syncFirst('local-1')).rejects.toMatchObject({
+    await expect(service.sync('local-1')).rejects.toMatchObject({
       code: 'CLOUD_NETWORK_UNAVAILABLE',
     });
     expect(await projects.findById('account-a', 'local-1')).toMatchObject({
@@ -165,7 +218,7 @@ describe('ProjectCloudService', () => {
       draftState: { remoteCreatePending: true, syncStatus: 'offline' },
     });
 
-    await expect(service.syncFirst('local-1')).resolves.toMatchObject({
+    await expect(service.sync('local-1')).resolves.toMatchObject({
       remoteProjectId: REMOTE_ID,
       draftState: { baseRemoteVersion: 1, remoteCreatePending: false, syncStatus: 'synced' },
     });
@@ -190,7 +243,7 @@ describe('ProjectCloudService', () => {
     const { projects, service } = setup(gateway({ create, putDraft }));
     await createLocal(projects, 'Partial Sync');
 
-    await expect(service.syncFirst('local-1')).rejects.toMatchObject({ code: 'CLOUD_TIMEOUT' });
+    await expect(service.sync('local-1')).rejects.toMatchObject({ code: 'CLOUD_TIMEOUT' });
     expect(await projects.findById('account-a', 'local-1')).toMatchObject({
       remoteProjectId: REMOTE_ID,
       draftState: {
@@ -200,7 +253,7 @@ describe('ProjectCloudService', () => {
       },
     });
 
-    await expect(service.syncFirst('local-1')).resolves.toMatchObject({
+    await expect(service.sync('local-1')).resolves.toMatchObject({
       remoteProjectId: REMOTE_ID,
       draftState: { baseRemoteVersion: 1, syncStatus: 'synced' },
     });
@@ -225,7 +278,7 @@ describe('ProjectCloudService', () => {
     const { projects, service } = setup(gateway({ putDraft }));
     const original = await createLocal(projects);
 
-    const syncing = service.syncFirst('local-1');
+    const syncing = service.sync('local-1');
     await started;
     const edited = structuredClone(original.document);
     edited.workflows['workflows/main.workflow.json'].name = 'Revision N+1';
@@ -239,6 +292,177 @@ describe('ProjectCloudService', () => {
 
     await expect(syncing).resolves.toMatchObject({
       draftState: { lastSyncedLocalRevision: 0, localRevision: 1, syncStatus: 'local-ahead' },
+    });
+  });
+
+  it('pushes a local-ahead revision with the current remote version', async () => {
+    const remote = statefulGateway('Repeat Project');
+    const { projects, service } = setup(remote.remote);
+    const initial = await createLocal(projects, 'Repeat Project');
+    await service.sync('local-1');
+    const edited = structuredClone(initial.document);
+    edited.workflows['workflows/main.workflow.json'].name = 'Revision two';
+    await projects.save({
+      accountScope: 'account-a',
+      document: edited,
+      expectedLocalRevision: 0,
+      localId: 'local-1',
+    });
+
+    await expect(service.sync('local-1')).resolves.toMatchObject({
+      draftState: { baseRemoteVersion: 2, lastSyncedLocalRevision: 1, syncStatus: 'synced' },
+    });
+    expect(remote.putDraft.mock.calls[1]?.[2]).toMatchObject({ expectedVersion: 1 });
+  });
+
+  it('marks remote-ahead without mutating cloud when a clean remote draft changed', async () => {
+    const remote = statefulGateway('Remote Ahead');
+    const { projects, service } = setup(remote.remote);
+    await createLocal(projects, 'Remote Ahead');
+    await service.sync('local-1');
+    remote.state.draft = {
+      ...remote.state.draft!,
+      version: 2,
+      contentHash: 'e'.repeat(64),
+      editorGraph: { changedElsewhere: true },
+    };
+
+    await expect(service.sync('local-1')).resolves.toMatchObject({
+      draftState: { baseRemoteVersion: 1, observedRemoteVersion: 2, syncStatus: 'remote-ahead' },
+    });
+    expect(remote.putDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks conflict without PUT when both local and remote drafts changed', async () => {
+    const remote = statefulGateway('Conflict Project');
+    const { projects, service } = setup(remote.remote);
+    const initial = await createLocal(projects, 'Conflict Project');
+    await service.sync('local-1');
+    const edited = structuredClone(initial.document);
+    edited.workflows['workflows/main.workflow.json'].name = 'Local change';
+    await projects.save({
+      accountScope: 'account-a',
+      document: edited,
+      expectedLocalRevision: 0,
+      localId: 'local-1',
+    });
+    remote.state.draft = {
+      ...remote.state.draft!,
+      version: 2,
+      contentHash: 'f'.repeat(64),
+      editorGraph: { changedElsewhere: true },
+    };
+
+    await expect(service.sync('local-1')).resolves.toMatchObject({
+      draftState: { observedRemoteVersion: 2, syncStatus: 'conflict' },
+    });
+    expect(remote.putDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('acknowledges a same-content retry after the PUT response was lost', async () => {
+    const remote = statefulGateway('Retry Draft');
+    const originalPut = remote.remote.putDraft;
+    let loseResponse = false;
+    remote.remote.putDraft = async (...args) => {
+      const result = await originalPut(...args);
+      if (loseResponse) {
+        loseResponse = false;
+        throw new CloudProjectError('CLOUD_TIMEOUT', 'Response was lost.', true);
+      }
+      return result;
+    };
+    const { projects, service } = setup(remote.remote);
+    const initial = await createLocal(projects, 'Retry Draft');
+    await service.sync('local-1');
+    const edited = structuredClone(initial.document);
+    edited.workflows['workflows/main.workflow.json'].name = 'Uploaded once';
+    await projects.save({
+      accountScope: 'account-a',
+      document: edited,
+      expectedLocalRevision: 0,
+      localId: 'local-1',
+    });
+    loseResponse = true;
+    await expect(service.sync('local-1')).rejects.toMatchObject({ code: 'CLOUD_TIMEOUT' });
+
+    await expect(service.sync('local-1')).resolves.toMatchObject({
+      draftState: { baseRemoteVersion: 2, syncStatus: 'synced' },
+    });
+    expect(remote.putDraft).toHaveBeenCalledTimes(2);
+  });
+
+  it('rejects sync for an archived project without mutating metadata or draft', async () => {
+    const remote = statefulGateway('Archived Project');
+    const { projects, service } = setup(remote.remote);
+    await createLocal(projects, 'Archived Project');
+    await service.sync('local-1');
+    remote.state.project = { ...remote.state.project, status: 'ARCHIVED' };
+
+    await expect(service.sync('local-1')).rejects.toMatchObject({
+      code: 'CLOUD_PROJECT_ARCHIVED',
+    });
+    expect(remote.putDraft).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks remote-ahead when clean metadata changed on cloud', async () => {
+    const remote = statefulGateway('Metadata Project');
+    const { projects, service } = setup(remote.remote);
+    await createLocal(projects, 'Metadata Project', 'Original');
+    await service.sync('local-1');
+    remote.state.project = { ...remote.state.project, description: 'Changed elsewhere' };
+
+    await expect(service.sync('local-1')).resolves.toMatchObject({
+      draftState: { syncStatus: 'remote-ahead' },
+    });
+    expect(remote.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('syncs local metadata through the independent metadata checkpoint', async () => {
+    const remote = statefulGateway('Metadata Update');
+    const { projects, service } = setup(remote.remote);
+    const initial = await createLocal(projects, 'Metadata Update', 'Original');
+    await service.sync('local-1');
+    const edited = structuredClone(initial.document);
+    edited.manifest.description = 'Edited locally';
+    await projects.save({
+      accountScope: 'account-a',
+      document: edited,
+      expectedLocalRevision: 0,
+      localId: 'local-1',
+    });
+
+    await expect(service.sync('local-1')).resolves.toMatchObject({
+      draftState: {
+        baseRemoteDescription: 'Edited locally',
+        metadataSyncedRevision: 1,
+        syncStatus: 'synced',
+      },
+    });
+    expect(remote.state.project.description).toBe('Edited locally');
+  });
+
+  it('rejects an impossible draft acknowledgement version', async () => {
+    const remote = statefulGateway('Invalid Ack');
+    const { projects, service } = setup(remote.remote);
+    const initial = await createLocal(projects, 'Invalid Ack');
+    await service.sync('local-1');
+    const edited = structuredClone(initial.document);
+    edited.workflows['workflows/main.workflow.json'].name = 'Local change';
+    await projects.save({
+      accountScope: 'account-a',
+      document: edited,
+      expectedLocalRevision: 0,
+      localId: 'local-1',
+    });
+    remote.remote.putDraft = async () => ({
+      id: DRAFT_ID,
+      version: 99,
+      contentHash: '9'.repeat(64),
+      savedAt: '2026-11-06T10:00:00.000Z',
+    });
+
+    await expect(service.sync('local-1')).rejects.toMatchObject({
+      code: 'CLOUD_INVALID_RESPONSE',
     });
   });
 });

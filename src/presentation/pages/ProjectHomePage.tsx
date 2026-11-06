@@ -1,10 +1,12 @@
-import { ArrowRight, FolderOpen, Plus, Workflow } from 'lucide-react';
+import { ArrowRight, FolderOpen, Info, Plus, RefreshCw, Workflow } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@presentation/components/ui/button';
 import { mergeRecentProjects } from '@application/project/recent-projects';
 import { CreateProjectDialog } from '@presentation/features/project-session/CreateProjectDialog';
+import { ProjectDetailsDialog } from '@presentation/features/project-session/ProjectDetailsDialog';
+import type { RecentProjectItem } from '@application/project/recent-projects';
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
 
 const capabilityItems = [
@@ -16,10 +18,12 @@ const capabilityItems = [
 export function ProjectHomePage() {
   const navigate = useNavigate();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
+  const [detailsItem, setDetailsItem] = useState<RecentProjectItem | null>(null);
   const create = useProjectStore((state) => state.create);
   const importProject = useProjectStore((state) => state.importProject);
   const loadRecent = useProjectStore((state) => state.loadRecent);
   const open = useProjectStore((state) => state.open);
+  const refreshCloudProjects = useProjectStore((state) => state.refreshCloudProjects);
   const recentProjects = useProjectStore((state) => state.recentProjects);
   const cloudIndex = useProjectStore((state) => state.cloudIndex);
   const cloudStatus = useProjectStore((state) => state.cloudStatus);
@@ -27,6 +31,7 @@ export function ProjectHomePage() {
   const status = useProjectStore((state) => state.status);
   const error = useProjectStore((state) => state.error);
   const busy = ['creating', 'importing', 'loading', 'opening'].includes(status);
+  const refreshingCloud = cloudStatus === 'refreshing';
   const recentItems = mergeRecentProjects(recentProjects, cloudIndex.projects);
 
   useEffect(() => {
@@ -54,15 +59,25 @@ export function ProjectHomePage() {
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-10 lg:px-10">
         <section className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
           <div>
-            <h1 className="max-w-3xl text-3xl font-semibold tracking-tight md:text-4xl">
-              Build Android automation as a visual system.
+            <h1 className="max-w-3xl text-2xl font-black tracking-[0.03em] md:text-4xl">
+              Every Action, Under Your Control.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
-              Create projects instantly in the local Studio database, or import an existing project
-              folder as a local working copy.
+              Design powerful Android workflows visually. From your first node to real execution.
             </p>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void refreshCloudProjects()}
+              disabled={busy || refreshingCloud}
+              title="Refresh the cloud project index without overwriting local drafts"
+            >
+              <RefreshCw className={refreshingCloud ? 'animate-spin' : undefined} />
+              <span className="text-sm font-medium">
+                {refreshingCloud ? 'Syncing…' : 'Sync'}
+              </span>
+            </Button>
             <Button variant="outline" onClick={handleImport} disabled={busy}>
               <FolderOpen />{' '}
               <span className="text-sm font-medium">
@@ -122,25 +137,41 @@ export function ProjectHomePage() {
             ) : (
               <div className="divide-y divide-border">
                 {recentItems.map((project) => (
-                  <button
+                  <div
                     key={project.key}
-                    type="button"
-                    onClick={() => project.local && handleRecent(project.local.localId)}
-                    disabled={!project.local}
-                    className="flex w-full items-center gap-4 px-5 py-4 text-left transition-colors enabled:hover:bg-accent disabled:cursor-default disabled:opacity-70"
+                    className="flex items-center pr-3 transition-colors hover:bg-accent"
                   >
-                    <div className="grid size-9 place-items-center rounded-lg bg-secondary text-cyan-400">
-                      <Workflow className="size-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm font-medium">{project.name}</div>
-                      <div className="truncate text-[11px] text-muted-foreground">
-                        Updated {new Date(project.effectiveUpdatedAt).toLocaleString()} ·{' '}
-                        {project.state}
+                    <button
+                      type="button"
+                      onClick={() =>
+                        project.local
+                          ? handleRecent(project.local.localId)
+                          : setDetailsItem(project)
+                      }
+                      className="flex min-w-0 flex-1 items-center gap-4 px-5 py-4 text-left"
+                    >
+                      <div className="grid size-9 place-items-center rounded-lg bg-secondary text-cyan-400">
+                        <Workflow className="size-4" />
                       </div>
-                    </div>
-                    <ArrowRight className="size-4 text-muted-foreground" />
-                  </button>
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-sm font-medium">{project.name}</div>
+                        <div className="truncate text-[11px] text-muted-foreground">
+                          Updated {new Date(project.effectiveUpdatedAt).toLocaleString()}
+                        </div>
+                      </div>
+                      {project.local ? (
+                        <ArrowRight className="size-4 text-muted-foreground" />
+                      ) : null}
+                    </button>
+                    <Button
+                      size="icon"
+                      variant="ghost"
+                      aria-label={`View details for ${project.name}`}
+                      onClick={() => setDetailsItem(project)}
+                    >
+                      <Info />
+                    </Button>
+                  </div>
                 ))}
               </div>
             )}
@@ -176,6 +207,14 @@ export function ProjectHomePage() {
         onCreate={handleCreate}
         busy={status === 'creating'}
       />
+      {detailsItem ? (
+        <ProjectDetailsDialog
+          key={detailsItem.key}
+          item={detailsItem}
+          open
+          onOpenChange={(open) => !open && setDetailsItem(null)}
+        />
+      ) : null}
     </div>
   );
 }

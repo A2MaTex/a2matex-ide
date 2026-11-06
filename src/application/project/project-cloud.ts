@@ -58,6 +58,11 @@ export interface CloudDraftAcknowledgement {
   version: number;
 }
 
+export interface UpdateCloudProjectInput {
+  description?: string | null;
+  name?: string;
+}
+
 export interface CloudProjectGateway {
   archive(accessToken: string, projectId: string): Promise<void>;
   create(
@@ -78,15 +83,10 @@ export interface CloudProjectGateway {
     projectId: string,
     input: CloudProjectDraftPayload,
   ): Promise<CloudDraftAcknowledgement>;
-  update(
-    accessToken: string,
-    projectId: string,
-    input: { description?: string | null; name?: string },
-  ): Promise<void>;
+  update(accessToken: string, projectId: string, input: UpdateCloudProjectInput): Promise<void>;
 }
 
 export type CloudProjectErrorCode =
-  | 'CLOUD_ALREADY_SYNCED'
   | 'CLOUD_CONFIGURATION_ERROR'
   | 'CLOUD_DRAFT_VERSION_CONFLICT'
   | 'CLOUD_FORBIDDEN'
@@ -130,9 +130,16 @@ export interface CloudProjectIndex {
 }
 
 export interface ProjectCloudClient {
+  archive(projectId: string): Promise<CloudProject>;
+  getDetail(projectId: string): Promise<CloudProject>;
   load(): Promise<CloudProjectIndex>;
   refresh(): Promise<CloudProjectIndex>;
-  syncFirst(localId: string): Promise<LocalProjectSnapshot>;
+  sync(localId: string): Promise<LocalProjectSnapshot>;
+  update(
+    projectId: string,
+    input: UpdateCloudProjectInput,
+    localId?: string,
+  ): Promise<CloudProject>;
 }
 
 interface ProjectCloudServiceOptions {
@@ -151,10 +158,13 @@ function copyAsJsonObject(value: unknown, label: string): JsonObject {
   return jsonObject(JSON.parse(JSON.stringify(value)) as JsonValue, label);
 }
 
-export function createCloudDraftPayload(snapshot: LocalProjectSnapshot): CloudProjectDraftPayload {
+export function createCloudDraftPayload(
+  snapshot: LocalProjectSnapshot,
+  expectedVersion = 0,
+): CloudProjectDraftPayload {
   const { document, draftState } = snapshot;
   return {
-    expectedVersion: 0,
+    expectedVersion,
     editorGraph: copyAsJsonObject(
       {
         schemaVersion: document.manifest.schemaVersion,
@@ -168,6 +178,25 @@ export function createCloudDraftPayload(snapshot: LocalProjectSnapshot): CloudPr
     validationSummary: jsonObject(draftState.validationSummary, 'validationSummary'),
     testSummary: jsonObject(draftState.testSummary, 'testSummary'),
   };
+}
+
+function canonicalJson(value: JsonValue): string {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
+  return `{${Object.keys(value)
+    .sort()
+    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key]!)}`)
+    .join(',')}}`;
+}
+
+function draftMatchesPayload(draft: CloudProjectDraft, payload: CloudProjectDraftPayload) {
+  return (
+    canonicalJson(draft.editorGraph) === canonicalJson(payload.editorGraph) &&
+    canonicalJson(draft.inputSchema) === canonicalJson(payload.inputSchema) &&
+    canonicalJson(draft.runtimeIr) === canonicalJson(payload.runtimeIr) &&
+    canonicalJson(draft.validationSummary) === canonicalJson(payload.validationSummary) &&
+    canonicalJson(draft.testSummary) === canonicalJson(payload.testSummary)
+  );
 }
 
 function cloudProjectFromCache(payload: JsonValue): CloudProject | null {
@@ -185,6 +214,30 @@ function cloudProjectFromCache(payload: JsonValue): CloudProject | null {
     return null;
   }
   return candidate as unknown as CloudProject;
+}
+
+function requireProjectId(value: string) {
+  const projectId = value.trim();
+  if (
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(projectId)
+  ) {
+    throw new CloudProjectError('CLOUD_INVALID_INPUT', 'A valid project ID is required.', false);
+  }
+  return projectId;
+}
+
+function metadataOf(snapshot: LocalProjectSnapshot) {
+  return {
+    name: snapshot.document.manifest.name,
+    description: snapshot.document.manifest.description?.trim() || null,
+  };
+}
+
+function metadataEqual(
+  project: CloudProject,
+  metadata: { description: string | null; name: string },
+) {
+  return project.name === metadata.name && project.description === metadata.description;
 }
 
 export class ProjectCloudService implements ProjectCloudClient {
@@ -236,7 +289,69 @@ export class ProjectCloudService implements ProjectCloudClient {
     }
   }
 
-  async syncFirst(localId: string): Promise<LocalProjectSnapshot> {
+  async getDetail(projectId: string) {
+    return this.withToken((token) => this.gateway.get(token, requireProjectId(projectId)));
+  }
+
+  async update(projectId: string, input: UpdateCloudProjectInput, localId?: string) {
+    const id = requireProjectId(projectId);
+    if (input.name === undefined && input.description === undefined) {
+      throw new CloudProjectError('CLOUD_INVALID_INPUT', 'Name or description is required.', false);
+    }
+    const name = input.name?.trim();
+    const description = input.description?.trim() || null;
+    if (name !== undefined && (!name || name.length > 255)) {
+      throw new CloudProjectError(
+        'CLOUD_INVALID_INPUT',
+        'Project name must contain between 1 and 255 characters.',
+        false,
+      );
+    }
+    if (description && description.length > 4_000) {
+      throw new CloudProjectError(
+        'CLOUD_INVALID_INPUT',
+        'Project description must not exceed 4,000 characters.',
+        false,
+      );
+    }
+    await this.withToken((token) =>
+      this.gateway.update(token, id, {
+        ...(name !== undefined ? { name } : {}),
+        ...(input.description !== undefined ? { description } : {}),
+      }),
+    );
+    const detail = await this.getDetail(id);
+    if (localId) {
+      const scope = await this.accountScope();
+      const snapshot = await this.projects.findById(scope, localId);
+      if (!snapshot || snapshot.remoteProjectId !== id) {
+        throw new CloudProjectError(
+          'CLOUD_INVALID_INPUT',
+          'The local project binding does not match this cloud project.',
+          false,
+        );
+      }
+      await this.projects.acknowledgeMetadata({
+        accountScope: scope,
+        description: detail.description,
+        localId,
+        name: detail.name,
+        revision: snapshot.draftState.metadataRevision,
+      });
+    }
+    await this.refreshStrict();
+    return detail;
+  }
+
+  async archive(projectId: string) {
+    const id = requireProjectId(projectId);
+    await this.withToken((token) => this.gateway.archive(token, id));
+    const detail = await this.getDetail(id);
+    await this.refreshStrict();
+    return detail;
+  }
+
+  async sync(localId: string): Promise<LocalProjectSnapshot> {
     const id = localId.trim();
     if (!id) {
       throw new CloudProjectError('CLOUD_INVALID_INPUT', 'Local project ID is required.', false);
@@ -245,7 +360,7 @@ export class ProjectCloudService implements ProjectCloudClient {
     const syncKey = `${scope}\u0000${id}`;
     const current = this.syncs.get(syncKey);
     if (current) return current;
-    const sync = this.runFirstSync(scope, id).finally(() => this.syncs.delete(syncKey));
+    const sync = this.runSync(scope, id).finally(() => this.syncs.delete(syncKey));
     this.syncs.set(syncKey, sync);
     return sync;
   }
@@ -288,81 +403,209 @@ export class ProjectCloudService implements ProjectCloudClient {
     return { projects, refreshedAt, source: 'network', warning: null };
   }
 
-  private async runFirstSync(scope: string, localId: string): Promise<LocalProjectSnapshot> {
+  private async runSync(scope: string, localId: string): Promise<LocalProjectSnapshot> {
     const snapshot = await this.projects.findById(scope, localId);
     if (!snapshot) {
       throw new CloudProjectError('CLOUD_INVALID_INPUT', 'Local project was not found.', false);
     }
-    if (snapshot.draftState.baseRemoteVersion !== null) {
-      throw new CloudProjectError(
-        'CLOUD_ALREADY_SYNCED',
-        'This project already has a cloud baseline. Re-sync belongs to Milestone C.',
-        false,
-      );
-    }
-
     await this.projects.setSyncStatus(scope, localId, 'syncing');
     try {
-      const index = await this.refreshStrict();
-      let remoteProjectId = snapshot.remoteProjectId;
-      if (!remoteProjectId) {
-        const duplicate = index.projects.find(
-          (project) =>
-            normalizeCloudProjectName(project.name) ===
-            normalizeCloudProjectName(snapshot.document.manifest.name),
-        );
-        if (duplicate && !snapshot.draftState.remoteCreatePending) {
-          await this.projects.setSyncStatus(scope, localId, 'name-conflict');
-          throw new CloudProjectError(
-            'CLOUD_NAME_CONFLICT',
-            'A cloud project already uses this name. Rename the local project before syncing.',
-            false,
-          );
-        }
-
-        await this.projects.beginRemoteCreate(scope, localId);
-        const created = await this.withToken((token) =>
-          this.gateway.create(token, {
-            name: snapshot.document.manifest.name,
-            description: snapshot.document.manifest.description?.trim() || null,
-          }),
-        );
-        remoteProjectId = created.id;
-        await this.projects.bindRemoteProject(scope, localId, remoteProjectId);
-      }
-
-      await this.withToken((token) =>
-        this.gateway.update(token, remoteProjectId!, {
-          name: snapshot.document.manifest.name,
-          description: snapshot.document.manifest.description?.trim() || null,
-        }),
-      );
-      await this.projects.acknowledgeMetadata(scope, localId, snapshot.draftState.metadataRevision);
-
-      await this.withToken((token) => this.gateway.getDraft(token, remoteProjectId!));
-      const acknowledgement = await this.withToken((token) =>
-        this.gateway.putDraft(token, remoteProjectId!, createCloudDraftPayload(snapshot)),
-      );
-      return await this.projects.acknowledgeRemoteDraft({
-        accountScope: scope,
-        contentHash: acknowledgement.contentHash,
-        localId,
-        remoteSavedAt: acknowledgement.savedAt,
-        remoteVersion: acknowledgement.version,
-        syncedLocalRevision: snapshot.draftState.localRevision,
-      });
+      return snapshot.draftState.baseRemoteVersion === null
+        ? await this.runFirstSync(scope, snapshot)
+        : await this.runRepeatedSync(scope, snapshot);
     } catch (error) {
       if (error instanceof CloudProjectError && error.code === 'CLOUD_NAME_CONFLICT') throw error;
+      if (error instanceof CloudProjectError && error.code === 'CLOUD_DRAFT_VERSION_CONFLICT') {
+        await this.projects.observeRemote(
+          scope,
+          localId,
+          error.details?.currentVersion ?? snapshot.draftState.observedRemoteVersion,
+          'conflict',
+        );
+        throw error;
+      }
       const status: LocalProjectSyncStatus =
         error instanceof CloudProjectError &&
         ['CLOUD_NETWORK_UNAVAILABLE', 'CLOUD_TIMEOUT'].includes(error.code)
           ? 'offline'
-          : error instanceof CloudProjectError && error.code === 'CLOUD_DRAFT_VERSION_CONFLICT'
-            ? 'conflict'
-            : 'error';
+          : 'error';
       await this.projects.setSyncStatus(scope, localId, status);
       throw error;
     }
+  }
+
+  private async runFirstSync(scope: string, snapshot: LocalProjectSnapshot) {
+    const index = await this.refreshStrict();
+    let remoteProjectId = snapshot.remoteProjectId;
+    if (!remoteProjectId) {
+      const duplicate = index.projects.find(
+        (project) =>
+          normalizeCloudProjectName(project.name) ===
+          normalizeCloudProjectName(snapshot.document.manifest.name),
+      );
+      if (duplicate && !snapshot.draftState.remoteCreatePending) {
+        await this.projects.setSyncStatus(scope, snapshot.localId, 'name-conflict');
+        throw new CloudProjectError(
+          'CLOUD_NAME_CONFLICT',
+          'A cloud project already uses this name. Rename the local project before syncing.',
+          false,
+        );
+      }
+
+      await this.projects.beginRemoteCreate(scope, snapshot.localId);
+      const created = await this.withToken((token) =>
+        this.gateway.create(token, metadataOf(snapshot)),
+      );
+      remoteProjectId = created.id;
+      await this.projects.bindRemoteProject(scope, snapshot.localId, remoteProjectId);
+    }
+
+    await this.withToken((token) =>
+      this.gateway.update(token, remoteProjectId, metadataOf(snapshot)),
+    );
+    await this.projects.acknowledgeMetadata({
+      accountScope: scope,
+      localId: snapshot.localId,
+      revision: snapshot.draftState.metadataRevision,
+      ...metadataOf(snapshot),
+    });
+
+    await this.withToken((token) => this.gateway.getDraft(token, remoteProjectId));
+    const acknowledgement = await this.withToken((token) =>
+      this.gateway.putDraft(token, remoteProjectId, createCloudDraftPayload(snapshot)),
+    );
+    return this.projects.acknowledgeRemoteDraft({
+      accountScope: scope,
+      contentHash: acknowledgement.contentHash,
+      localId: snapshot.localId,
+      remoteSavedAt: acknowledgement.savedAt,
+      remoteVersion: acknowledgement.version,
+      syncedLocalRevision: snapshot.draftState.localRevision,
+    });
+  }
+
+  private async runRepeatedSync(scope: string, snapshot: LocalProjectSnapshot) {
+    const remoteProjectId = snapshot.remoteProjectId;
+    if (!remoteProjectId || !snapshot.draftState.contentHash) {
+      throw new CloudProjectError(
+        'CLOUD_INVALID_INPUT',
+        'The local cloud baseline is incomplete.',
+        false,
+      );
+    }
+
+    const remoteProject = await this.withToken((token) => this.gateway.get(token, remoteProjectId));
+    if (remoteProject.status === 'ARCHIVED') {
+      throw new CloudProjectError(
+        'CLOUD_PROJECT_ARCHIVED',
+        'The cloud project is archived.',
+        false,
+      );
+    }
+    const remoteState = await this.withToken((token) =>
+      this.gateway.getDraft(token, remoteProjectId),
+    );
+    if (remoteState.projectStatus === 'ARCHIVED') {
+      throw new CloudProjectError(
+        'CLOUD_PROJECT_ARCHIVED',
+        'The cloud project is archived.',
+        false,
+      );
+    }
+
+    const remoteDraft = remoteState.draft;
+    const remoteVersion = remoteDraft?.version ?? null;
+    const metadata = metadataOf(snapshot);
+    const metadataLocalAhead =
+      snapshot.draftState.metadataRevision !== snapshot.draftState.metadataSyncedRevision;
+    const metadataMatchesLocal = metadataEqual(remoteProject, metadata);
+    const metadataBaselineKnown = snapshot.draftState.baseRemoteName !== null;
+    const metadataChanged =
+      metadataBaselineKnown &&
+      (remoteProject.name !== snapshot.draftState.baseRemoteName ||
+        remoteProject.description !== snapshot.draftState.baseRemoteDescription);
+    const metadataUnresolved = metadataBaselineKnown
+      ? metadataChanged && !metadataMatchesLocal
+      : !metadataMatchesLocal;
+
+    const draftLocalAhead =
+      snapshot.draftState.localRevision !== snapshot.draftState.lastSyncedLocalRevision;
+    const draftChanged =
+      !remoteDraft ||
+      remoteDraft.version !== snapshot.draftState.baseRemoteVersion ||
+      remoteDraft.contentHash !== snapshot.draftState.contentHash;
+    const draftMatchesLocal =
+      remoteDraft !== null &&
+      draftMatchesPayload(remoteDraft, createCloudDraftPayload(snapshot, remoteDraft.version));
+    const draftUnresolved = draftChanged && !draftMatchesLocal;
+
+    if (metadataUnresolved || draftUnresolved) {
+      const conflict =
+        (metadataUnresolved && metadataLocalAhead) || (draftUnresolved && draftLocalAhead);
+      return this.projects.observeRemote(
+        scope,
+        snapshot.localId,
+        remoteVersion,
+        conflict ? 'conflict' : 'remote-ahead',
+      );
+    }
+
+    if (!metadataBaselineKnown || metadataChanged || metadataLocalAhead) {
+      if (!metadataMatchesLocal) {
+        await this.withToken((token) => this.gateway.update(token, remoteProjectId, metadata));
+      }
+      await this.projects.acknowledgeMetadata({
+        accountScope: scope,
+        localId: snapshot.localId,
+        revision: snapshot.draftState.metadataRevision,
+        ...metadata,
+      });
+    }
+
+    if (draftChanged && draftMatchesLocal && remoteDraft) {
+      return this.projects.acknowledgeRemoteDraft({
+        accountScope: scope,
+        contentHash: remoteDraft.contentHash,
+        localId: snapshot.localId,
+        remoteSavedAt: remoteDraft.savedAt,
+        remoteVersion: remoteDraft.version,
+        syncedLocalRevision: snapshot.draftState.localRevision,
+      });
+    }
+
+    if (draftLocalAhead && remoteDraft) {
+      const acknowledgement = await this.withToken((token) =>
+        this.gateway.putDraft(
+          token,
+          remoteProjectId,
+          createCloudDraftPayload(snapshot, remoteDraft.version),
+        ),
+      );
+      if (
+        acknowledgement.version < remoteDraft.version ||
+        acknowledgement.version > remoteDraft.version + 1
+      ) {
+        throw new CloudProjectError(
+          'CLOUD_INVALID_RESPONSE',
+          'The project service returned an invalid draft version acknowledgement.',
+          true,
+        );
+      }
+      return this.projects.acknowledgeRemoteDraft({
+        accountScope: scope,
+        contentHash: acknowledgement.contentHash,
+        localId: snapshot.localId,
+        remoteSavedAt: acknowledgement.savedAt,
+        remoteVersion: acknowledgement.version,
+        syncedLocalRevision: snapshot.draftState.localRevision,
+      });
+    }
+
+    return this.projects.completeSyncCheck(
+      scope,
+      snapshot.localId,
+      remoteDraft?.version ?? snapshot.draftState.baseRemoteVersion!,
+    );
   }
 
   private async withToken<T>(operation: (accessToken: string) => Promise<T>): Promise<T> {

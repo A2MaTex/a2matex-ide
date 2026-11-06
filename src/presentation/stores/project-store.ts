@@ -17,7 +17,12 @@ import type {
   ProjectRepository,
   ProjectSnapshot,
 } from '@application/project/project-repository';
-import type { CloudProjectIndex, ProjectCloudClient } from '@application/project/project-cloud';
+import type {
+  CloudProject,
+  CloudProjectIndex,
+  ProjectCloudClient,
+  UpdateCloudProjectInput,
+} from '@application/project/project-cloud';
 import {
   createProject,
   exportProject,
@@ -43,7 +48,7 @@ interface ProjectHistoryEntry {
 
 export interface ProjectStoreState {
   cloudIndex: CloudProjectIndex;
-  cloudStatus: 'idle' | 'loading' | 'refreshing' | 'syncing';
+  cloudStatus: 'idle' | 'loading' | 'mutating' | 'refreshing' | 'syncing';
   cloudError: string | null;
   session: ProjectSession | null;
   recentProjects: ProjectSnapshot[];
@@ -60,7 +65,15 @@ export interface ProjectStoreState {
   loadRecent(): Promise<void>;
   open(localId: string): Promise<ProjectSnapshot | null>;
   flushLocalSave(): Promise<boolean>;
-  syncFirst(): Promise<boolean>;
+  refreshCloudProjects(): Promise<boolean>;
+  archiveCloudProject(projectId: string): Promise<CloudProject | null>;
+  getCloudProject(projectId: string): Promise<CloudProject | null>;
+  syncCloud(): Promise<boolean>;
+  updateCloudProject(
+    projectId: string,
+    input: UpdateCloudProjectInput,
+    localId?: string,
+  ): Promise<CloudProject | null>;
   updateProjectName(name: string): void;
   executeWorkflowCommand(
     workflowPath: string,
@@ -83,6 +96,23 @@ function addRecent(items: ProjectSnapshot[], snapshot: ProjectSnapshot) {
   return [snapshot, ...items.filter((item) => item.localId !== snapshot.localId)].sort((a, b) =>
     b.updatedAt.localeCompare(a.updatedAt),
   );
+}
+
+function replaceCloudProject(index: CloudProjectIndex, project: CloudProject): CloudProjectIndex {
+  return {
+    ...index,
+    projects: [project, ...index.projects.filter((item) => item.id !== project.id)],
+  };
+}
+
+function syncNotice(snapshot: ProjectSnapshot) {
+  if (snapshot.draftState.syncStatus === 'conflict') {
+    return 'Local and cloud drafts both changed. The local draft was kept; nothing was uploaded.';
+  }
+  if (snapshot.draftState.syncStatus === 'remote-ahead') {
+    return 'Cloud has a newer draft. The local draft was kept; nothing was downloaded.';
+  }
+  return null;
 }
 
 function emptyHistory(session: ProjectSession | null) {
@@ -245,18 +275,35 @@ export function createProjectStore(
         }
       },
       flushLocalSave,
-      async syncFirst() {
+      async refreshCloudProjects() {
+        if (!options.cloud) return false;
+        set({ cloudStatus: 'refreshing', cloudError: null });
+        try {
+          const refreshed = await options.cloud.refresh();
+          set({
+            cloudIndex: refreshed,
+            cloudError: refreshed.warning,
+            cloudStatus: 'idle',
+          });
+          return true;
+        } catch (error) {
+          set({ cloudStatus: 'idle', cloudError: messageOf(error) });
+          return false;
+        }
+      },
+      async syncCloud() {
         if (!options.cloud || !(await flushLocalSave())) return false;
         const startingSession = get().session;
         if (!startingSession) return false;
         set({ cloudStatus: 'syncing', cloudError: null, error: null });
         try {
-          const synced = await options.cloud.syncFirst(startingSession.snapshot.localId);
+          const synced = await options.cloud.sync(startingSession.snapshot.localId);
           set((state) => {
             if (!state.session || state.session.snapshot.localId !== synced.localId) {
               return {
                 recentProjects: addRecent(state.recentProjects, synced),
                 cloudStatus: 'idle',
+                cloudError: syncNotice(synced),
               };
             }
             const session = {
@@ -267,6 +314,7 @@ export function createProjectStore(
               session,
               recentProjects: addRecent(state.recentProjects, session.snapshot),
               cloudStatus: 'idle',
+              cloudError: syncNotice(synced),
             };
           });
           return true;
@@ -289,6 +337,92 @@ export function createProjectStore(
             // Preserve the original cloud failure and the current editor working copy.
           }
           return false;
+        }
+      },
+      async getCloudProject(projectId) {
+        if (!options.cloud) return null;
+        set({ cloudStatus: 'loading', cloudError: null });
+        try {
+          const project = await options.cloud.getDetail(projectId);
+          set((state) => ({
+            cloudIndex: replaceCloudProject(state.cloudIndex, project),
+            cloudStatus: 'idle',
+          }));
+          return project;
+        } catch (error) {
+          set({ cloudStatus: 'idle', cloudError: messageOf(error) });
+          return null;
+        }
+      },
+      async updateCloudProject(projectId, input, localId) {
+        if (!options.cloud || !(await flushLocalSave())) return null;
+        set({ cloudStatus: 'mutating', cloudError: null });
+        try {
+          if (localId) {
+            const current = await openProject(repository, localId);
+            const description =
+              input.description === undefined
+                ? current.document.manifest.description
+                : input.description?.trim() || undefined;
+            const document = {
+              ...current.document,
+              manifest: {
+                ...current.document.manifest,
+                name: input.name?.trim() ?? current.document.manifest.name,
+                ...(description ? { description } : {}),
+              },
+            };
+            if (!description) delete document.manifest.description;
+            await saveProject(repository, { ...current, document });
+            if (current.draftState.baseRemoteName === null) {
+              await options.cloud.update(projectId, input, localId);
+            }
+            const synced = await options.cloud.sync(localId);
+            set((state) => {
+              const session =
+                state.session?.snapshot.localId === localId
+                  ? createProjectSession(synced)
+                  : state.session;
+              return {
+                ...(session !== state.session ? emptyHistory(session) : {}),
+                recentProjects: addRecent(state.recentProjects, synced),
+                session,
+              };
+            });
+            if (synced.draftState.syncStatus === 'conflict') {
+              throw new Error('Cloud project changed elsewhere. Local metadata was kept safely.');
+            }
+            if (synced.draftState.syncStatus === 'remote-ahead') {
+              throw new Error('Cloud project is ahead. Local metadata was kept safely.');
+            }
+          } else {
+            const project = await options.cloud.update(projectId, input);
+            set((state) => ({ cloudIndex: replaceCloudProject(state.cloudIndex, project) }));
+          }
+          const project = await options.cloud.getDetail(projectId);
+          set((state) => ({
+            cloudIndex: replaceCloudProject(state.cloudIndex, project),
+            cloudStatus: 'idle',
+          }));
+          return project;
+        } catch (error) {
+          set({ cloudStatus: 'idle', cloudError: messageOf(error) });
+          return null;
+        }
+      },
+      async archiveCloudProject(projectId) {
+        if (!options.cloud || !(await flushLocalSave())) return null;
+        set({ cloudStatus: 'mutating', cloudError: null });
+        try {
+          const project = await options.cloud.archive(projectId);
+          set((state) => ({
+            cloudIndex: replaceCloudProject(state.cloudIndex, project),
+            cloudStatus: 'idle',
+          }));
+          return project;
+        } catch (error) {
+          set({ cloudStatus: 'idle', cloudError: messageOf(error) });
+          return null;
         }
       },
       async exportProject() {

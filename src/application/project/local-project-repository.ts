@@ -20,6 +20,8 @@ export interface LocalDraftArtifacts {
 }
 
 export interface LocalProjectDraftState extends LocalDraftArtifacts {
+  baseRemoteDescription: string | null;
+  baseRemoteName: string | null;
   baseRemoteVersion: number | null;
   contentHash: string | null;
   lastSyncedLocalRevision: number | null;
@@ -65,12 +67,16 @@ export interface AcknowledgeRemoteDraftInput {
   syncedLocalRevision: number;
 }
 
+export interface AcknowledgeRemoteMetadataInput {
+  accountScope: string;
+  description: string | null;
+  localId: string;
+  name: string;
+  revision: number;
+}
+
 export interface LocalProjectRepository {
-  acknowledgeMetadata(
-    accountScope: string,
-    localId: string,
-    revision: number,
-  ): Promise<LocalProjectSnapshot>;
+  acknowledgeMetadata(input: AcknowledgeRemoteMetadataInput): Promise<LocalProjectSnapshot>;
   acknowledgeRemoteDraft(input: AcknowledgeRemoteDraftInput): Promise<LocalProjectSnapshot>;
   beginRemoteCreate(accountScope: string, localId: string): Promise<LocalProjectSnapshot>;
   bindRemoteProject(
@@ -79,9 +85,20 @@ export interface LocalProjectRepository {
     remoteProjectId: string,
   ): Promise<LocalProjectSnapshot>;
   create(input: CreateLocalProjectInput): Promise<LocalProjectSnapshot>;
+  completeSyncCheck(
+    accountScope: string,
+    localId: string,
+    observedRemoteVersion: number,
+  ): Promise<LocalProjectSnapshot>;
   findById(accountScope: string, localId: string): Promise<LocalProjectSnapshot | null>;
   list(accountScope: string): Promise<LocalProjectSnapshot[]>;
   save(input: SaveLocalProjectInput): Promise<LocalProjectSnapshot>;
+  observeRemote(
+    accountScope: string,
+    localId: string,
+    observedRemoteVersion: number | null,
+    status: Extract<LocalProjectSyncStatus, 'conflict' | 'remote-ahead'>,
+  ): Promise<LocalProjectSnapshot>;
   setSyncStatus(
     accountScope: string,
     localId: string,

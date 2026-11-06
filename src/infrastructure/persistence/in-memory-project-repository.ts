@@ -19,6 +19,8 @@ function clone<T>(value: T): T {
 
 function initialDraftState(): LocalProjectDraftState {
   return {
+    baseRemoteDescription: null,
+    baseRemoteName: null,
     baseRemoteVersion: null,
     contentHash: null,
     inputSchema: {},

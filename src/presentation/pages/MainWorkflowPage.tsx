@@ -79,7 +79,7 @@ export function MainWorkflowPage() {
   const open = useProjectStore((state) => state.open);
   const flushLocalSave = useProjectStore((state) => state.flushLocalSave);
   const exportProject = useProjectStore((state) => state.exportProject);
-  const syncFirst = useProjectStore((state) => state.syncFirst);
+  const syncCloud = useProjectStore((state) => state.syncCloud);
   const cloudStatus = useProjectStore((state) => state.cloudStatus);
   const cloudError = useProjectStore((state) => state.cloudError);
   const close = useProjectStore((state) => state.close);
@@ -369,13 +369,9 @@ export function MainWorkflowPage() {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => void syncFirst()}
-            disabled={saving || syncing || session.snapshot.draftState.baseRemoteVersion !== null}
-            title={
-              session.snapshot.draftState.baseRemoteVersion === null
-                ? 'Back up this local project to cloud'
-                : 'Cloud re-sync is implemented in Milestone C'
-            }
+            onClick={() => void syncCloud()}
+            disabled={saving || syncing}
+            title="Sync the durable local revision with cloud"
           >
             <CloudUpload /> {syncing ? 'Syncing…' : 'Sync'}
           </Button>

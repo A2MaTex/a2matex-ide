@@ -3,6 +3,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import {
   LocalProjectPersistenceError,
   type AcknowledgeRemoteDraftInput,
+  type AcknowledgeRemoteMetadataInput,
   type CreateLocalProjectInput,
   type LocalDraftArtifacts,
   type LocalProjectDraftState,
@@ -22,6 +23,8 @@ import { withImmediateTransaction } from '@electron/main/persistence/studio-data
 
 interface ProjectRow {
   account_scope: string;
+  base_remote_description: string | null;
+  base_remote_name: string | null;
   base_remote_version: number | null;
   content_hash: string | null;
   created_at: string;
@@ -59,6 +62,8 @@ const SELECT_PROJECT = `
     d.local_revision,
     d.metadata_revision,
     d.metadata_synced_revision,
+    d.base_remote_name,
+    d.base_remote_description,
     d.base_remote_version,
     d.observed_remote_version,
     d.last_synced_local_revision,
@@ -132,6 +137,8 @@ function parseProjectSnapshot(database: DatabaseSync, row: ProjectRow): LocalPro
       workflows,
     });
     const draftState: LocalProjectDraftState = {
+      baseRemoteDescription: row.base_remote_description,
+      baseRemoteName: row.base_remote_name,
       baseRemoteVersion: row.base_remote_version,
       contentHash: row.content_hash,
       inputSchema: parseStoredJson(row.input_schema_json) as LocalDraftArtifacts['inputSchema'],
@@ -260,14 +267,19 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
     });
   }
 
-  async acknowledgeMetadata(accountScope: string, localId: string, revision: number) {
-    if (!Number.isSafeInteger(revision) || revision < 0) {
+  async acknowledgeMetadata(input: AcknowledgeRemoteMetadataInput) {
+    if (!Number.isSafeInteger(input.revision) || input.revision < 0) {
       throw new TypeError('revision must be a non-negative safe integer');
     }
-    return this.updateCheckpoint(accountScope, localId, (current) => {
+    const name = requireIdentifier(input.name, 'name');
+    return this.updateCheckpoint(input.accountScope, input.localId, (current) => {
       this.database
-        .prepare(`UPDATE project_draft_state SET metadata_synced_revision = ? WHERE local_id = ?`)
-        .run(revision, current.localId);
+        .prepare(
+          `UPDATE project_draft_state
+           SET metadata_synced_revision = ?, base_remote_name = ?, base_remote_description = ?
+           WHERE local_id = ?`,
+        )
+        .run(input.revision, name, input.description, current.localId);
     });
   }
 
@@ -307,6 +319,38 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
       this.database
         .prepare('UPDATE project_draft_state SET sync_status = ? WHERE local_id = ?')
         .run(status, current.localId);
+    });
+  }
+
+  async observeRemote(
+    accountScope: string,
+    localId: string,
+    observedRemoteVersion: number | null,
+    status: Extract<LocalProjectSyncStatus, 'conflict' | 'remote-ahead'>,
+  ) {
+    return this.updateCheckpoint(accountScope, localId, (current) => {
+      this.database
+        .prepare(
+          `UPDATE project_draft_state
+           SET observed_remote_version = ?, sync_status = ?
+           WHERE local_id = ?`,
+        )
+        .run(observedRemoteVersion, status, current.localId);
+    });
+  }
+
+  async completeSyncCheck(accountScope: string, localId: string, observedRemoteVersion: number) {
+    return this.updateCheckpoint(accountScope, localId, (current) => {
+      const clean =
+        current.draftState.localRevision === current.draftState.lastSyncedLocalRevision &&
+        current.draftState.metadataRevision === current.draftState.metadataSyncedRevision;
+      this.database
+        .prepare(
+          `UPDATE project_draft_state
+           SET observed_remote_version = ?, sync_status = ?
+           WHERE local_id = ?`,
+        )
+        .run(observedRemoteVersion, clean ? 'synced' : 'local-ahead', current.localId);
     });
   }
 

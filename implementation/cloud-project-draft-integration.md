@@ -823,6 +823,11 @@ Các điểm cần điều chỉnh hoặc làm rõ:
 
 **Phụ thuộc:** Phase 5.
 
+**Trạng thái triển khai:** hoàn thành trong Milestone C. Studio lưu metadata baseline riêng, GET
+Project/Draft trước mỗi re-sync, không PUT khi `remote-ahead`/`conflict`, và nhận diện retry cùng nội
+dung sau khi mất acknowledgement. Project Details dùng cùng typed cloud client cho GET detail, PUT
+metadata và Archive; Archive chỉ tác động cloud, không xóa Local Draft.
+
 **Mục tiêu:** Sync lặp lại an toàn cho project đã có remote binding.
 
 **Công việc:**
