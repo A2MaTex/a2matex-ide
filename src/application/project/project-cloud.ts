@@ -5,6 +5,13 @@ import type {
   LocalProjectSnapshot,
   LocalProjectSyncStatus,
 } from '@application/project/local-project-repository';
+import { LocalProjectPersistenceError } from '@application/project/local-project-repository';
+import {
+  CloudProjectDocumentError,
+  createCloudDraftPayload,
+  decodeCloudProject,
+  draftMatchesPayload,
+} from '@application/project/cloud-project-document';
 import { normalizeCloudProjectName } from '@domain/project/project-name';
 import type { JsonValue } from '@shared/types/json-value';
 
@@ -88,10 +95,12 @@ export interface CloudProjectGateway {
 
 export type CloudProjectErrorCode =
   | 'CLOUD_CONFIGURATION_ERROR'
+  | 'CLOUD_DRAFT_UNSUPPORTED'
   | 'CLOUD_DRAFT_VERSION_CONFLICT'
   | 'CLOUD_FORBIDDEN'
   | 'CLOUD_INVALID_INPUT'
   | 'CLOUD_INVALID_RESPONSE'
+  | 'CLOUD_LOCAL_CHANGES'
   | 'CLOUD_NAME_CONFLICT'
   | 'CLOUD_NETWORK_UNAVAILABLE'
   | 'CLOUD_PROJECT_ARCHIVED'
@@ -133,8 +142,10 @@ export interface ProjectCloudClient {
   archive(projectId: string): Promise<CloudProject>;
   getDetail(projectId: string): Promise<CloudProject>;
   load(): Promise<CloudProjectIndex>;
+  open(projectId: string): Promise<LocalProjectSnapshot>;
   refresh(): Promise<CloudProjectIndex>;
   sync(localId: string): Promise<LocalProjectSnapshot>;
+  updateFromCloud(localId: string): Promise<LocalProjectSnapshot>;
   update(
     projectId: string,
     input: UpdateCloudProjectInput,
@@ -143,60 +154,23 @@ export interface ProjectCloudClient {
 }
 
 interface ProjectCloudServiceOptions {
+  createId?: () => string;
   now?: () => string;
+  onEvent?: (event: ProjectCloudEvent) => void;
   pageSize?: number;
 }
 
-function jsonObject(value: JsonValue, label: string): JsonObject {
-  if (!value || Array.isArray(value) || typeof value !== 'object') {
-    throw new CloudProjectError('CLOUD_INVALID_INPUT', `${label} must be a JSON object.`, false);
-  }
-  return value;
-}
+export { createCloudDraftPayload } from '@application/project/cloud-project-document';
 
-function copyAsJsonObject(value: unknown, label: string): JsonObject {
-  return jsonObject(JSON.parse(JSON.stringify(value)) as JsonValue, label);
-}
-
-export function createCloudDraftPayload(
-  snapshot: LocalProjectSnapshot,
-  expectedVersion = 0,
-): CloudProjectDraftPayload {
-  const { document, draftState } = snapshot;
-  return {
-    expectedVersion,
-    editorGraph: copyAsJsonObject(
-      {
-        schemaVersion: document.manifest.schemaVersion,
-        entryWorkflow: document.manifest.entryWorkflow,
-        workflows: document.workflows,
-      },
-      'editorGraph',
-    ),
-    inputSchema: jsonObject(draftState.inputSchema, 'inputSchema'),
-    runtimeIr: draftState.runtimeIr === null ? null : jsonObject(draftState.runtimeIr, 'runtimeIr'),
-    validationSummary: jsonObject(draftState.validationSummary, 'validationSummary'),
-    testSummary: jsonObject(draftState.testSummary, 'testSummary'),
-  };
-}
-
-function canonicalJson(value: JsonValue): string {
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
-  return `{${Object.keys(value)
-    .sort()
-    .map((key) => `${JSON.stringify(key)}:${canonicalJson(value[key]!)}`)
-    .join(',')}}`;
-}
-
-function draftMatchesPayload(draft: CloudProjectDraft, payload: CloudProjectDraftPayload) {
-  return (
-    canonicalJson(draft.editorGraph) === canonicalJson(payload.editorGraph) &&
-    canonicalJson(draft.inputSchema) === canonicalJson(payload.inputSchema) &&
-    canonicalJson(draft.runtimeIr) === canonicalJson(payload.runtimeIr) &&
-    canonicalJson(draft.validationSummary) === canonicalJson(payload.validationSummary) &&
-    canonicalJson(draft.testSummary) === canonicalJson(payload.testSummary)
-  );
+export interface ProjectCloudEvent {
+  attemptId?: string;
+  errorCode?: CloudProjectErrorCode;
+  event: 'cloud_open' | 'cloud_update' | 'sync_completed' | 'sync_failed' | 'sync_started';
+  localId?: string;
+  localRevision?: number;
+  remoteProjectId?: string;
+  remoteVersion?: number;
+  status?: LocalProjectSyncStatus;
 }
 
 function cloudProjectFromCache(payload: JsonValue): CloudProject | null {
@@ -246,7 +220,9 @@ export class ProjectCloudService implements ProjectCloudClient {
   private readonly projects: LocalProjectRepository;
   private readonly auth: MainAuthSession;
   private readonly accountScope: () => Promise<string>;
+  private readonly createId: () => string;
   private readonly now: () => string;
+  private readonly onEvent?: (event: ProjectCloudEvent) => void;
   private readonly pageSize: number;
   private readonly syncs = new Map<string, Promise<LocalProjectSnapshot>>();
   private readonly refreshes = new Map<string, Promise<CloudProjectIndex>>();
@@ -264,7 +240,9 @@ export class ProjectCloudService implements ProjectCloudClient {
     this.projects = projects;
     this.auth = auth;
     this.accountScope = accountScope;
+    this.createId = options.createId ?? (() => globalThis.crypto.randomUUID());
     this.now = options.now ?? (() => new Date().toISOString());
+    this.onEvent = options.onEvent;
     this.pageSize = options.pageSize ?? 100;
   }
 
@@ -291,6 +269,123 @@ export class ProjectCloudService implements ProjectCloudClient {
 
   async getDetail(projectId: string) {
     return this.withToken((token) => this.gateway.get(token, requireProjectId(projectId)));
+  }
+
+  async open(projectId: string): Promise<LocalProjectSnapshot> {
+    const remoteProjectId = requireProjectId(projectId);
+    const scope = await this.accountScope();
+    const existing = await this.projects.findByRemoteId(scope, remoteProjectId);
+    if (existing) return existing;
+
+    const [project, remoteState] = await this.withToken((token) =>
+      Promise.all([
+        this.gateway.get(token, remoteProjectId),
+        this.gateway.getDraft(token, remoteProjectId),
+      ]),
+    );
+    const localId = this.createId();
+    const decoded = decodeCloudProjectSafely(project, remoteState.draft, localId);
+    const snapshot = await this.projects.materializeCloudProject({
+      accountScope: scope,
+      localId,
+      remoteProjectId,
+      document: decoded.document,
+      artifacts: decoded.artifacts,
+      baseRemoteName: project.name,
+      baseRemoteDescription: project.description,
+      remoteVersion: remoteState.draft?.version ?? null,
+      contentHash: remoteState.draft?.contentHash ?? null,
+      remoteSavedAt: remoteState.draft?.savedAt ?? null,
+    });
+    this.emit({
+      event: 'cloud_open',
+      localId: snapshot.localId,
+      localRevision: snapshot.draftState.localRevision,
+      remoteProjectId,
+      ...(remoteState.draft ? { remoteVersion: remoteState.draft.version } : {}),
+      status: snapshot.draftState.syncStatus,
+    });
+    return snapshot;
+  }
+
+  async updateFromCloud(localId: string): Promise<LocalProjectSnapshot> {
+    const id = localId.trim();
+    if (!id) {
+      throw new CloudProjectError('CLOUD_INVALID_INPUT', 'Local project ID is required.', false);
+    }
+    const scope = await this.accountScope();
+    const current = await this.projects.findById(scope, id);
+    if (!current?.remoteProjectId) {
+      throw new CloudProjectError(
+        'CLOUD_INVALID_INPUT',
+        'The local project is not bound to a cloud project.',
+        false,
+      );
+    }
+    const clean =
+      current.draftState.localRevision === current.draftState.lastSyncedLocalRevision &&
+      current.draftState.metadataRevision === current.draftState.metadataSyncedRevision;
+    if (!clean || current.draftState.syncStatus !== 'remote-ahead') {
+      throw new CloudProjectError(
+        'CLOUD_LOCAL_CHANGES',
+        'Update from cloud is only available for a clean local project that is remote-ahead.',
+        false,
+      );
+    }
+
+    const remoteProjectId = current.remoteProjectId;
+    const [project, remoteState] = await this.withToken((token) =>
+      Promise.all([
+        this.gateway.get(token, remoteProjectId),
+        this.gateway.getDraft(token, remoteProjectId),
+      ]),
+    );
+    if (!remoteState.draft) {
+      throw new CloudProjectError(
+        'CLOUD_INVALID_RESPONSE',
+        'The cloud draft no longer exists; the local project was not changed.',
+        false,
+      );
+    }
+    const decoded = decodeCloudProjectSafely(project, remoteState.draft, id);
+    try {
+      const snapshot = await this.projects.replaceFromCloud({
+        accountScope: scope,
+        localId: id,
+        remoteProjectId,
+        expectedLocalRevision: current.draftState.localRevision,
+        document: decoded.document,
+        artifacts: decoded.artifacts,
+        baseRemoteName: project.name,
+        baseRemoteDescription: project.description,
+        remoteVersion: remoteState.draft.version,
+        contentHash: remoteState.draft.contentHash,
+        remoteSavedAt: remoteState.draft.savedAt,
+      });
+      this.emit({
+        event: 'cloud_update',
+        localId: id,
+        localRevision: snapshot.draftState.localRevision,
+        remoteProjectId,
+        remoteVersion: remoteState.draft.version,
+        status: snapshot.draftState.syncStatus,
+      });
+      return snapshot;
+    } catch (error) {
+      if (
+        error instanceof LocalProjectPersistenceError &&
+        error.code === 'LOCAL_REVISION_CONFLICT'
+      ) {
+        throw new CloudProjectError(
+          'CLOUD_LOCAL_CHANGES',
+          'Local changes were saved while the cloud draft was loading; nothing was replaced.',
+          false,
+          undefined,
+          { cause: error },
+        );
+      }
+      throw error;
+    }
   }
 
   async update(projectId: string, input: UpdateCloudProjectInput, localId?: string) {
@@ -360,7 +455,33 @@ export class ProjectCloudService implements ProjectCloudClient {
     const syncKey = `${scope}\u0000${id}`;
     const current = this.syncs.get(syncKey);
     if (current) return current;
-    const sync = this.runSync(scope, id).finally(() => this.syncs.delete(syncKey));
+    const attemptId = this.createId();
+    this.emit({ event: 'sync_started', attemptId, localId: id });
+    const sync = this.runSync(scope, id)
+      .then((snapshot) => {
+        this.emit({
+          event: 'sync_completed',
+          attemptId,
+          localId: id,
+          localRevision: snapshot.draftState.localRevision,
+          ...(snapshot.remoteProjectId ? { remoteProjectId: snapshot.remoteProjectId } : {}),
+          ...(snapshot.draftState.observedRemoteVersion === null
+            ? {}
+            : { remoteVersion: snapshot.draftState.observedRemoteVersion }),
+          status: snapshot.draftState.syncStatus,
+        });
+        return snapshot;
+      })
+      .catch((error) => {
+        this.emit({
+          event: 'sync_failed',
+          attemptId,
+          localId: id,
+          ...(error instanceof CloudProjectError ? { errorCode: error.code } : {}),
+        });
+        throw error;
+      })
+      .finally(() => this.syncs.delete(syncKey));
     this.syncs.set(syncKey, sync);
     return sync;
   }
@@ -627,6 +748,33 @@ export class ProjectCloudService implements ProjectCloudClient {
       if (!refreshed) throw error;
       return operation(refreshed);
     }
+  }
+
+  private emit(event: ProjectCloudEvent) {
+    try {
+      this.onEvent?.(event);
+    } catch {
+      // Observability must never change sync behavior.
+    }
+  }
+}
+
+function decodeCloudProjectSafely(
+  project: CloudProject,
+  draft: CloudProjectDraft | null,
+  localId: string,
+) {
+  try {
+    return decodeCloudProject(project, draft, localId);
+  } catch (error) {
+    if (!(error instanceof CloudProjectDocumentError)) throw error;
+    throw new CloudProjectError(
+      error.reason === 'unsupported' ? 'CLOUD_DRAFT_UNSUPPORTED' : 'CLOUD_INVALID_RESPONSE',
+      error.message,
+      false,
+      undefined,
+      { cause: error },
+    );
   }
 }
 

@@ -122,6 +122,9 @@ describe('project store local-first lifecycle', () => {
         throw new Error('Not used');
       },
       load: async () => ({ projects: [], refreshedAt: null, source: 'cache', warning: null }),
+      open: async () => {
+        throw new Error('Not used');
+      },
       refresh: async () => ({ projects: [], refreshedAt: null, source: 'network', warning: null }),
       sync: async (localId) => {
         const snapshot = await repository.open(localId);
@@ -137,6 +140,9 @@ describe('project store local-first lifecycle', () => {
             syncStatus: 'synced',
           },
         };
+      },
+      updateFromCloud: async () => {
+        throw new Error('Not used');
       },
       update: async () => {
         throw new Error('Not used');

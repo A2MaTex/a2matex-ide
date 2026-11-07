@@ -2,6 +2,7 @@ import {
   ChevronDown,
   ChevronRight,
   CirclePlay,
+  CloudDownload,
   CloudUpload,
   FileJson2,
   Folder,
@@ -63,7 +64,8 @@ function isTextInput(target: EventTarget | null) {
 }
 
 function newNodeId(type: string) {
-  return type.replace(/[^a-z0-9]+/gi, '-') + '-' + crypto.randomUUID().slice(0, 8);
+  void type;
+  return crypto.randomUUID();
 }
 
 export function MainWorkflowPage() {
@@ -80,7 +82,9 @@ export function MainWorkflowPage() {
   const flushLocalSave = useProjectStore((state) => state.flushLocalSave);
   const exportProject = useProjectStore((state) => state.exportProject);
   const syncCloud = useProjectStore((state) => state.syncCloud);
+  const updateFromCloud = useProjectStore((state) => state.updateFromCloud);
   const cloudStatus = useProjectStore((state) => state.cloudStatus);
+  const cloudAvailable = useProjectStore((state) => state.cloudAvailable);
   const cloudError = useProjectStore((state) => state.cloudError);
   const close = useProjectStore((state) => state.close);
   const discard = useProjectStore((state) => state.discard);
@@ -292,6 +296,18 @@ export function MainWorkflowPage() {
     session.snapshot.draftState.syncStatus === 'local-only'
       ? 'Not synced'
       : session.snapshot.draftState.syncStatus.replaceAll('-', ' ');
+  const remoteAhead = session.snapshot.draftState.syncStatus === 'remote-ahead';
+
+  const confirmUpdateFromCloud = async () => {
+    const { baseRemoteVersion, observedRemoteVersion } = session.snapshot.draftState;
+    if (
+      !window.confirm(
+        `Replace this clean local working copy (cloud baseline v${baseRemoteVersion ?? 'none'}) with cloud draft v${observedRemoteVersion ?? 'unknown'}? This cannot be undone.`,
+      )
+    )
+      return;
+    if (await updateFromCloud()) resetWorkflowSession();
+  };
 
   const returnToProjects = async () => {
     if (!(await flushLocalSave())) return;
@@ -341,9 +357,11 @@ export function MainWorkflowPage() {
           >
             {localSaveLabel}
           </span>
-          <span className="ml-1 rounded bg-secondary px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider">
-            {cloudSyncLabel}
-          </span>
+          {cloudAvailable ? (
+            <span className="ml-1 rounded bg-secondary px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider">
+              {cloudSyncLabel}
+            </span>
+          ) : null}
           <span className="ml-2 text-[10px]">
             {workflow.nodes.length} nodes · {issues.length} problems
           </span>
@@ -366,15 +384,28 @@ export function MainWorkflowPage() {
           >
             <SaveAll /> {exporting ? 'Exporting…' : 'Export'}
           </Button>
-          <Button
-            size="sm"
-            variant="secondary"
-            onClick={() => void syncCloud()}
-            disabled={saving || syncing}
-            title="Sync the durable local revision with cloud"
-          >
-            <CloudUpload /> {syncing ? 'Syncing…' : 'Sync'}
-          </Button>
+          {cloudAvailable ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void syncCloud()}
+              disabled={saving || syncing}
+              title="Sync the durable local revision with cloud"
+            >
+              <CloudUpload /> {syncing ? 'Syncing…' : 'Sync'}
+            </Button>
+          ) : null}
+          {cloudAvailable && remoteAhead ? (
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => void confirmUpdateFromCloud()}
+              disabled={saving || syncing || dirty}
+              title="Replace the clean local copy with the newer cloud draft"
+            >
+              <CloudDownload /> {syncing ? 'Updating…' : 'Update from cloud'}
+            </Button>
+          ) : null}
           <Button
             size="sm"
             variant="secondary"
@@ -540,7 +571,7 @@ export function MainWorkflowPage() {
               >
                 <div className="flex h-9 shrink-0 items-center border-b border-border bg-panel/80 px-3 text-xs">
                   <span className="border-b-2 border-primary px-2 py-2.5 font-medium">
-                    {workflow.name}
+                    {workflowPath.split('/').at(-1)?.replace('.workflow.json', '') ?? 'Workflow'}
                   </span>
                 </div>
                 <div className="min-h-0 flex-1">

@@ -2,6 +2,7 @@ import type { DatabaseSync } from 'node:sqlite';
 
 import {
   LocalProjectPersistenceError,
+  type ApplyCloudProjectInput,
   type AcknowledgeRemoteDraftInput,
   type AcknowledgeRemoteMetadataInput,
   type CreateLocalProjectInput,
@@ -10,8 +11,10 @@ import {
   type LocalProjectRepository,
   type LocalProjectSnapshot,
   type LocalProjectSyncStatus,
+  type ReplaceLocalFromCloudInput,
   type SaveLocalProjectInput,
 } from '@application/project/local-project-repository';
+import type { ProjectDocument } from '@domain/project/project';
 import { projectDocumentSchema } from '@domain/project/project-schema';
 import {
   LOCAL_PROJECT_NAME_NORMALIZATION_VERSION,
@@ -203,6 +206,29 @@ function artifactsEqual(left: LocalDraftArtifacts, right: LocalDraftArtifacts) {
   return serializeJson(left) === serializeJson(right);
 }
 
+function writeWorkflows(
+  database: DatabaseSync,
+  localId: string,
+  document: ProjectDocument,
+  timestamp: string,
+) {
+  const insertWorkflow = database.prepare(
+    `INSERT INTO workflow_documents (
+      local_id, workflow_path, schema_version, document_json, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?)`,
+  );
+  for (const [workflowPath, workflow] of Object.entries(document.workflows)) {
+    insertWorkflow.run(
+      localId,
+      workflowPath,
+      workflow.schemaVersion,
+      serializeJson(workflow),
+      timestamp,
+      timestamp,
+    );
+  }
+}
+
 export class SqliteLocalProjectRepository implements LocalProjectRepository {
   constructor(
     private readonly database: DatabaseSync,
@@ -382,21 +408,7 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
               timestamp,
             );
 
-          const insertWorkflow = this.database.prepare(
-            `INSERT INTO workflow_documents (
-              local_id, workflow_path, schema_version, document_json, created_at, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?)`,
-          );
-          for (const [workflowPath, workflow] of Object.entries(document.workflows)) {
-            insertWorkflow.run(
-              localId,
-              workflowPath,
-              workflow.schemaVersion,
-              serializeJson(workflow),
-              timestamp,
-              timestamp,
-            );
-          }
+          writeWorkflows(this.database, localId, document, timestamp);
           this.database
             .prepare('INSERT INTO project_draft_state (local_id) VALUES (?)')
             .run(localId);
@@ -417,12 +429,186 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
     );
   }
 
+  async findByRemoteId(
+    accountScope: string,
+    remoteProjectId: string,
+  ): Promise<LocalProjectSnapshot | null> {
+    const scope = requireIdentifier(accountScope, 'accountScope');
+    const remoteId = requireIdentifier(remoteProjectId, 'remoteProjectId');
+    const row = this.database
+      .prepare(`${SELECT_PROJECT} WHERE p.account_scope = ? AND p.remote_project_id = ?`)
+      .get(scope, remoteId) as ProjectRow | undefined;
+    return row ? parseProjectSnapshot(this.database, row) : null;
+  }
+
   async list(accountScope: string): Promise<LocalProjectSnapshot[]> {
     const normalizedScope = requireIdentifier(accountScope, 'accountScope');
     const rows = this.database
       .prepare(`${SELECT_PROJECT} WHERE p.account_scope = ? ORDER BY p.updated_at DESC, p.local_id`)
       .all(normalizedScope) as unknown as ProjectRow[];
     return rows.map((row) => parseProjectSnapshot(this.database, row));
+  }
+
+  async materializeCloudProject(input: ApplyCloudProjectInput): Promise<LocalProjectSnapshot> {
+    const accountScope = requireIdentifier(input.accountScope, 'accountScope');
+    const localId = requireIdentifier(input.localId, 'localId');
+    const remoteProjectId = requireIdentifier(input.remoteProjectId, 'remoteProjectId');
+    return this.writes.run(projectKey(accountScope, localId), () => {
+      try {
+        const document = projectDocumentSchema.parse(input.document);
+        const timestamp = this.now();
+        return withImmediateTransaction(this.database, () => {
+          const existing = this.database
+            .prepare(`${SELECT_PROJECT} WHERE p.account_scope = ? AND p.remote_project_id = ?`)
+            .get(accountScope, remoteProjectId) as ProjectRow | undefined;
+          if (existing) return parseProjectSnapshot(this.database, existing);
+
+          this.database
+            .prepare(
+              `INSERT INTO projects (
+                local_id, account_scope, remote_project_id, name, normalized_name,
+                name_normalization_version, description, manifest_json, created_at, updated_at
+              ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            )
+            .run(
+              localId,
+              accountScope,
+              remoteProjectId,
+              document.manifest.name,
+              normalizeProjectName(document.manifest.name),
+              LOCAL_PROJECT_NAME_NORMALIZATION_VERSION,
+              document.manifest.description ?? null,
+              serializeJson(document.manifest),
+              timestamp,
+              timestamp,
+            );
+          writeWorkflows(this.database, localId, document, timestamp);
+          this.database
+            .prepare(
+              `INSERT INTO project_draft_state (
+                local_id, metadata_synced_revision, base_remote_name,
+                base_remote_description, base_remote_version, observed_remote_version,
+                last_synced_local_revision, sync_status, content_hash, remote_saved_at,
+                input_schema_json, runtime_ir_json, validation_summary_json, test_summary_json
+              ) VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            )
+            .run(
+              localId,
+              requireIdentifier(input.baseRemoteName, 'baseRemoteName'),
+              input.baseRemoteDescription,
+              input.remoteVersion,
+              input.remoteVersion,
+              input.remoteVersion === null ? null : 0,
+              input.remoteVersion === null ? 'local-ahead' : 'synced',
+              input.contentHash,
+              input.remoteSavedAt,
+              serializeJson(input.artifacts.inputSchema),
+              input.artifacts.runtimeIr === null ? null : serializeJson(input.artifacts.runtimeIr),
+              serializeJson(input.artifacts.validationSummary),
+              serializeJson(input.artifacts.testSummary),
+            );
+          return readProject(this.database, accountScope, localId)!;
+        });
+      } catch (error) {
+        return mapWriteError(error);
+      }
+    });
+  }
+
+  async replaceFromCloud(input: ReplaceLocalFromCloudInput): Promise<LocalProjectSnapshot> {
+    const accountScope = requireIdentifier(input.accountScope, 'accountScope');
+    const localId = requireIdentifier(input.localId, 'localId');
+    const remoteProjectId = requireIdentifier(input.remoteProjectId, 'remoteProjectId');
+    return this.writes.run(projectKey(accountScope, localId), () => {
+      try {
+        const document = projectDocumentSchema.parse(input.document);
+        return withImmediateTransaction(this.database, () => {
+          const current = readProject(this.database, accountScope, localId);
+          if (!current) {
+            throw new LocalProjectPersistenceError(
+              'PROJECT_NOT_FOUND',
+              `Local project ${localId} was not found`,
+            );
+          }
+          const clean =
+            current.draftState.localRevision === current.draftState.lastSyncedLocalRevision &&
+            current.draftState.metadataRevision === current.draftState.metadataSyncedRevision;
+          if (
+            current.remoteProjectId !== remoteProjectId ||
+            current.draftState.localRevision !== input.expectedLocalRevision ||
+            !clean
+          ) {
+            throw new LocalProjectPersistenceError(
+              'LOCAL_REVISION_CONFLICT',
+              'Local project changed while the cloud draft was loading',
+              true,
+            );
+          }
+          if (input.remoteVersion === null || !input.contentHash || !input.remoteSavedAt) {
+            throw new LocalProjectPersistenceError(
+              'TRANSACTION_FAILED',
+              'A remote draft baseline is required when replacing a local project',
+            );
+          }
+
+          const timestamp = this.now();
+          const localRevision = current.draftState.localRevision + 1;
+          const metadataChanged =
+            current.document.manifest.name !== document.manifest.name ||
+            (current.document.manifest.description ?? null) !==
+              (document.manifest.description ?? null);
+          const metadataRevision = current.draftState.metadataRevision + (metadataChanged ? 1 : 0);
+          this.database
+            .prepare(
+              `UPDATE projects
+               SET name = ?, normalized_name = ?, description = ?, manifest_json = ?, updated_at = ?
+               WHERE account_scope = ? AND local_id = ?`,
+            )
+            .run(
+              document.manifest.name,
+              normalizeProjectName(document.manifest.name),
+              document.manifest.description ?? null,
+              serializeJson(document.manifest),
+              timestamp,
+              accountScope,
+              localId,
+            );
+          this.database.prepare('DELETE FROM workflow_documents WHERE local_id = ?').run(localId);
+          writeWorkflows(this.database, localId, document, timestamp);
+          this.database
+            .prepare(
+              `UPDATE project_draft_state
+               SET local_revision = ?, last_synced_local_revision = ?,
+                   metadata_revision = ?, metadata_synced_revision = ?,
+                   base_remote_name = ?, base_remote_description = ?,
+                   base_remote_version = ?, observed_remote_version = ?, sync_status = 'synced',
+                   content_hash = ?, remote_saved_at = ?, input_schema_json = ?,
+                   runtime_ir_json = ?, validation_summary_json = ?, test_summary_json = ?
+               WHERE local_id = ?`,
+            )
+            .run(
+              localRevision,
+              localRevision,
+              metadataRevision,
+              metadataRevision,
+              requireIdentifier(input.baseRemoteName, 'baseRemoteName'),
+              input.baseRemoteDescription,
+              input.remoteVersion,
+              input.remoteVersion,
+              input.contentHash,
+              input.remoteSavedAt,
+              serializeJson(input.artifacts.inputSchema),
+              input.artifacts.runtimeIr === null ? null : serializeJson(input.artifacts.runtimeIr),
+              serializeJson(input.artifacts.validationSummary),
+              serializeJson(input.artifacts.testSummary),
+              localId,
+            );
+          return readProject(this.database, accountScope, localId)!;
+        });
+      } catch (error) {
+        return mapWriteError(error);
+      }
+    });
   }
 
   async save(input: SaveLocalProjectInput): Promise<LocalProjectSnapshot> {
@@ -491,21 +677,7 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
 
           if (workflowsChanged) {
             this.database.prepare('DELETE FROM workflow_documents WHERE local_id = ?').run(localId);
-            const insertWorkflow = this.database.prepare(
-              `INSERT INTO workflow_documents (
-                local_id, workflow_path, schema_version, document_json, created_at, updated_at
-              ) VALUES (?, ?, ?, ?, ?, ?)`,
-            );
-            for (const [workflowPath, workflow] of Object.entries(document.workflows)) {
-              insertWorkflow.run(
-                localId,
-                workflowPath,
-                workflow.schemaVersion,
-                serializeJson(workflow),
-                timestamp,
-                timestamp,
-              );
-            }
+            writeWorkflows(this.database, localId, document, timestamp);
           }
 
           this.database

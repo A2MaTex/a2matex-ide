@@ -44,8 +44,10 @@ export interface StudioHostApi {
     archive(projectId: string): Promise<HostResult<CloudProject, CloudProjectErrorCode>>;
     getDetail(projectId: string): Promise<HostResult<CloudProject, CloudProjectErrorCode>>;
     load(): Promise<HostResult<CloudProjectIndex, CloudProjectErrorCode>>;
+    open(projectId: string): Promise<HostResult<ProjectSnapshot, CloudProjectErrorCode>>;
     refresh(): Promise<HostResult<CloudProjectIndex, CloudProjectErrorCode>>;
     sync(localId: string): Promise<HostResult<ProjectSnapshot, CloudProjectErrorCode>>;
+    updateFromCloud(localId: string): Promise<HostResult<ProjectSnapshot, CloudProjectErrorCode>>;
     update(
       projectId: string,
       update: UpdateCloudProjectInput,

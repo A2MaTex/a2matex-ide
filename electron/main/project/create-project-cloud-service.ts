@@ -10,6 +10,7 @@ import type {
   LocalProjectRepository,
 } from '@application/project/local-project-repository';
 import { createProjectCloudApi } from '@electron/main/api/project-cloud.api';
+import { logMain } from '@electron/main/logger';
 
 export function createProjectCloudService(input: {
   auth: MainAuthSession;
@@ -33,5 +34,17 @@ export function createProjectCloudService(input: {
     input.projects,
     input.auth,
     accountScope,
+    {
+      onEvent: (event) =>
+        logMain(event.event === 'sync_failed' ? 'error' : 'info', `project_${event.event}`, {
+          ...(event.attemptId ? { attemptId: event.attemptId } : {}),
+          ...(event.localId ? { localId: event.localId } : {}),
+          ...(event.remoteProjectId ? { remoteProjectId: event.remoteProjectId } : {}),
+          ...(event.localRevision === undefined ? {} : { localRevision: event.localRevision }),
+          ...(event.remoteVersion === undefined ? {} : { remoteVersion: event.remoteVersion }),
+          ...(event.status ? { status: event.status } : {}),
+          ...(event.errorCode ? { errorCode: event.errorCode } : {}),
+        }),
+    },
   );
 }

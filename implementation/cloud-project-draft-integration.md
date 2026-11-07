@@ -851,6 +851,16 @@ metadata và Archive; Archive chỉ tác động cloud, không xóa Local Draft.
 
 **Phụ thuộc:** Phase 4 và Phase 6.
 
+**Trạng thái triển khai:** hoàn thành trong Milestone D. Click một item cloud-only sẽ GET Project và
+Draft, decode/validate toàn bộ payload trước khi materialize vào SQLite trong một transaction rồi mới
+mở workspace. Draft schema 1 cũ vẫn đọc được; payload schema mới hơn hoặc hỏng trả typed error và
+không để lại local row. Action **Update from cloud** chỉ xuất hiện khi `remote-ahead`, yêu cầu xác nhận,
+và repository kiểm tra lại local revision/clean state ngay trong transaction trước khi replace.
+
+Cloud payload schema 1 mới giữ `version`, `minimumRuntimeVersion`, workflow paths, assets,
+permissions và environment trong `editorGraph.manifest`; project identity, name, description và
+publisher không được nhúng vào graph. Metadata luôn lấy từ Project API.
+
 **Mục tiêu:** project chỉ có trên cloud có thể được mở mà không vi phạm nguyên tắc bảo vệ Local Draft.
 
 **Công việc:**
@@ -868,6 +878,15 @@ metadata và Archive; Archive chỉ tác động cloud, không xóa Local Draft.
 ### Phase 8 — UX hoàn thiện, hardening và rollout
 
 **Phụ thuộc:** Phase 3 đến Phase 7.
+
+**Trạng thái triển khai trong code:** UI tách Local Save/Cloud Sync state, dedupe Sync theo local ID,
+ghi structured event không chứa token/workflow content, tạo backup `studio.sqlite3.pre-vN.bak` trước
+migration của database đã tồn tại, và hiển thị lỗi rõ ràng nếu database không mở được. Kill switch
+`VITE_CLOUD_PROJECTS_ENABLED=false` tắt toàn bộ cloud actions mà không xóa Local Draft.
+
+**Release gate bên ngoài code:** packaging smoke trên từng target OS, E2E với backend/staging thật,
+feature-flag rollout và đo metric production phải được CI/Release thực hiện trước khi tuyên bố rollout
+hoàn tất; một phiên phát triển local không thể cung cấp bằng chứng production cho các mục này.
 
 **Mục tiêu:** chứng minh các invariant end-to-end và phát hành có thể quan sát/rollback.
 

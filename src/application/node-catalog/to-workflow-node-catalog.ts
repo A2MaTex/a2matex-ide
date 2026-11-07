@@ -1,4 +1,4 @@
-import type { CatalogNodeDefinition, CatalogObjectSchema } from '@domain/node-catalog/node-catalog';
+import type { CatalogNodeDefinition } from '@domain/node-catalog/node-catalog';
 import type {
   NodeDefinition,
   PortDefinition,
@@ -33,6 +33,7 @@ function toProperty(
   name: string,
   schema: Record<string, JsonValue>,
   order: number,
+  storage: PropertyDefinition['storage'],
 ): PropertyDefinition | null {
   const type = schema.type;
   if (
@@ -49,6 +50,7 @@ function toProperty(
   const property: PropertyDefinition = {
     type,
     title: typeof schema.title === 'string' ? schema.title : titleFromName(name),
+    storage,
     ui: {
       order,
       control: Array.isArray(schema.enum) ? 'select' : type === 'boolean' ? 'switch' : 'input',
@@ -66,15 +68,26 @@ function toProperty(
 }
 
 function toProperties(node: CatalogNodeDefinition): NodeDefinition['properties'] {
-  const schemas: CatalogObjectSchema['properties'] = {
-    ...node.configSchema.properties,
-    ...node.inputSchema.properties,
-  };
+  const schemas: ReadonlyArray<
+    readonly [string, Record<string, JsonValue>, PropertyDefinition['storage']]
+  > = [
+    ...Object.entries(node.configSchema.properties).map(
+      ([name, schema]) => [name, schema, 'config'] as const,
+    ),
+    ...Object.entries(node.inputSchema.properties).map(
+      ([name, schema]) => [name, schema, 'binding'] as const,
+    ),
+  ];
   const fieldOrder = node.editorHints.fieldOrder;
   const properties = Object.fromEntries(
-    Object.entries(schemas).flatMap(([name, schema], index) => {
+    schemas.flatMap(([name, schema, storage], index) => {
       const configuredOrder = fieldOrder.indexOf(name);
-      const property = toProperty(name, schema, configuredOrder >= 0 ? configuredOrder : index);
+      const property = toProperty(
+        name,
+        schema,
+        configuredOrder >= 0 ? configuredOrder : index,
+        storage,
+      );
       return property ? [[name, property]] : [];
     }),
   );
@@ -107,5 +120,6 @@ export function toWorkflowNodeCatalog(nodes: readonly CatalogNodeDefinition[]): 
     requiredCapabilities: node.capabilities.map((capability) => capability.code),
     requiredPermissions: [],
     runtimeHandler: node.runtimeHandler,
+    supportedErrorPolicies: node.supportedErrorPolicies,
   }));
 }

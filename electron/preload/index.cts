@@ -24,12 +24,15 @@ const studioHost = {
   },
   cloudProject: {
     load: () => ipcRenderer.invoke('studio:cloud-project:load'),
+    open: (projectId) => ipcRenderer.invoke('studio:cloud-project:open', projectId),
     refresh: () => ipcRenderer.invoke('studio:cloud-project:refresh'),
     getDetail: (projectId) => ipcRenderer.invoke('studio:cloud-project:detail', projectId),
     update: (projectId, update, localId) =>
       ipcRenderer.invoke('studio:cloud-project:update', { projectId, update, localId }),
     archive: (projectId) => ipcRenderer.invoke('studio:cloud-project:archive', projectId),
     sync: (localId) => ipcRenderer.invoke('studio:cloud-project:sync', localId),
+    updateFromCloud: (localId) =>
+      ipcRenderer.invoke('studio:cloud-project:update-from-cloud', localId),
   },
   project: {
     list: () => ipcRenderer.invoke('studio:project:list'),

@@ -1,7 +1,6 @@
 import { Copy, PanelRightClose, Settings2, Trash2 } from 'lucide-react';
 
 import type { WorkflowNode } from '@domain/project/project';
-import { findNodeDefinition } from '@domain/workflow/node-catalog';
 import type { NodeDefinition, PropertyDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
@@ -73,7 +72,7 @@ export function NodeInspector({
     );
   }
 
-  const definition = findNodeDefinition(node.type, node.nodeVersion, catalog);
+  const definition = catalog.find((candidate) => candidate.type === node.type);
   if (!definition) {
     return (
       <section className="h-full bg-panel" aria-label="Node inspector">
@@ -117,9 +116,19 @@ export function NodeInspector({
         {Object.entries(definition.properties.properties)
           .sort(([, left], [, right]) => (left.ui?.order ?? 0) - (right.ui?.order ?? 0))
           .map(([name, property]) => {
-            const value = node.params[name] ?? property.default ?? '';
+            const binding = node.bindings[name];
+            const storedValue =
+              property.storage === 'config'
+                ? node.config[name]
+                : binding?.kind === 'constant'
+                  ? binding.value
+                  : undefined;
+            const value = storedValue ?? property.default ?? '';
             const fieldIssues = issues.filter(
-              (entry) => entry.nodeId === node.id && entry.propertyPath === 'params.' + name,
+              (entry) =>
+                entry.nodeId === node.id &&
+                entry.propertyPath ===
+                  (property.storage === 'config' ? 'config.' : 'bindings.') + name,
             );
             const inputClass =
               'mt-2 w-full rounded-md border bg-background px-2.5 text-xs outline-none focus:border-primary ' +

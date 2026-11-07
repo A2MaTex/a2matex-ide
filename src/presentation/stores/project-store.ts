@@ -47,6 +47,7 @@ interface ProjectHistoryEntry {
 }
 
 export interface ProjectStoreState {
+  cloudAvailable: boolean;
   cloudIndex: CloudProjectIndex;
   cloudStatus: 'idle' | 'loading' | 'mutating' | 'refreshing' | 'syncing';
   cloudError: string | null;
@@ -64,11 +65,13 @@ export interface ProjectStoreState {
   importProject(): Promise<ProjectSnapshot | null>;
   loadRecent(): Promise<void>;
   open(localId: string): Promise<ProjectSnapshot | null>;
+  openCloudProject(projectId: string): Promise<ProjectSnapshot | null>;
   flushLocalSave(): Promise<boolean>;
   refreshCloudProjects(): Promise<boolean>;
   archiveCloudProject(projectId: string): Promise<CloudProject | null>;
   getCloudProject(projectId: string): Promise<CloudProject | null>;
   syncCloud(): Promise<boolean>;
+  updateFromCloud(): Promise<boolean>;
   updateCloudProject(
     projectId: string,
     input: UpdateCloudProjectInput,
@@ -201,6 +204,7 @@ export function createProjectStore(
     };
 
     return {
+      cloudAvailable: Boolean(options.cloud),
       cloudIndex: { projects: [], refreshedAt: null, source: 'cache', warning: null },
       cloudStatus: 'idle',
       cloudError: null,
@@ -255,6 +259,19 @@ export function createProjectStore(
           return snapshot;
         } catch (error) {
           set({ status: 'idle', error: messageOf(error) });
+          return null;
+        }
+      },
+      async openCloudProject(projectId) {
+        if (!options.cloud || !(await prepareForProjectChange())) return null;
+        set({ status: 'opening', cloudStatus: 'loading', cloudError: null, error: null });
+        try {
+          const snapshot = await options.cloud.open(projectId);
+          activateSnapshot(snapshot);
+          set({ cloudStatus: 'idle' });
+          return snapshot;
+        } catch (error) {
+          set({ status: 'idle', cloudStatus: 'idle', cloudError: messageOf(error) });
           return null;
         }
       },
@@ -336,6 +353,28 @@ export function createProjectStore(
           } catch {
             // Preserve the original cloud failure and the current editor working copy.
           }
+          return false;
+        }
+      },
+      async updateFromCloud() {
+        if (!options.cloud || !(await flushLocalSave())) return false;
+        const localId = get().session?.snapshot.localId;
+        if (!localId) return false;
+        set({ cloudStatus: 'syncing', cloudError: null, error: null });
+        try {
+          const snapshot = await options.cloud.updateFromCloud(localId);
+          const session = createProjectSession(snapshot);
+          set((state) => ({
+            ...emptyHistory(session),
+            session,
+            recentProjects: addRecent(state.recentProjects, snapshot),
+            cloudStatus: 'idle',
+            localSaveError: null,
+            localSaveStatus: 'saved-local',
+          }));
+          return true;
+        } catch (error) {
+          set({ cloudStatus: 'idle', cloudError: messageOf(error) });
           return false;
         }
       },

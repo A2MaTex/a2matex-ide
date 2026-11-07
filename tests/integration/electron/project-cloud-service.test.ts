@@ -127,9 +127,10 @@ function setup(remote: CloudProjectGateway) {
   const projects = new SqliteLocalProjectRepository(database.connection);
   const cache = new SqliteCloudProjectCache(database.connection);
   const service = new ProjectCloudService(remote, cache, projects, auth, async () => 'account-a', {
+    createId: () => 'cloud-local-1',
     now: () => '2026-11-06T10:00:00.000Z',
   });
-  return { cache, projects, service };
+  return { cache, database, projects, service };
 }
 
 async function createLocal(
@@ -145,6 +146,26 @@ async function createLocal(
 }
 
 describe('ProjectCloudService', () => {
+  it('syncs the persisted entry workflow as the editorGraph without a project wrapper', async () => {
+    const remote = statefulGateway('Direct graph');
+    const { projects, service } = setup(remote.remote);
+    const local = await createLocal(projects, 'Direct graph');
+
+    await service.sync('local-1');
+
+    expect(remote.state.draft?.editorGraph).toEqual(
+      local.document.workflows[local.document.manifest.entryWorkflow],
+    );
+    expect(Object.keys(remote.state.draft!.editorGraph).sort()).toEqual([
+      'edges',
+      'entryNodeId',
+      'nodes',
+      'schemaVersion',
+    ]);
+    expect(remote.state.draft?.editorGraph).not.toHaveProperty('workflows');
+    expect(remote.state.draft?.editorGraph).not.toHaveProperty('manifest');
+  });
+
   it('sends the locally persisted description when creating the cloud project', async () => {
     const create = vi.fn(async () => ({ id: REMOTE_ID }));
     const { projects, service } = setup(gateway({ create }));
@@ -281,7 +302,7 @@ describe('ProjectCloudService', () => {
     const syncing = service.sync('local-1');
     await started;
     const edited = structuredClone(original.document);
-    edited.workflows['workflows/main.workflow.json'].name = 'Revision N+1';
+    edited.workflows['workflows/main.workflow.json'].nodes[0]!.editor.x = 201;
     await projects.save({
       accountScope: 'account-a',
       document: edited,
@@ -301,7 +322,7 @@ describe('ProjectCloudService', () => {
     const initial = await createLocal(projects, 'Repeat Project');
     await service.sync('local-1');
     const edited = structuredClone(initial.document);
-    edited.workflows['workflows/main.workflow.json'].name = 'Revision two';
+    edited.workflows['workflows/main.workflow.json'].nodes[0]!.editor.x = 202;
     await projects.save({
       accountScope: 'account-a',
       document: edited,
@@ -339,7 +360,7 @@ describe('ProjectCloudService', () => {
     const initial = await createLocal(projects, 'Conflict Project');
     await service.sync('local-1');
     const edited = structuredClone(initial.document);
-    edited.workflows['workflows/main.workflow.json'].name = 'Local change';
+    edited.workflows['workflows/main.workflow.json'].nodes[0]!.editor.x = 203;
     await projects.save({
       accountScope: 'account-a',
       document: edited,
@@ -375,7 +396,7 @@ describe('ProjectCloudService', () => {
     const initial = await createLocal(projects, 'Retry Draft');
     await service.sync('local-1');
     const edited = structuredClone(initial.document);
-    edited.workflows['workflows/main.workflow.json'].name = 'Uploaded once';
+    edited.workflows['workflows/main.workflow.json'].nodes[0]!.editor.x = 204;
     await projects.save({
       accountScope: 'account-a',
       document: edited,
@@ -447,7 +468,7 @@ describe('ProjectCloudService', () => {
     const initial = await createLocal(projects, 'Invalid Ack');
     await service.sync('local-1');
     const edited = structuredClone(initial.document);
-    edited.workflows['workflows/main.workflow.json'].name = 'Local change';
+    edited.workflows['workflows/main.workflow.json'].nodes[0]!.editor.x = 205;
     await projects.save({
       accountScope: 'account-a',
       document: edited,
@@ -463,6 +484,209 @@ describe('ProjectCloudService', () => {
 
     await expect(service.sync('local-1')).rejects.toMatchObject({
       code: 'CLOUD_INVALID_RESPONSE',
+    });
+  });
+
+  it('bootstraps a missing metadata baseline during an explicit legacy project edit', async () => {
+    const remote = statefulGateway('Legacy Metadata');
+    const { database, projects, service } = setup(remote.remote);
+    const initial = await createLocal(projects, 'Legacy Metadata', 'Original');
+    await service.sync('local-1');
+    database.connection
+      .prepare(
+        `UPDATE project_draft_state
+         SET base_remote_name = NULL, base_remote_description = NULL
+         WHERE local_id = ?`,
+      )
+      .run('local-1');
+    const edited = structuredClone(initial.document);
+    edited.manifest.description = 'Explicit edit';
+    await projects.save({
+      accountScope: 'account-a',
+      document: edited,
+      expectedLocalRevision: 0,
+      localId: 'local-1',
+    });
+
+    await service.update(REMOTE_ID, { description: 'Explicit edit' }, 'local-1');
+    await expect(service.sync('local-1')).resolves.toMatchObject({
+      draftState: {
+        baseRemoteDescription: 'Explicit edit',
+        baseRemoteName: 'Legacy Metadata',
+        syncStatus: 'synced',
+      },
+    });
+  });
+
+  it('materializes a cloud-only project and its draft in one local snapshot', async () => {
+    const remote = statefulGateway('Cloud only');
+    const source = setup(remote.remote);
+    await createLocal(source.projects, 'Cloud only', 'From cloud');
+    await source.service.sync('local-1');
+    remote.state.draft = {
+      ...remote.state.draft!,
+      editorGraph: structuredClone(remote.state.draft!.editorGraph),
+    };
+    const downloadedNodes = remote.state.draft.editorGraph.nodes as Array<{
+      editor: { x: number; y: number };
+    }>;
+    downloadedNodes[0]!.editor.x = 301;
+    const target = setup(remote.remote);
+
+    await expect(target.service.open(REMOTE_ID)).resolves.toMatchObject({
+      localId: 'cloud-local-1',
+      remoteProjectId: REMOTE_ID,
+      document: {
+        manifest: { name: 'Cloud only', description: 'From cloud' },
+        workflows: {
+          'workflows/main.workflow.json': { nodes: [{ editor: { x: 301, y: 180 } }] },
+        },
+      },
+      draftState: { baseRemoteVersion: 1, syncStatus: 'synced' },
+    });
+    await expect(target.projects.list('account-a')).resolves.toHaveLength(1);
+  });
+
+  it('opens a cloud project without a draft as a bound local-ahead project without PUT', async () => {
+    const putDraft = vi.fn();
+    const target = setup(gateway({ get: async () => cloudProject('Empty cloud'), putDraft }));
+
+    await expect(target.service.open(REMOTE_ID)).resolves.toMatchObject({
+      remoteProjectId: REMOTE_ID,
+      document: { manifest: { name: 'Empty cloud' } },
+      draftState: {
+        baseRemoteVersion: null,
+        lastSyncedLocalRevision: null,
+        syncStatus: 'local-ahead',
+      },
+    });
+    expect(putDraft).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unsupported cloud draft before writing any local rows', async () => {
+    const invalidDraft: CloudProjectDraft = {
+      id: DRAFT_ID,
+      projectId: REMOTE_ID,
+      version: 2,
+      editorGraph: { schemaVersion: 2 },
+      inputSchema: {},
+      runtimeIr: null,
+      validationSummary: {},
+      testSummary: {},
+      contentHash: 'f'.repeat(64),
+      savedAt: '2026-11-06T11:00:00.000Z',
+    };
+    const target = setup(
+      gateway({
+        getDraft: async () => ({ projectStatus: 'ACTIVE', draft: invalidDraft }),
+      }),
+    );
+
+    await expect(target.service.open(REMOTE_ID)).rejects.toMatchObject({
+      code: 'CLOUD_DRAFT_UNSUPPORTED',
+    });
+    await expect(target.projects.list('account-a')).resolves.toEqual([]);
+  });
+
+  it('reads legacy schema-1 drafts that do not contain the manifest extension', async () => {
+    const document = createEmptyProjectDocument('remote-document', 'Legacy cloud');
+    const legacyDraft: CloudProjectDraft = {
+      id: DRAFT_ID,
+      projectId: REMOTE_ID,
+      version: 1,
+      editorGraph: {
+        schemaVersion: 1,
+        entryWorkflow: document.manifest.entryWorkflow,
+        workflows: document.workflows,
+      },
+      inputSchema: {},
+      runtimeIr: null,
+      validationSummary: {},
+      testSummary: {},
+      contentHash: '1'.repeat(64),
+      savedAt: '2026-11-06T09:00:00.000Z',
+    };
+    const target = setup(
+      gateway({
+        get: async () => cloudProject('Legacy cloud'),
+        getDraft: async () => ({ projectStatus: 'ACTIVE', draft: legacyDraft }),
+      }),
+    );
+
+    await expect(target.service.open(REMOTE_ID)).resolves.toMatchObject({
+      document: {
+        manifest: {
+          version: '0.1.0',
+          minimumRuntimeVersion: '0.1.0',
+          workflows: ['workflows/main.workflow.json'],
+        },
+      },
+      draftState: { syncStatus: 'synced' },
+    });
+  });
+
+  it('explicitly replaces a clean remote-ahead project from cloud', async () => {
+    const remote = statefulGateway('Remote update');
+    const target = setup(remote.remote);
+    await createLocal(target.projects, 'Remote update');
+    await target.service.sync('local-1');
+    const editorGraph = structuredClone(remote.state.draft!.editorGraph);
+    const remoteNodes = editorGraph.nodes as Array<{ editor: { x: number; y: number } }>;
+    remoteNodes[0]!.editor.x = 302;
+    remote.state.draft = {
+      ...remote.state.draft!,
+      version: 2,
+      contentHash: '2'.repeat(64),
+      editorGraph,
+    };
+    await target.service.sync('local-1');
+
+    await expect(target.service.updateFromCloud('local-1')).resolves.toMatchObject({
+      document: {
+        workflows: {
+          'workflows/main.workflow.json': { nodes: [{ editor: { x: 302, y: 180 } }] },
+        },
+      },
+      draftState: {
+        baseRemoteVersion: 2,
+        localRevision: 1,
+        lastSyncedLocalRevision: 1,
+        syncStatus: 'synced',
+      },
+    });
+  });
+
+  it('does not overwrite a conflicting local draft with the cloud draft', async () => {
+    const remote = statefulGateway('Protected local');
+    const target = setup(remote.remote);
+    const initial = await createLocal(target.projects, 'Protected local');
+    await target.service.sync('local-1');
+    const localDocument = structuredClone(initial.document);
+    localDocument.workflows['workflows/main.workflow.json'].nodes[0]!.editor.x = 303;
+    await target.projects.save({
+      accountScope: 'account-a',
+      localId: 'local-1',
+      expectedLocalRevision: 0,
+      document: localDocument,
+    });
+    remote.state.draft = {
+      ...remote.state.draft!,
+      version: 2,
+      contentHash: '3'.repeat(64),
+      editorGraph: { schemaVersion: 1, changedElsewhere: true },
+    };
+    await target.service.sync('local-1');
+
+    await expect(target.service.updateFromCloud('local-1')).rejects.toMatchObject({
+      code: 'CLOUD_LOCAL_CHANGES',
+    });
+    await expect(target.projects.findById('account-a', 'local-1')).resolves.toMatchObject({
+      document: {
+        workflows: {
+          'workflows/main.workflow.json': { nodes: [{ editor: { x: 303, y: 180 } }] },
+        },
+      },
+      draftState: { syncStatus: 'conflict' },
     });
   });
 });

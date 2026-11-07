@@ -19,6 +19,7 @@ export function createEmptyProjectDocument(
     throw new Error('Project description must not exceed 4,000 characters');
   }
 
+  const startNodeId = crypto.randomUUID();
   return {
     manifest: {
       schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
@@ -36,11 +37,18 @@ export function createEmptyProjectDocument(
     workflows: {
       [DEFAULT_WORKFLOW_PATH]: {
         schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION,
-        id: 'main',
-        name: 'Main workflow',
-        nodes: [],
+        entryNodeId: startNodeId,
+        nodes: [
+          {
+            id: startNodeId,
+            type: 'flow.start',
+            config: {},
+            editor: { x: 100, y: 180 },
+            bindings: {},
+            errorPolicy: 'STOP',
+          },
+        ],
         edges: [],
-        layout: { nodes: {}, viewport: { x: 0, y: 0, zoom: 1 } },
       },
     },
   };

@@ -1,5 +1,4 @@
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
-import { findNodeDefinition } from '@domain/workflow/node-catalog';
 import type { NodeDefinition, PropertyDefinition } from '@domain/workflow/node-definition';
 
 export interface WorkflowIssue {
@@ -21,11 +20,11 @@ function issue(
 ): WorkflowIssue {
   const path = target.propertyPath ?? target.edgeId ?? target.nodeId ?? 'workflow';
   return {
-    id: [workflow.id, code, path].join(':'),
+    id: [workflow.entryNodeId || 'workflow', code, path].join(':'),
     severity: 'error',
     code,
     message,
-    workflowId: workflow.id,
+    workflowId: workflow.entryNodeId || 'workflow',
     ...target,
   };
 }
@@ -59,22 +58,36 @@ function validateNodeProperties(
 ) {
   const issues: WorkflowIssue[] = [];
   for (const required of definition.properties.required ?? []) {
-    if (node.params[required] === undefined || node.params[required] === '') {
+    const property = definition.properties.properties[required];
+    const stored =
+      property?.storage === 'config'
+        ? node.config[required]
+        : node.bindings[required]?.kind === 'constant'
+          ? node.bindings[required].value
+          : node.bindings[required];
+    if (stored === undefined || stored === '') {
       issues.push(
         issue(workflow, 'PROPERTY_REQUIRED', required + ' is required', {
           nodeId: node.id,
-          propertyPath: 'params.' + required,
+          propertyPath: (property?.storage === 'config' ? 'config.' : 'bindings.') + required,
         }),
       );
     }
   }
-  for (const [name, value] of Object.entries(node.params)) {
+  const values = [
+    ...Object.entries(node.config).map(([name, value]) => [name, value, 'config'] as const),
+    ...Object.entries(node.bindings).map(
+      ([name, binding]) =>
+        [name, binding.kind === 'constant' ? binding.value : binding, 'binding'] as const,
+    ),
+  ];
+  for (const [name, value, storage] of values) {
     const property = definition.properties.properties[name];
-    if (!property) {
+    if (!property || property.storage !== storage) {
       issues.push(
         issue(workflow, 'PROPERTY_UNKNOWN', name + ' is not supported by this node version', {
           nodeId: node.id,
-          propertyPath: 'params.' + name,
+          propertyPath: (storage === 'config' ? 'config.' : 'bindings.') + name,
         }),
       );
       continue;
@@ -83,7 +96,7 @@ function validateNodeProperties(
       issues.push(
         issue(workflow, 'PROPERTY_INVALID', property.title + ' has an invalid value', {
           nodeId: node.id,
-          propertyPath: 'params.' + name,
+          propertyPath: (storage === 'config' ? 'config.' : 'bindings.') + name,
         }),
       );
     }
@@ -98,8 +111,8 @@ function validateEdge(
   definitions: Map<string, NodeDefinition>,
 ) {
   const issues: WorkflowIssue[] = [];
-  const source = nodes.get(edge.source.nodeId);
-  const target = nodes.get(edge.target.nodeId);
+  const source = nodes.get(edge.sourceNodeId);
+  const target = nodes.get(edge.targetNodeId);
   if (!source || !target) {
     return [
       issue(workflow, 'EDGE_NODE_MISSING', 'Connection references a missing node', {
@@ -110,8 +123,8 @@ function validateEdge(
   const sourceDefinition = definitions.get(source.id);
   const targetDefinition = definitions.get(target.id);
   if (!sourceDefinition || !targetDefinition) return issues;
-  const output = sourceDefinition.outputs.find((port) => port.name === edge.source.port);
-  const input = targetDefinition.inputs.find((port) => port.name === edge.target.port);
+  const output = sourceDefinition.outputs.find((port) => port.name === edge.sourcePort);
+  const input = targetDefinition.inputs.find((port) => port.name === 'in');
   if (!output || !input) {
     issues.push(
       issue(workflow, 'EDGE_PORT_MISSING', 'Connection references a missing port', {
@@ -134,9 +147,9 @@ function validateEdge(
 function cycleNodeIds(workflow: WorkflowDocument) {
   const outgoing = new Map<string, string[]>();
   for (const edge of workflow.edges) {
-    const targets = outgoing.get(edge.source.nodeId) ?? [];
-    targets.push(edge.target.nodeId);
-    outgoing.set(edge.source.nodeId, targets);
+    const targets = outgoing.get(edge.sourceNodeId) ?? [];
+    targets.push(edge.targetNodeId);
+    outgoing.set(edge.sourceNodeId, targets);
   }
   const visiting = new Set<string>();
   const visited = new Set<string>();
@@ -178,15 +191,12 @@ export function validateWorkflow(
       continue;
     }
     nodes.set(node.id, node);
-    const definition = findNodeDefinition(node.type, node.nodeVersion, catalog);
+    const definition = catalog.find((candidate) => candidate.type === node.type);
     if (!definition) {
       issues.push(
-        issue(
-          workflow,
-          'NODE_DEFINITION_MISSING',
-          node.type + '@' + node.nodeVersion + ' is unavailable',
-          { nodeId: node.id },
-        ),
+        issue(workflow, 'NODE_DEFINITION_MISSING', node.type + ' is unavailable', {
+          nodeId: node.id,
+        }),
       );
       continue;
     }
@@ -203,18 +213,10 @@ export function validateWorkflow(
     }
   }
 
-  const starts = workflow.nodes.filter(
-    (node) => node.type === 'trigger.start' && node.nodeVersion === 1,
-  );
-  if (starts.length !== 1) {
+  const entry = nodes.get(workflow.entryNodeId);
+  if (!entry || entry.type !== 'flow.start') {
     issues.push(
-      issue(
-        workflow,
-        'ENTRY_TRIGGER_COUNT',
-        starts.length === 0
-          ? 'Entry workflow requires one Start node'
-          : 'Entry workflow may only contain one Start node',
-      ),
+      issue(workflow, 'ENTRY_NODE_INVALID', 'entryNodeId must reference a flow.start node'),
     );
   }
 
@@ -229,14 +231,7 @@ export function validateWorkflow(
       );
     }
     edgeIds.add(edge.id);
-    const key =
-      edge.source.nodeId +
-      ':' +
-      edge.source.port +
-      '->' +
-      edge.target.nodeId +
-      ':' +
-      edge.target.port;
+    const key = edge.sourceNodeId + ':' + edge.sourcePort + '->' + edge.targetNodeId;
     if (edgeKeys.has(key)) {
       issues.push(
         issue(workflow, 'EDGE_DUPLICATE', 'Connection is duplicated', { edgeId: edge.id }),
@@ -251,7 +246,7 @@ export function validateWorkflow(
     if (!definition) continue;
     for (const input of definition.inputs.filter((port) => port.required)) {
       const incoming = workflow.edges.filter(
-        (edge) => edge.target.nodeId === node.id && edge.target.port === input.name,
+        (edge) => edge.targetNodeId === node.id && input.name === 'in',
       );
       if (incoming.length === 0) {
         issues.push(
@@ -270,7 +265,7 @@ export function validateWorkflow(
     }
     for (const output of definition.outputs.filter((port) => port.cardinality === 'one')) {
       const outgoing = workflow.edges.filter(
-        (edge) => edge.source.nodeId === node.id && edge.source.port === output.name,
+        (edge) => edge.sourceNodeId === node.id && edge.sourcePort === output.name,
       );
       if (outgoing.length > 1) {
         issues.push(
@@ -299,7 +294,7 @@ export function requiredPermissionsForWorkflow(
     ...new Set(
       workflow.nodes.flatMap(
         (node) =>
-          findNodeDefinition(node.type, node.nodeVersion, catalog)?.requiredPermissions ?? [],
+          catalog.find((definition) => definition.type === node.type)?.requiredPermissions ?? [],
       ),
     ),
   ].sort();

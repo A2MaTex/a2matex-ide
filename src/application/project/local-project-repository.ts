@@ -75,6 +75,23 @@ export interface AcknowledgeRemoteMetadataInput {
   revision: number;
 }
 
+export interface ApplyCloudProjectInput {
+  accountScope: string;
+  artifacts: LocalDraftArtifacts;
+  baseRemoteDescription: string | null;
+  baseRemoteName: string;
+  contentHash: string | null;
+  document: ProjectDocument;
+  localId: string;
+  remoteProjectId: string;
+  remoteSavedAt: string | null;
+  remoteVersion: number | null;
+}
+
+export interface ReplaceLocalFromCloudInput extends ApplyCloudProjectInput {
+  expectedLocalRevision: number;
+}
+
 export interface LocalProjectRepository {
   acknowledgeMetadata(input: AcknowledgeRemoteMetadataInput): Promise<LocalProjectSnapshot>;
   acknowledgeRemoteDraft(input: AcknowledgeRemoteDraftInput): Promise<LocalProjectSnapshot>;
@@ -91,8 +108,14 @@ export interface LocalProjectRepository {
     observedRemoteVersion: number,
   ): Promise<LocalProjectSnapshot>;
   findById(accountScope: string, localId: string): Promise<LocalProjectSnapshot | null>;
+  findByRemoteId(
+    accountScope: string,
+    remoteProjectId: string,
+  ): Promise<LocalProjectSnapshot | null>;
   list(accountScope: string): Promise<LocalProjectSnapshot[]>;
+  materializeCloudProject(input: ApplyCloudProjectInput): Promise<LocalProjectSnapshot>;
   save(input: SaveLocalProjectInput): Promise<LocalProjectSnapshot>;
+  replaceFromCloud(input: ReplaceLocalFromCloudInput): Promise<LocalProjectSnapshot>;
   observeRemote(
     accountScope: string,
     localId: string,

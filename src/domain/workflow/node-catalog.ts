@@ -1,4 +1,5 @@
 import type { NodeDefinition } from '@domain/workflow/node-definition';
+import type { WorkflowBinding } from '@domain/project/project';
 import type { JsonValue } from '@shared/types/json-value';
 
 export function findNodeDefinition(
@@ -9,12 +10,16 @@ export function findNodeDefinition(
   return catalog.find((definition) => definition.type === type && definition.version === version);
 }
 
-export function defaultParamsFor(definition: NodeDefinition): Record<string, JsonValue> {
-  const params: Record<string, JsonValue> = {};
+export function defaultNodeValuesFor(definition: NodeDefinition): {
+  bindings: Record<string, WorkflowBinding>;
+  config: Record<string, JsonValue>;
+} {
+  const bindings: Record<string, WorkflowBinding> = {};
+  const config: Record<string, JsonValue> = {};
   for (const [name, property] of Object.entries(definition.properties.properties)) {
-    if (property.default !== undefined) {
-      params[name] = structuredClone(property.default);
-    }
+    if (property.default === undefined) continue;
+    if (property.storage === 'config') config[name] = structuredClone(property.default);
+    else bindings[name] = { kind: 'constant', value: structuredClone(property.default) };
   }
-  return params;
+  return { bindings, config };
 }

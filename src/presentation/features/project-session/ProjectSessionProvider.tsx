@@ -10,7 +10,7 @@ import { ProjectStoreContext } from '@presentation/features/project-session/proj
 interface ProjectSessionProviderProps {
   children: ReactNode;
   repository: ProjectRepository;
-  cloud: ProjectCloudClient;
+  cloud?: ProjectCloudClient;
 }
 
 export function ProjectSessionProvider({

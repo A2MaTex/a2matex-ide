@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 
@@ -67,6 +67,15 @@ function migrate(database: DatabaseSync, migrationsPath: string) {
   }
 }
 
+function backupBeforeMigration(database: DatabaseSync, filePath: string) {
+  const version = readDatabaseVersion(database);
+  if (filePath === ':memory:' || version === 0 || version >= CURRENT_DATABASE_VERSION) return;
+  const backupPath = `${filePath}.pre-v${CURRENT_DATABASE_VERSION}.bak`;
+  if (existsSync(backupPath)) return;
+  database.exec(`VACUUM INTO '${backupPath.replaceAll("'", "''")}'`);
+  chmodSync(backupPath, 0o600);
+}
+
 export function openStudioDatabase(input: {
   filePath?: string;
   migrationsPath?: string;
@@ -84,6 +93,7 @@ export function openStudioDatabase(input: {
     database.exec('PRAGMA foreign_keys = ON');
     database.exec('PRAGMA busy_timeout = 5000');
     if (filePath !== ':memory:') database.exec('PRAGMA journal_mode = WAL');
+    backupBeforeMigration(database, filePath);
     migrate(database, migrationsPath);
     database.exec(`PRAGMA application_id = 0x41324d58`);
   } catch (error) {

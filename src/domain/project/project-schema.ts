@@ -77,43 +77,98 @@ const workflowNodeSchema = z
   .object({
     id: z.string().min(1).max(128),
     type: z.string().min(1).max(128),
-    nodeVersion: z.number().int().positive(),
-    name: z.string().max(100).optional(),
-    disabled: z.boolean().optional(),
-    params: z.record(z.string(), jsonValueSchema),
+    config: z.record(z.string(), jsonValueSchema),
+    editor: z.object({ x: z.number().finite(), y: z.number().finite() }).strict(),
+    bindings: z.record(
+      z.string(),
+      z.object({ kind: z.string().min(1).max(64) }).catchall(jsonValueSchema),
+    ),
+    errorPolicy: z.enum(['STOP', 'ERROR_BRANCH']),
   })
-  .passthrough();
+  .strict();
 
 const workflowEdgeSchema = z
   .object({
     id: z.string().min(1).max(128),
-    source: z.object({ nodeId: z.string().min(1), port: z.string().min(1) }).passthrough(),
-    target: z.object({ nodeId: z.string().min(1), port: z.string().min(1) }).passthrough(),
+    sourcePort: z.string().min(1).max(64),
+    sourceNodeId: z.string().min(1).max(128),
+    targetNodeId: z.string().min(1).max(128),
   })
-  .passthrough();
+  .strict();
 
-export const workflowDocumentV1Schema: z.ZodType<WorkflowDocument> = z
+const legacyWorkflowDocumentV1Schema = z
   .object({
     schemaVersion: z.literal(CURRENT_WORKFLOW_SCHEMA_VERSION),
     id: z.string().min(1).max(128),
     name: z.string().min(1).max(100),
-    nodes: z.array(workflowNodeSchema).max(5_000),
-    edges: z.array(workflowEdgeSchema).max(10_000),
+    nodes: z.array(
+      z
+        .object({
+          id: z.string().min(1).max(128),
+          type: z.string().min(1).max(128),
+          params: z.record(z.string(), jsonValueSchema),
+        })
+        .passthrough(),
+    ),
+    edges: z.array(
+      z
+        .object({
+          id: z.string().min(1).max(128),
+          source: z.object({ nodeId: z.string().min(1), port: z.string().min(1) }).passthrough(),
+          target: z.object({ nodeId: z.string().min(1), port: z.string().min(1) }).passthrough(),
+        })
+        .passthrough(),
+    ),
     layout: z
       .object({
         nodes: z.record(
           z.string(),
           z.object({ x: z.number().finite(), y: z.number().finite() }).passthrough(),
         ),
-        viewport: z
-          .object({ x: z.number().finite(), y: z.number().finite(), zoom: z.number().positive() })
-          .passthrough()
-          .optional(),
       })
       .passthrough(),
-    metadata: z.record(z.string(), jsonValueSchema).optional(),
   })
   .passthrough();
+
+function migrateLegacyWorkflow(input: unknown): unknown {
+  const legacy = legacyWorkflowDocumentV1Schema.safeParse(input);
+  if (!legacy.success) return input;
+  const startNode = legacy.data.nodes.find(
+    (node) => node.type === 'flow.start' || node.type === 'trigger.start',
+  );
+  return {
+    schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION,
+    entryNodeId: startNode?.id ?? '',
+    nodes: legacy.data.nodes.map((node) => ({
+      id: node.id,
+      type: node.type === 'trigger.start' ? 'flow.start' : node.type,
+      config: {},
+      editor: legacy.data.layout.nodes[node.id] ?? { x: 0, y: 0 },
+      bindings: Object.fromEntries(
+        Object.entries(node.params).map(([name, value]) => [name, { kind: 'constant', value }]),
+      ),
+      errorPolicy: 'STOP' as const,
+    })),
+    edges: legacy.data.edges.map((edge) => ({
+      id: edge.id,
+      sourcePort: edge.source.port,
+      sourceNodeId: edge.source.nodeId,
+      targetNodeId: edge.target.nodeId,
+    })),
+  };
+}
+
+export const workflowDocumentV1Schema: z.ZodType<WorkflowDocument> = z.preprocess(
+  migrateLegacyWorkflow,
+  z
+    .object({
+      schemaVersion: z.literal(CURRENT_WORKFLOW_SCHEMA_VERSION),
+      entryNodeId: z.string().max(128),
+      nodes: z.array(workflowNodeSchema).max(5_000),
+      edges: z.array(workflowEdgeSchema).max(10_000),
+    })
+    .strict(),
+) as z.ZodType<WorkflowDocument>;
 
 export const projectDocumentSchema: z.ZodType<ProjectDocument> = z
   .object({

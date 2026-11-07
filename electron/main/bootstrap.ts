@@ -1,6 +1,6 @@
 import path from 'node:path';
 
-import { app, BrowserWindow, session } from 'electron';
+import { app, BrowserWindow, dialog, session } from 'electron';
 
 import { createAuthSessionService } from '@electron/main/auth/create-auth-session-service';
 import { SqliteCloudProjectCache } from '@electron/main/adapters/project/sqlite-cloud-project-cache';
@@ -77,6 +77,10 @@ app.whenReady().then(() => {
     logMain('error', 'local_database_initialization_failed', {
       name: error instanceof Error ? error.name : 'UnknownError',
     });
+    dialog.showErrorBox(
+      'A2MateX Studio could not open local projects',
+      'The local database could not be initialized. Your project files were not overwritten. Check the application logs or restore the pre-migration backup before reopening Studio.',
+    );
     app.quit();
     return;
   }

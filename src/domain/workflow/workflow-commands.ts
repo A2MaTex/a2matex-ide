@@ -1,5 +1,5 @@
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
-import { defaultParamsFor, findNodeDefinition } from '@domain/workflow/node-catalog';
+import { defaultNodeValuesFor, findNodeDefinition } from '@domain/workflow/node-catalog';
 import type { NodeDefinition, PortDefinition } from '@domain/workflow/node-definition';
 import type { JsonValue } from '@shared/types/json-value';
 
@@ -63,11 +63,11 @@ function findNode(workflow: WorkflowDocument, nodeId: string) {
 }
 
 function definitionFor(node: WorkflowNode, catalog: readonly NodeDefinition[]) {
-  const definition = findNodeDefinition(node.type, node.nodeVersion, catalog);
+  const definition = catalog.find((candidate) => candidate.type === node.type);
   if (!definition) {
     throw new WorkflowCommandError(
       'NODE_DEFINITION_MISSING',
-      'Node definition ' + node.type + '@' + node.nodeVersion + ' is unavailable',
+      'Node definition ' + node.type + ' is unavailable',
     );
   }
   return definition;
@@ -98,9 +98,9 @@ function wouldCreateCycle(workflow: WorkflowDocument, sourceNodeId: string, targ
   if (sourceNodeId === targetNodeId) return true;
   const outgoing = new Map<string, string[]>();
   for (const edge of workflow.edges) {
-    const targets = outgoing.get(edge.source.nodeId) ?? [];
-    targets.push(edge.target.nodeId);
-    outgoing.set(edge.source.nodeId, targets);
+    const targets = outgoing.get(edge.sourceNodeId) ?? [];
+    targets.push(edge.targetNodeId);
+    outgoing.set(edge.sourceNodeId, targets);
   }
   const pending = [targetNodeId];
   const visited = new Set<string>();
@@ -118,33 +118,29 @@ export function assertValidConnection(
   workflow: WorkflowDocument,
   edge: WorkflowEdge,
   catalog: readonly NodeDefinition[],
+  targetPort = 'in',
 ) {
   if (
     workflow.edges.some(
       (candidate) =>
-        candidate.source.nodeId === edge.source.nodeId &&
-        candidate.source.port === edge.source.port &&
-        candidate.target.nodeId === edge.target.nodeId &&
-        candidate.target.port === edge.target.port,
+        candidate.sourceNodeId === edge.sourceNodeId &&
+        candidate.sourcePort === edge.sourcePort &&
+        candidate.targetNodeId === edge.targetNodeId,
     )
   ) {
     throw new WorkflowCommandError('DUPLICATE_EDGE', 'This connection already exists');
   }
 
-  const sourceNode = findNode(workflow, edge.source.nodeId);
-  const targetNode = findNode(workflow, edge.target.nodeId);
-  const output = portFor(definitionFor(sourceNode, catalog), 'output', edge.source.port);
-  const input = portFor(definitionFor(targetNode, catalog), 'input', edge.target.port);
+  const sourceNode = findNode(workflow, edge.sourceNodeId);
+  const targetNode = findNode(workflow, edge.targetNodeId);
+  const output = portFor(definitionFor(sourceNode, catalog), 'output', edge.sourcePort);
+  const input = portFor(definitionFor(targetNode, catalog), 'input', targetPort);
   if (output.kind !== input.kind || !valueTypesEqual(output.valueType, input.valueType)) {
     throw new WorkflowCommandError('PORT_INCOMPATIBLE', 'The selected ports are incompatible');
   }
   if (
     input.cardinality === 'one' &&
-    workflow.edges.some(
-      (candidate) =>
-        candidate.target.nodeId === edge.target.nodeId &&
-        candidate.target.port === edge.target.port,
-    )
+    workflow.edges.some((candidate) => candidate.targetNodeId === edge.targetNodeId)
   ) {
     throw new WorkflowCommandError('EDGE_CARDINALITY', 'The input already has a connection');
   }
@@ -152,13 +148,12 @@ export function assertValidConnection(
     output.cardinality === 'one' &&
     workflow.edges.some(
       (candidate) =>
-        candidate.source.nodeId === edge.source.nodeId &&
-        candidate.source.port === edge.source.port,
+        candidate.sourceNodeId === edge.sourceNodeId && candidate.sourcePort === edge.sourcePort,
     )
   ) {
     throw new WorkflowCommandError('EDGE_CARDINALITY', 'The output already has a connection');
   }
-  if (wouldCreateCycle(workflow, edge.source.nodeId, edge.target.nodeId)) {
+  if (wouldCreateCycle(workflow, edge.sourceNodeId, edge.targetNodeId)) {
     throw new WorkflowCommandError('GRAPH_CYCLE', 'This connection would create a cycle');
   }
 }
@@ -181,62 +176,62 @@ export function applyWorkflowCommand(
       if (!definition) {
         throw new WorkflowCommandError('NODE_DEFINITION_MISSING', 'Node definition is unavailable');
       }
+      const defaults = defaultNodeValuesFor(definition);
+      const node = {
+        id: command.payload.nodeId,
+        type: definition.type,
+        config: defaults.config,
+        editor: command.payload.position,
+        bindings: defaults.bindings,
+        errorPolicy: 'STOP' as const,
+      };
       return {
         ...workflow,
-        nodes: [
-          ...workflow.nodes,
-          {
-            id: command.payload.nodeId,
-            type: definition.type,
-            nodeVersion: definition.version,
-            params: defaultParamsFor(definition),
-          },
-        ],
-        layout: {
-          ...workflow.layout,
-          nodes: {
-            ...workflow.layout.nodes,
-            [command.payload.nodeId]: command.payload.position,
-          },
-        },
+        entryNodeId:
+          workflow.entryNodeId || definition.type !== 'flow.start'
+            ? workflow.entryNodeId
+            : command.payload.nodeId,
+        nodes: [...workflow.nodes, node],
       };
     }
     case 'node.move': {
       findNode(workflow, command.payload.nodeId);
       return {
         ...workflow,
-        layout: {
-          ...workflow.layout,
-          nodes: {
-            ...workflow.layout.nodes,
-            [command.payload.nodeId]: command.payload.position,
-          },
-        },
-      };
-    }
-    case 'node.updateParams':
-      findNode(workflow, command.payload.nodeId);
-      return {
-        ...workflow,
         nodes: workflow.nodes.map((node) =>
-          node.id === command.payload.nodeId
-            ? { ...node, params: { ...node.params, ...command.payload.changes } }
-            : node,
+          node.id === command.payload.nodeId ? { ...node, editor: command.payload.position } : node,
         ),
       };
-    case 'node.remove': {
-      findNode(workflow, command.payload.nodeId);
-      const positions = { ...workflow.layout.nodes };
-      delete positions[command.payload.nodeId];
+    }
+    case 'node.updateParams': {
+      const current = findNode(workflow, command.payload.nodeId);
+      const definition = definitionFor(current, catalog);
       return {
         ...workflow,
+        nodes: workflow.nodes.map((node) => {
+          if (node.id !== command.payload.nodeId) return node;
+          const config = { ...node.config };
+          const bindings = structuredClone(node.bindings);
+          for (const [name, value] of Object.entries(command.payload.changes)) {
+            const property = definition.properties.properties[name];
+            if (property?.storage === 'config') config[name] = value;
+            else bindings[name] = { kind: 'constant', value };
+          }
+          return { ...node, config, bindings };
+        }),
+      };
+    }
+    case 'node.remove': {
+      findNode(workflow, command.payload.nodeId);
+      return {
+        ...workflow,
+        entryNodeId: workflow.entryNodeId === command.payload.nodeId ? '' : workflow.entryNodeId,
         nodes: workflow.nodes.filter((node) => node.id !== command.payload.nodeId),
         edges: workflow.edges.filter(
           (edge) =>
-            edge.source.nodeId !== command.payload.nodeId &&
-            edge.target.nodeId !== command.payload.nodeId,
+            edge.sourceNodeId !== command.payload.nodeId &&
+            edge.targetNodeId !== command.payload.nodeId,
         ),
-        layout: { ...workflow.layout, nodes: positions },
       };
     }
     case 'node.duplicate': {
@@ -244,32 +239,32 @@ export function applyWorkflowCommand(
       if (workflow.nodes.some((node) => node.id === command.payload.nodeId)) {
         throw new WorkflowCommandError('DUPLICATE_NODE', 'Node ID already exists');
       }
-      const sourcePosition = workflow.layout.nodes[source.id] ?? { x: 0, y: 0 };
+      const sourcePosition = source.editor;
       return {
         ...workflow,
         nodes: [
           ...workflow.nodes,
-          { ...source, id: command.payload.nodeId, params: structuredClone(source.params) },
-        ],
-        layout: {
-          ...workflow.layout,
-          nodes: {
-            ...workflow.layout.nodes,
-            [command.payload.nodeId]: command.payload.position ?? {
+          {
+            ...source,
+            id: command.payload.nodeId,
+            config: structuredClone(source.config),
+            bindings: structuredClone(source.bindings),
+            editor: command.payload.position ?? {
               x: sourcePosition.x + 48,
               y: sourcePosition.y + 48,
             },
           },
-        },
+        ],
       };
     }
     case 'edge.connect': {
       const edge = {
         id: command.payload.edgeId,
-        source: command.payload.source,
-        target: command.payload.target,
+        sourcePort: command.payload.source.port,
+        sourceNodeId: command.payload.source.nodeId,
+        targetNodeId: command.payload.target.nodeId,
       };
-      assertValidConnection(workflow, edge, catalog);
+      assertValidConnection(workflow, edge, catalog, command.payload.target.port);
       return { ...workflow, edges: [...workflow.edges, edge] };
     }
     case 'edge.remove':

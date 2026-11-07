@@ -106,6 +106,20 @@ describe('SqliteLocalProjectRepository', () => {
       },
     });
     expect(Object.keys(snapshot.document.workflows)).toEqual(['workflows/main.workflow.json']);
+    const row = database.connection
+      .prepare('SELECT document_json FROM workflow_documents WHERE local_id = ?')
+      .get('local-1') as { document_json: string };
+    const storedWorkflow = JSON.parse(row.document_json) as Record<string, unknown>;
+    expect(Object.keys(storedWorkflow).sort()).toEqual([
+      'edges',
+      'entryNodeId',
+      'nodes',
+      'schemaVersion',
+    ]);
+    expect(storedWorkflow).toEqual(snapshot.document.workflows['workflows/main.workflow.json']);
+    expect(
+      Object.keys((storedWorkflow.nodes as Array<Record<string, unknown>>)[0]!).sort(),
+    ).toEqual(['bindings', 'config', 'editor', 'errorPolicy', 'id', 'type']);
   });
 
   it('enforces normalized names within an account but isolates different accounts', async () => {
@@ -163,7 +177,7 @@ describe('SqliteLocalProjectRepository', () => {
     expect(saved.draftState).toMatchObject({ localRevision: 1, metadataRevision: 1 });
 
     const workflowEdit = structuredClone(renamed);
-    workflowEdit.workflows['workflows/main.workflow.json'].name = 'Renamed workflow';
+    workflowEdit.workflows['workflows/main.workflow.json'].nodes[0]!.editor.x = 220;
     const workflowSaved = await repository.save({
       accountScope: 'account-a',
       document: workflowEdit,
@@ -220,7 +234,7 @@ describe('SqliteLocalProjectRepository', () => {
     expect(compiled.draftState.runtimeIr).toEqual({ instructions: ['compiled'] });
 
     const edited = structuredClone(document);
-    edited.workflows['workflows/main.workflow.json'].name = 'Edited workflow';
+    edited.workflows['workflows/main.workflow.json'].nodes[0]!.editor.x = 220;
     const saved = await repository.save({
       accountScope: 'account-a',
       document: edited,
@@ -233,6 +247,42 @@ describe('SqliteLocalProjectRepository', () => {
       testSummary: {},
       validationSummary: {},
     });
+  });
+
+  it('rolls back cloud materialization when a local constraint fails', async () => {
+    const database = openMemoryDatabase();
+    const repository = new SqliteLocalProjectRepository(database.connection);
+    await repository.create({
+      accountScope: 'account-a',
+      document: createEmptyProjectDocument('local-1', 'Duplicate name'),
+      localId: 'local-1',
+    });
+
+    await expect(
+      repository.materializeCloudProject({
+        accountScope: 'account-a',
+        localId: 'cloud-local-1',
+        remoteProjectId: 'remote-1',
+        document: createEmptyProjectDocument('cloud-local-1', 'Duplicate name'),
+        artifacts: {
+          inputSchema: {},
+          runtimeIr: null,
+          testSummary: {},
+          validationSummary: {},
+        },
+        baseRemoteName: 'Duplicate name',
+        baseRemoteDescription: null,
+        remoteVersion: 1,
+        contentHash: 'a'.repeat(64),
+        remoteSavedAt: '2026-11-06T09:00:00.000Z',
+      }),
+    ).rejects.toMatchObject({ code: 'DUPLICATE_PROJECT_NAME' });
+
+    expect(await repository.findById('account-a', 'cloud-local-1')).toBeNull();
+    const rows = database.connection
+      .prepare('SELECT COUNT(*) AS count FROM workflow_documents WHERE local_id = ?')
+      .get('cloud-local-1') as { count: number };
+    expect(rows.count).toBe(0);
   });
 });
 

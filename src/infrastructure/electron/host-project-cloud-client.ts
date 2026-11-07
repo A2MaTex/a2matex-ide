@@ -13,6 +13,11 @@ function unwrap<T>(result: HostResult<T, CloudProjectErrorCode>): T {
 }
 
 export class HostProjectCloudClient implements ProjectCloudClient {
+  open(projectId: string) {
+    if (!window.studioHost) return Promise.reject(unavailable());
+    return window.studioHost.cloudProject.open(projectId).then(unwrap);
+  }
+
   getDetail(projectId: string): Promise<CloudProject> {
     if (!window.studioHost) return Promise.reject(unavailable());
     return window.studioHost.cloudProject.getDetail(projectId).then(unwrap);
@@ -41,6 +46,11 @@ export class HostProjectCloudClient implements ProjectCloudClient {
   sync(localId: string) {
     if (!window.studioHost) return Promise.reject(unavailable());
     return window.studioHost.cloudProject.sync(localId).then(unwrap);
+  }
+
+  updateFromCloud(localId: string) {
+    if (!window.studioHost) return Promise.reject(unavailable());
+    return window.studioHost.cloudProject.updateFromCloud(localId).then(unwrap);
   }
 }
 

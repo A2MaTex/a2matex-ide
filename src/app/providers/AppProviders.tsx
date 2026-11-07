@@ -14,11 +14,13 @@ interface AppProvidersProps {
 }
 
 export function AppProviders({ children }: AppProvidersProps) {
+  const cloud =
+    import.meta.env.VITE_CLOUD_PROJECTS_ENABLED === 'false' ? undefined : hostProjectCloudClient;
   return (
     <HashRouter>
       <AuthProvider client={hostAuthClient}>
         <HostStatusProvider gateway={electronHostGateway}>
-          <ProjectSessionProvider repository={hostProjectRepository} cloud={hostProjectCloudClient}>
+          <ProjectSessionProvider repository={hostProjectRepository} cloud={cloud}>
             {children}
           </ProjectSessionProvider>
         </HostStatusProvider>

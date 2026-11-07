@@ -23,9 +23,11 @@ export function ProjectHomePage() {
   const importProject = useProjectStore((state) => state.importProject);
   const loadRecent = useProjectStore((state) => state.loadRecent);
   const open = useProjectStore((state) => state.open);
+  const openCloudProject = useProjectStore((state) => state.openCloudProject);
   const refreshCloudProjects = useProjectStore((state) => state.refreshCloudProjects);
   const recentProjects = useProjectStore((state) => state.recentProjects);
   const cloudIndex = useProjectStore((state) => state.cloudIndex);
+  const cloudAvailable = useProjectStore((state) => state.cloudAvailable);
   const cloudStatus = useProjectStore((state) => state.cloudStatus);
   const cloudError = useProjectStore((state) => state.cloudError);
   const status = useProjectStore((state) => state.status);
@@ -53,6 +55,10 @@ export function ProjectHomePage() {
     const snapshot = await open(localId);
     if (snapshot) enterWorkspace(snapshot.localId);
   };
+  const handleCloudProject = async (projectId: string) => {
+    const snapshot = await openCloudProject(projectId);
+    if (snapshot) enterWorkspace(snapshot.localId);
+  };
 
   return (
     <div className="min-h-full bg-[radial-gradient(circle_at_65%_-10%,var(--primary-soft),transparent_34%)]">
@@ -67,17 +73,17 @@ export function ProjectHomePage() {
             </p>
           </div>
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              onClick={() => void refreshCloudProjects()}
-              disabled={busy || refreshingCloud}
-              title="Refresh the cloud project index without overwriting local drafts"
-            >
-              <RefreshCw className={refreshingCloud ? 'animate-spin' : undefined} />
-              <span className="text-sm font-medium">
-                {refreshingCloud ? 'Syncing…' : 'Sync'}
-              </span>
-            </Button>
+            {cloudAvailable ? (
+              <Button
+                variant="outline"
+                onClick={() => void refreshCloudProjects()}
+                disabled={busy || refreshingCloud}
+                title="Refresh the cloud project index without overwriting local drafts"
+              >
+                <RefreshCw className={refreshingCloud ? 'animate-spin' : undefined} />
+                <span className="text-sm font-medium">{refreshingCloud ? 'Syncing…' : 'Sync'}</span>
+              </Button>
+            ) : null}
             <Button variant="outline" onClick={handleImport} disabled={busy}>
               <FolderOpen />{' '}
               <span className="text-sm font-medium">
@@ -146,7 +152,7 @@ export function ProjectHomePage() {
                       onClick={() =>
                         project.local
                           ? handleRecent(project.local.localId)
-                          : setDetailsItem(project)
+                          : project.cloud && handleCloudProject(project.cloud.id)
                       }
                       className="flex min-w-0 flex-1 items-center gap-4 px-5 py-4 text-left"
                     >
@@ -159,18 +165,18 @@ export function ProjectHomePage() {
                           Updated {new Date(project.effectiveUpdatedAt).toLocaleString()}
                         </div>
                       </div>
-                      {project.local ? (
-                        <ArrowRight className="size-4 text-muted-foreground" />
-                      ) : null}
+                      <ArrowRight className="size-4 text-muted-foreground" />
                     </button>
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`View details for ${project.name}`}
-                      onClick={() => setDetailsItem(project)}
-                    >
-                      <Info />
-                    </Button>
+                    {cloudAvailable ? (
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        aria-label={`View details for ${project.name}`}
+                        onClick={() => setDetailsItem(project)}
+                      >
+                        <Info />
+                      </Button>
+                    ) : null}
                   </div>
                 ))}
               </div>

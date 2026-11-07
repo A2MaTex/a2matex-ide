@@ -36,7 +36,8 @@ interface WorkflowCanvasProps {
 const nodeTypes = { automation: AutomationNode };
 
 function nextNodeId(type: string) {
-  return type.replace(/[^a-z0-9]+/gi, '-') + '-' + crypto.randomUUID().slice(0, 8);
+  void type;
+  return crypto.randomUUID();
 }
 
 export function WorkflowCanvas({ catalog, workflow, issues, execute }: WorkflowCanvasProps) {
@@ -102,10 +103,12 @@ export function WorkflowCanvas({ catalog, workflow, issues, execute }: WorkflowC
         workflow,
         {
           id: 'connection-preview',
-          source: { nodeId: connection.source, port: connection.sourceHandle },
-          target: { nodeId: connection.target, port: connection.targetHandle },
+          sourcePort: connection.sourceHandle,
+          sourceNodeId: connection.source,
+          targetNodeId: connection.target,
         },
         catalog,
+        connection.targetHandle,
       );
       return true;
     } catch {

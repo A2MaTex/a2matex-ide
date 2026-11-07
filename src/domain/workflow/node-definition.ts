@@ -32,6 +32,7 @@ export interface PropertyDefinition {
   pattern?: string;
   secret?: boolean;
   expression?: boolean;
+  storage: 'binding' | 'config';
   ui?: {
     control?: 'input' | 'textarea' | 'select' | 'switch' | 'code' | 'asset';
     group?: string;
@@ -59,6 +60,7 @@ export interface NodeDefinition {
   requiredCapabilities: string[];
   requiredPermissions: string[];
   runtimeHandler: string;
+  supportedErrorPolicies: Array<'ERROR_BRANCH' | 'STOP'>;
   deprecation?: {
     message: string;
     replacement?: { type: string; version: number };

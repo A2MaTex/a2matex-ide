@@ -48,6 +48,9 @@ function handle(channel: string, operation: (input: unknown) => Promise<unknown>
 
 export function registerCloudProjectHandlers(cloud: ProjectCloudClient) {
   handle(IPC_CHANNELS.cloudProjectLoad, () => cloud.load());
+  handle(IPC_CHANNELS.cloudProjectOpen, (projectId) =>
+    cloud.open(requireString(projectId, 'Project ID')),
+  );
   handle(IPC_CHANNELS.cloudProjectRefresh, () => cloud.refresh());
   handle(IPC_CHANNELS.cloudProjectDetail, (projectId) =>
     cloud.getDetail(requireString(projectId, 'Project ID')),
@@ -74,6 +77,9 @@ export function registerCloudProjectHandlers(cloud: ProjectCloudClient) {
     }
     return cloud.sync(localId);
   });
+  handle(IPC_CHANNELS.cloudProjectUpdateFromCloud, (localId) =>
+    cloud.updateFromCloud(requireString(localId, 'Local project ID')),
+  );
 }
 
 function requireString(value: unknown, label: string) {

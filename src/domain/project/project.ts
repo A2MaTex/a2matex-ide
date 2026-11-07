@@ -41,30 +41,29 @@ export interface ProjectManifest {
 export interface WorkflowNode {
   id: string;
   type: string;
-  nodeVersion: number;
-  name?: string;
-  disabled?: boolean;
-  params: Record<string, JsonValue>;
+  config: Record<string, JsonValue>;
+  editor: { x: number; y: number };
+  bindings: Record<string, WorkflowBinding>;
+  errorPolicy: 'ERROR_BRANCH' | 'STOP';
+}
+
+export interface WorkflowBinding {
+  kind: string;
+  [key: string]: JsonValue;
 }
 
 export interface WorkflowEdge {
   id: string;
-  source: { nodeId: string; port: string };
-  target: { nodeId: string; port: string };
+  sourcePort: string;
+  sourceNodeId: string;
+  targetNodeId: string;
 }
 
 export interface WorkflowDocument {
   schemaVersion: 1;
-  id: string;
-  name: string;
+  entryNodeId: string;
   nodes: WorkflowNode[];
   edges: WorkflowEdge[];
-  layout: {
-    nodes: Record<string, { x: number; y: number }>;
-    viewport?: { x: number; y: number; zoom: number };
-  };
-  metadata?: Record<string, JsonValue>;
-  [key: string]: unknown;
 }
 
 export interface ProjectDocument {
