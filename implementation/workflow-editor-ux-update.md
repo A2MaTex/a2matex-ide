@@ -2,6 +2,7 @@
 
 Status: Proposed  
 Date: 2026-10-26  
+Updated: 2026-11-07 — quick node configuration moves to a click-away drawer because the persistent right Inspector panel is assigned to Android UI snapshots<br>
 Owners: Product, Core/Editor, Catalog, Runtime  
 Related: ADR-001, ADR-002, ADR-003; docs/03_workflow_node_and_project_spec.md; docs/04_ide_ux_and_state_plan.md
 
@@ -10,7 +11,7 @@ Related: ADR-001, ADR-002, ADR-003; docs/03_workflow_node_and_project_spec.md; d
 This document specifies an update to the workflow authoring experience across four areas:
 
 1. Make the Node Palette easier to search, categorize, and explore.
-2. Open a full editor on node double-click, separating configuration from rich-text description.
+2. Open quick node parameters in a right-to-left drawer on selection, while retaining a full editor on double-click for configuration and rich-text description.
 3. Allow properties to reference variables in two scopes: **flow.** and **global.**.
 4. Allow unlimited connections on input/output ports, with node suggestions, reconnection, and independent deletion when dragging connections.
 
@@ -23,7 +24,8 @@ This is a change specification, not a description of the current implementation.
 - **Function name**: The default `displayName` in the node definition, such as Delay or Tap.
 - **Custom name**: A user-defined name for a node instance.
 - **Connection/edge**: A directed link from an output port to an input port.
-- **Node detail**: A dialog or drawer for editing a node instance, distinct from the quick-view Inspector.
+- **Quick node configuration drawer**: A non-modal, click-away drawer for editing common node parameters after selecting a node.
+- **Node detail**: A full editor for a node instance, distinct from the quick drawer and the persistent Android UI Inspector.
 - **Help**: Documentation for a node definition, not the user-authored rich-text description of a node instance.
 
 Out of scope: arbitrary cycles, a complete data-wire UI, variable synchronization across machines/tenants, and allowing rich text to execute scripts or embed uncontrolled HTML.
@@ -34,7 +36,7 @@ Out of scope: arbitrary cycles, a complete data-wire UI, variable synchronizatio
 | --- | --- | --- |
 | Palette | Search, categories, and per-category collapse are available | Sticky search; collapse/expand all; compact icon + name items; descriptions on hover; Help |
 | Canvas node | Shows icon, name, type/version, and port counts | Name is primary; colors; icon-only or icon + name |
-| Node editing | Single-click selects; Inspector edits params | Double-click opens Node detail with Config and Description |
+| Node editing | Single-click selects; fixed right Inspector edits params | Single-click opens a quick config drawer; double-click opens full Node detail with Config and Description |
 | Instance metadata | Optional name exists, but no editing UI | Rename, label mode, and description persist in the workflow |
 | Enable/disable | Model has optional `disabled`, but UI does not expose it | Node detail toggles state; disabled nodes are dimmed and use bypass semantics |
 | Variables | No scopes in model/editor | Typed `flow.name` and `global.name` references |
@@ -97,7 +99,20 @@ Out of scope: arbitrary cycles, a complete data-wire UI, variable synchronizatio
 - Disabled nodes retain their position, label, ports, and connections, but the entire card is dimmed. The node must also have a **Disabled** badge/text and corresponding accessible state; opacity or color alone is insufficient.
 - Disabling does not change the original color from the definition.
 - Disabled nodes remain selectable, double-clickable, editable, and able to open Help, just like enabled nodes. Dimming must not disable pointer or keyboard interaction.
-- Single-click continues to select a node. Double-click selects the node and opens Node detail. Double-click must not create two history entries or unintentionally start a drag.
+- Single-click selects a node and opens its quick configuration drawer. Double-click selects the node and opens full Node detail. Double-click must not create duplicate history entries, open two competing editors, or unintentionally start a drag.
+
+### 5.1.1 Quick Node Configuration Drawer
+
+- The persistent right-side Inspector panel belongs to Android UI Inspector and its device snapshot; it no longer renders node properties.
+- Selecting any canvas node opens a non-modal quick configuration drawer immediately to the left of Android UI Inspector.
+- The drawer slides from right to left over the canvas and does not resize the React Flow workspace or cover the snapshot panel.
+- Selecting a different node while the drawer is open changes its content to the newly selected node.
+- Clicking outside, pressing Escape, or clicking Close retracts the drawer. Dismissal does not clear `selectedNodeId`.
+- The active field finishes its blur/validation/command behavior before dismissal. Invalid input must not be silently written to workflow state.
+- Values already committed through workflow commands remain committed after click-away; closing the drawer is not an undo or discard action.
+- Focus returns to the selected node or canvas after close. Keyboard users must have explicit Open/Close behavior equivalent to pointer click-away.
+- The quick drawer contains the schema-driven parameter controls currently provided by `NodeInspector.tsx`. Rich Description, combined metadata drafts, and the explicit Done/Cancel workflow remain responsibilities of full Node detail.
+- Clicking **Use in Node** in Android UI Inspector may retract the drawer as an outside click, but selected-node identity remains available so selector binding succeeds.
 
 ### 5.2 Node Detail Contents
 
@@ -221,7 +236,7 @@ The remote catalog currently lacks color, complete property Help, input ports, p
 
 - **Workflow source**: Custom name, appearance, description, enabled/disabled state, node config, variable bindings, and ordered edges.
 - **Catalog snapshot**: Category, icon/color token, function description, property/port Help, and compatibility metadata.
-- **Zustand editor session**: Category collapse state, search query, Help target, Node detail open state, pending connection suggestion, and selected edge/node.
+- **Zustand editor session**: Category collapse state, search query, Help target, quick-drawer open state, Node detail open state, pending connection suggestion, and selected edge/node. Closing the quick drawer must not clear node selection.
 - **Component-local**: Hover tooltip, rich-text draft before commit, and menu/popover focus.
 - **React Flow** is a projection only; all add/update/reconnect/delete operations still go through application/domain commands.
 
@@ -248,7 +263,7 @@ The remote catalog currently lacks color, complete property Help, input ports, p
 
 ### Node Detail
 
-- Double-click opens the correct node; single-click only selects it.
+- Single-click opens the correct node in the quick configuration drawer. Clicking outside/Escape/Close retracts it without clearing selection. Double-click opens the correct node in full Node detail without leaving both editors active.
 - An empty name displays the function name; a custom name replaces the function name on the canvas.
 - Switching between Icon only/Icon and name survives save, reload, and undo/redo.
 - Config shows only properties from the exact definition version; Description round-trips Markdown without executing HTML/scripts.
@@ -276,7 +291,7 @@ The remote catalog currently lacks color, complete property Help, input ports, p
 
 - **Domain unit**: Metadata normalization, variable binding validation, unlimited fan-in/fan-out, ordered-edge execution, disabled bypass/unsupported topology, duplicate/type/cycle rules, atomic add-and-connect, reconnect, and cascade delete/undo.
 - **Adapter unit**: Catalog color/order/Help/input mapping; workflow ↔ React Flow projection; unknown-definition fallback.
-- **Component**: Sticky search, collapse all, hover/focus tooltip, Help, double-click dialog, Markdown toolbar, enable/disable button, dimmed disabled state, validation, delete confirmation, and accessible icon-only nodes.
+- **Component**: Sticky search, collapse all, hover/focus tooltip, Help, single-click quick drawer, click-away/Escape dismissal, double-click full detail, Markdown toolbar, enable/disable button, dimmed disabled state, validation, delete confirmation, and accessible icon-only nodes.
 - **Integration**: Save/reopen appearance, Markdown description, disabled state, ordered edges, and scoped bindings; catalog refresh must not lose Help or instance metadata.
 - **E2E Electron**: Drag connection onto canvas → select suggested node → verify execution order → disable/enable node → reconnect → delete edge → delete node → undo/redo → save/reopen.
 
@@ -292,7 +307,8 @@ Key areas to update during implementation:
 - `NodePalette.tsx`: Sticky search, global collapse/expand, compact items, tooltip, and Help action.
 - `AutomationNode.tsx`/`react-flow-adapter.ts`: Label mode, effective name, definition color, and dimmed disabled state.
 - `WorkflowCanvas.tsx`: Double-click, connection suggestions, reconnect, and selected-edge behavior.
-- `NodeInspector.tsx` or a new Node detail component: Common fields, Config/Description, Help, and enable/disable button.
+- Refactor `NodeInspector.tsx` into a quick `NodeConfigDrawer` (or wrap its existing schema form) with right-to-left animation, click-away/Escape/Close behavior, focus return, and preserved node selection.
+- Add a separate Node detail component for common metadata, Config/Description, Help, and enable/disable behavior; do not overload the Android UI Inspector panel with node editing.
 - Unit/component/E2E fixtures must include nodes with multiple ordered incoming/outgoing edges, catalog definitions with Help/color/`disabledBehavior`, and workflows containing disabled nodes.
 
 ## 14. Finalized Decisions and Open Questions
@@ -304,3 +320,81 @@ Key areas to update during implementation:
 3. Node colors come exclusively from the exact node definition. Users cannot change or override an individual node instance's color.
 4. Node detail has an Enabled/Disabled button. Disabled nodes are dimmed on the canvas and use the semantics specified in section 5.4.
 5. `global.` can be shared across devices within the same run group.
+6. The existing fixed right Inspector panel is reserved for Android UI snapshots. Selecting a node opens a separate quick configuration drawer beside it; closing that drawer does not deselect the node.
+
+## 15. Inspector-readiness UX phases
+
+The full UX update is not a prerequisite for Android UI Inspector. Only the phases below must be
+completed before starting snapshot capture. Variables, unlimited connections, rich Description,
+disabled-node semantics, connection suggestions, and full Node Detail remain independent workstreams.
+
+### UX-F0 — Ownership and interaction contract
+
+**Status:** Complete in documentation.
+
+- Assign the existing right Inspector panel to Android UI Inspector.
+- Define quick node configuration as a separate non-modal drawer.
+- Decide that drawer dismissal preserves `selectedNodeId`.
+- Define click-away, Escape, Close, focus return, and active-field blur behavior.
+- Keep full Node Detail separate from the quick drawer.
+
+**Exit criteria:** Product and implementation docs describe one non-conflicting layout and interaction
+model.
+
+### UX-F1 — Separate drawer visibility from node selection
+
+**Status:** Implemented.
+
+- Add `nodeConfigDrawerOpen` to editor session state.
+- Selecting a node opens the drawer.
+- Closing the drawer changes visibility only; it does not deselect the node.
+- Selecting the same node again reopens the drawer.
+- Resetting the workflow session clears both selection and drawer state.
+
+**Exit criteria:** store tests prove visibility and selection can change independently.
+
+### UX-F2 — Refactor workspace surfaces
+
+**Status:** Implemented.
+
+- Replace fixed `NodeInspector` content in the right panel with `AndroidInspectorPanel`.
+- Keep an explicit placeholder where device controls and snapshots will be implemented.
+- Wrap the existing schema-driven node parameter form in `NodeConfigDrawer`.
+- Render the drawer inside the canvas panel so it overlays the canvas and remains immediately left of
+  Android UI Inspector.
+- Keep existing workflow commands, validation, duplicate, and delete behavior.
+
+**Exit criteria:** selecting a node opens its parameter UI without changing panel sizes or covering the
+Android Inspector placeholder.
+
+### UX-F3 — Dismissal, focus, accessibility, and regression tests
+
+**Status:** Implemented and verified in scope.
+
+- Close on outside pointer interaction, Escape, and explicit Close.
+- Let the active field finish its normal blur/commit path during pointer dismissal.
+- Return focus to the selected React Flow node when possible.
+- Keep the hidden drawer inert and unavailable to pointer/keyboard interaction.
+- Add store and component tests for open, close, reopen, click-away, and Escape.
+- Run formatting, lint, typecheck, unit/component tests, and production build.
+
+**Exit criteria:** quality commands pass and the workflow editor retains existing add/edit/delete,
+autosave, undo/redo, and panel-collapse behavior.
+
+Verification on 2026-11-07:
+
+- Changed files pass Prettier check.
+- ESLint passes.
+- Renderer and Electron TypeScript checks pass.
+- All 61 Vitest tests pass.
+- Desktop production build passes.
+- The aggregate `npm run quality` command is still stopped by pre-existing formatting differences in
+  `AppShell.tsx`, `LoginPage.tsx`, `login.schema.ts`, and `logout.schema.ts`; those unrelated files were
+  intentionally not rewritten as part of this feature.
+
+### Gate to Android UI Inspector implementation
+
+After UX-F0 through UX-F3 pass, implementation can move directly to Inspector contracts, ADB device
+enumeration, typed IPC, manual capture, snapshot rendering, hit-testing, and selector binding. The
+remaining sections of this UX document must not block that work unless Inspector explicitly depends on
+them.

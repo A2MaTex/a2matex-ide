@@ -43,6 +43,7 @@ function nextNodeId(type: string) {
 export function WorkflowCanvas({ catalog, workflow, issues, execute }: WorkflowCanvasProps) {
   const selectedNodeId = useEditorStore((state) => state.selectedNodeId);
   const selectNode = useEditorStore((state) => state.selectNode);
+  const closeNodeConfigDrawer = useEditorStore((state) => state.closeNodeConfigDrawer);
   const { fitView, screenToFlowPosition } = useReactFlow();
   const nodes = useMemo(
     () => toReactFlowNodes(workflow, selectedNodeId, issues, catalog),
@@ -148,7 +149,7 @@ export function WorkflowCanvas({ catalog, workflow, issues, execute }: WorkflowC
         minZoom={0.25}
         maxZoom={1.8}
         onNodeClick={(_, node) => selectNode(node.id)}
-        onPaneClick={() => selectNode(null)}
+        onPaneClick={closeNodeConfigDrawer}
         onNodeDragStop={(_, node: Node) =>
           execute({
             type: 'node.move',

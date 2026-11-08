@@ -1,4 +1,8 @@
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
+import {
+  ANDROID_SELECTOR_V1_FORMAT,
+  isAndroidSelectorV1,
+} from '@domain/android-inspector/android-selector';
 import type { NodeDefinition, PropertyDefinition } from '@domain/workflow/node-definition';
 
 export interface WorkflowIssue {
@@ -30,6 +34,7 @@ function issue(
 }
 
 function propertyValueIsValid(value: unknown, property: PropertyDefinition) {
+  if (property.format === ANDROID_SELECTOR_V1_FORMAT) return isAndroidSelectorV1(value);
   switch (property.type) {
     case 'string':
       if (typeof value !== 'string') return false;

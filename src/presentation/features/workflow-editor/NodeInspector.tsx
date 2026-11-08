@@ -1,4 +1,4 @@
-import { Copy, PanelRightClose, Settings2, Trash2 } from 'lucide-react';
+import { Copy, Settings2, Trash2, X } from 'lucide-react';
 
 import type { WorkflowNode } from '@domain/project/project';
 import type { NodeDefinition, PropertyDefinition } from '@domain/workflow/node-definition';
@@ -6,6 +6,7 @@ import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import type { JsonValue } from '@shared/types/json-value';
 import { Button } from '@presentation/components/ui/button';
+import { AndroidSelectorControl } from '@presentation/features/android-inspector/AndroidSelectorControl';
 
 import { NodeIcon } from '@presentation/features/workflow-editor/node-icons';
 
@@ -16,22 +17,22 @@ interface NodeInspectorProps {
   execute(command: WorkflowCommand): boolean;
   onDuplicate(): void;
   onDelete(): void;
-  onCollapse(): void;
+  onClose(): void;
 }
 
-function InspectorHeader({ onCollapse }: { onCollapse(): void }) {
+function InspectorHeader({ onClose }: { onClose(): void }) {
   return (
     <div className="flex h-9 items-center gap-2 border-b border-border px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
       <Settings2 className="size-3.5" />
-      <span className="flex-1">Inspector</span>
+      <span className="flex-1">Node configuration</span>
       <button
         type="button"
-        onClick={onCollapse}
-        aria-label="Collapse Inspector"
-        title="Collapse Inspector"
+        onClick={onClose}
+        aria-label="Close node configuration"
+        title="Close node configuration"
         className="grid size-6 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
       >
-        <PanelRightClose className="size-3.5" />
+        <X className="size-3.5" />
       </button>
     </div>
   );
@@ -53,12 +54,12 @@ export function NodeInspector({
   execute,
   onDuplicate,
   onDelete,
-  onCollapse,
+  onClose,
 }: NodeInspectorProps) {
   if (!node) {
     return (
-      <section className="h-full bg-panel" aria-label="Node inspector">
-        <InspectorHeader onCollapse={onCollapse} />
+      <section className="h-full bg-panel" aria-label="Node configuration">
+        <InspectorHeader onClose={onClose} />
         <div className="grid h-48 place-items-center p-6 text-center">
           <div>
             <Settings2 className="mx-auto size-6 text-muted-foreground" />
@@ -75,8 +76,8 @@ export function NodeInspector({
   const definition = catalog.find((candidate) => candidate.type === node.type);
   if (!definition) {
     return (
-      <section className="h-full bg-panel" aria-label="Node inspector">
-        <InspectorHeader onCollapse={onCollapse} />
+      <section className="h-full bg-panel" aria-label="Node configuration">
+        <InspectorHeader onClose={onClose} />
         <p className="p-4 text-xs text-destructive">Node definition is unavailable.</p>
       </section>
     );
@@ -88,8 +89,8 @@ export function NodeInspector({
     });
 
   return (
-    <section className="h-full overflow-y-auto bg-panel" aria-label="Node inspector">
-      <InspectorHeader onCollapse={onCollapse} />
+    <section className="h-full overflow-y-auto bg-panel" aria-label="Node configuration">
+      <InspectorHeader onClose={onClose} />
       <div className="border-b border-border p-4">
         <div className="flex items-center gap-3">
           <span className="grid size-9 place-items-center rounded-lg bg-primary/10 text-cyan-400">
@@ -97,7 +98,7 @@ export function NodeInspector({
           </span>
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-sm font-semibold">{definition.displayName}</h2>
-            <p className="truncate font-mono text-[9px] text-muted-foreground">
+            <p className="truncate font-mono text-[10px] text-muted-foreground">
               {definition.type}@{definition.version}
             </p>
           </div>
@@ -139,11 +140,17 @@ export function NodeInspector({
                   {property.title}
                 </label>
                 {property.description ? (
-                  <p className="mt-1 text-[9px] leading-4 text-muted-foreground">
+                  <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
                     {property.description}
                   </p>
                 ) : null}
-                {property.enum ? (
+                {property.ui?.control === 'android-selector' ? (
+                  <AndroidSelectorControl
+                    id={'property-' + name}
+                    value={value}
+                    onCommit={(nextValue) => commit(name, nextValue)}
+                  />
+                ) : property.enum ? (
                   <select
                     id={'property-' + name}
                     value={String(value)}
@@ -202,7 +209,7 @@ export function NodeInspector({
                   />
                 )}
                 {fieldIssues.map((entry) => (
-                  <p key={entry.id} className="mt-1 text-[9px] text-destructive">
+                  <p key={entry.id} className="mt-1 text-[10px] text-destructive">
                     {entry.message}
                   </p>
                 ))}

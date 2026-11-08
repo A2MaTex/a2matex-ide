@@ -1,4 +1,5 @@
 import type { CatalogNodeDefinition } from '@domain/node-catalog/node-catalog';
+import { ANDROID_SELECTOR_V1_FORMAT } from '@domain/android-inspector/android-selector';
 import type {
   NodeDefinition,
   PortDefinition,
@@ -50,10 +51,18 @@ function toProperty(
   const property: PropertyDefinition = {
     type,
     title: typeof schema.title === 'string' ? schema.title : titleFromName(name),
+    jsonSchema: structuredClone(schema),
     storage,
     ui: {
       order,
-      control: Array.isArray(schema.enum) ? 'select' : type === 'boolean' ? 'switch' : 'input',
+      control:
+        schema.format === ANDROID_SELECTOR_V1_FORMAT
+          ? 'android-selector'
+          : Array.isArray(schema.enum)
+            ? 'select'
+            : type === 'boolean'
+              ? 'switch'
+              : 'input',
     },
   };
 
@@ -63,6 +72,7 @@ function toProperty(
   if (typeof schema.minimum === 'number') property.minimum = schema.minimum;
   if (typeof schema.maximum === 'number') property.maximum = schema.maximum;
   if (typeof schema.pattern === 'string') property.pattern = schema.pattern;
+  if (typeof schema.format === 'string') property.format = schema.format;
 
   return property;
 }

@@ -6,7 +6,6 @@ import {
   CloudUpload,
   FileJson2,
   Folder,
-  PanelRightOpen,
   Redo2,
   Save,
   SaveAll,
@@ -19,14 +18,19 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ReactFlowProvider } from '@xyflow/react';
 
 import { toWorkflowNodeCatalog } from '@application/node-catalog/to-workflow-node-catalog';
+import {
+  androidSelectorToJsonValue,
+  getAndroidSelectorTargets,
+} from '@domain/android-inspector/android-selector';
 import { DEFAULT_NODE_CATALOG_RUNTIME_VERSION } from '@domain/node-catalog/node-catalog';
 import type { NodeDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import { validateWorkflow } from '@domain/workflow/workflow-validator';
 import { Button } from '@presentation/components/ui/button';
+import { AndroidInspectorPanel } from '@presentation/features/android-inspector/AndroidInspectorPanel';
 import { useProjectCloseGuard } from '@presentation/features/project-session/use-project-close-guard';
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
-import { NodeInspector } from '@presentation/features/workflow-editor/NodeInspector';
+import { NodeConfigDrawer } from '@presentation/features/workflow-editor/NodeConfigDrawer';
 import { NodePalette } from '@presentation/features/workflow-editor/NodePalette';
 import { ProblemsPanel } from '@presentation/features/workflow-editor/ProblemsPanel';
 import { WorkflowCanvas } from '@presentation/features/workflow-editor/WorkflowCanvas';
@@ -92,14 +96,16 @@ export function MainWorkflowPage() {
   const undo = useProjectStore((state) => state.undo);
   const redo = useProjectStore((state) => state.redo);
   const selectedNodeId = useEditorStore((state) => state.selectedNodeId);
+  const nodeConfigDrawerOpen = useEditorStore((state) => state.nodeConfigDrawerOpen);
   const copiedNodeId = useEditorStore((state) => state.copiedNodeId);
   const selectNode = useEditorStore((state) => state.selectNode);
+  const closeNodeConfigDrawer = useEditorStore((state) => state.closeNodeConfigDrawer);
   const copyNode = useEditorStore((state) => state.copyNode);
   const resetWorkflowSession = useEditorStore((state) => state.resetWorkflowSession);
   const [explorerExpanded, setExplorerExpanded] = useState(true);
   const [workflowsExpanded, setWorkflowsExpanded] = useState(true);
   const [nodePaletteExpanded, setNodePaletteExpanded] = useState(true);
-  const [inspectorCollapsed, setInspectorCollapsed] = useState(false);
+  const [androidInspectorCollapsed, setAndroidInspectorCollapsed] = useState(false);
   const [nodeCatalog, setNodeCatalog] = useState<NodeDefinition[]>([]);
   const [nodeCatalogStatus, setNodeCatalogStatus] = useState<'loading' | 'ready' | 'error'>(
     'loading',
@@ -107,7 +113,7 @@ export function MainWorkflowPage() {
   const [nodeCatalogError, setNodeCatalogError] = useState<string | null>(null);
   const explorerPanelRef = usePanelRef();
   const nodePalettePanelRef = usePanelRef();
-  const inspectorPanelRef = usePanelRef();
+  const androidInspectorPanelRef = usePanelRef();
   const attemptedProjectId = useRef<string | null>(null);
   useProjectCloseGuard(dirty, flushLocalSave);
 
@@ -280,6 +286,10 @@ export function MainWorkflowPage() {
   const exporting = status === 'exporting';
   const syncing = cloudStatus === 'syncing';
   const selectedNode = workflow.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const selectedNodeDefinition = selectedNode
+    ? nodeCatalog.find((definition) => definition.type === selectedNode.type)
+    : undefined;
+  const androidSelectorTargets = getAndroidSelectorTargets(selectedNode, selectedNodeDefinition);
   const localSaveLabel = {
     dirty: 'Unsaved changes',
     'local-save-error': 'Local save failed',
@@ -353,12 +363,12 @@ export function MainWorkflowPage() {
           <ChevronRight className="size-3" />
           <span className="truncate font-medium text-foreground">{manifest.name}</span>
           <span
-            className={`ml-2 rounded px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider ${localSaveTone}`}
+            className={`ml-2 rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${localSaveTone}`}
           >
             {localSaveLabel}
           </span>
           {cloudAvailable ? (
-            <span className="ml-1 rounded bg-secondary px-1.5 py-0.5 font-mono text-[9px] uppercase tracking-wider">
+            <span className="ml-1 rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider">
               {cloudSyncLabel}
             </span>
           ) : null}
@@ -565,50 +575,29 @@ export function MainWorkflowPage() {
             </Panel>
             <ResizeHandle orientation="horizontal" />
             <Panel defaultSize="57%" minSize="34%">
-              <section
-                className="flex h-full flex-col bg-editor-canvas"
-                aria-label="Workflow canvas"
-              >
-                <div className="flex h-9 shrink-0 items-center border-b border-border bg-panel/80 px-3 text-xs">
-                  <span className="border-b-2 border-primary px-2 py-2.5 font-medium">
-                    {workflowPath.split('/').at(-1)?.replace('.workflow.json', '') ?? 'Workflow'}
-                  </span>
-                </div>
-                <div className="min-h-0 flex-1">
-                  <ReactFlowProvider>
-                    <WorkflowCanvas
-                      catalog={nodeCatalog}
-                      workflow={workflow}
-                      issues={issues}
-                      execute={execute}
-                    />
-                  </ReactFlowProvider>
-                </div>
-              </section>
-            </Panel>
-            <ResizeHandle orientation="horizontal" />
-            <Panel
-              id="inspector-panel"
-              panelRef={inspectorPanelRef}
-              defaultSize="22%"
-              minSize="18%"
-              maxSize="36%"
-              collapsedSize="38px"
-              collapsible
-              onResize={(size) => setInspectorCollapsed(size.inPixels <= 48)}
-            >
-              {inspectorCollapsed ? (
-                <button
-                  type="button"
-                  onClick={() => inspectorPanelRef.current?.expand()}
-                  aria-label="Expand Inspector"
-                  title="Expand Inspector"
-                  className="flex h-full w-full flex-col items-center gap-2 bg-panel py-2 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
+              <div className="relative h-full overflow-hidden">
+                <section
+                  className="flex h-full flex-col bg-editor-canvas"
+                  aria-label="Workflow canvas"
                 >
-                  <PanelRightOpen className="size-4 shrink-0" />
-                </button>
-              ) : (
-                <NodeInspector
+                  <div className="flex h-9 shrink-0 items-center border-b border-border bg-panel/80 px-3 text-xs">
+                    <span className="border-b-2 border-primary px-2 py-2.5 font-medium">
+                      {workflowPath.split('/').at(-1)?.replace('.workflow.json', '') ?? 'Workflow'}
+                    </span>
+                  </div>
+                  <div className="min-h-0 flex-1">
+                    <ReactFlowProvider>
+                      <WorkflowCanvas
+                        catalog={nodeCatalog}
+                        workflow={workflow}
+                        issues={issues}
+                        execute={execute}
+                      />
+                    </ReactFlowProvider>
+                  </div>
+                </section>
+                <NodeConfigDrawer
+                  open={nodeConfigDrawerOpen && Boolean(selectedNode)}
                   catalog={nodeCatalog}
                   node={selectedNode}
                   issues={issues}
@@ -619,9 +608,43 @@ export function MainWorkflowPage() {
                     execute({ type: 'node.remove', payload: { nodeId: selectedNode.id } });
                     selectNode(null);
                   }}
-                  onCollapse={() => inspectorPanelRef.current?.collapse()}
+                  onClose={closeNodeConfigDrawer}
                 />
-              )}
+              </div>
+            </Panel>
+            <ResizeHandle orientation="horizontal" />
+            <Panel
+              id="android-inspector-panel"
+              panelRef={androidInspectorPanelRef}
+              defaultSize="22%"
+              minSize="18%"
+              maxSize="36%"
+              collapsedSize="38px"
+              collapsible
+              onResize={(size) => setAndroidInspectorCollapsed(size.inPixels <= 48)}
+            >
+              <AndroidInspectorPanel
+                collapsed={androidInspectorCollapsed}
+                selectorTargets={androidSelectorTargets}
+                onCollapse={() => androidInspectorPanelRef.current?.collapse()}
+                onExpand={() => androidInspectorPanelRef.current?.expand()}
+                onUseSelector={(target, selector) =>
+                  androidSelectorTargets.some(
+                    (candidate) =>
+                      candidate.nodeId === target.nodeId &&
+                      candidate.propertyName === target.propertyName,
+                  ) &&
+                  execute({
+                    type: 'node.updateParams',
+                    payload: {
+                      nodeId: target.nodeId,
+                      changes: {
+                        [target.propertyName]: androidSelectorToJsonValue(selector),
+                      },
+                    },
+                  })
+                }
+              />
             </Panel>
           </Group>
         </Panel>

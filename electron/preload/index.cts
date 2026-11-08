@@ -7,6 +7,10 @@ const studioHost = {
   system: {
     getInfo: () => ipcRenderer.invoke('studio:system:get-info'),
   },
+  androidInspector: {
+    listDevices: () => ipcRenderer.invoke('studio:android-inspector:list-devices'),
+    capture: (input) => ipcRenderer.invoke('studio:android-inspector:capture', input),
+  },
   auth: {
     restore: () => ipcRenderer.invoke('studio:auth:restore'),
     login: (input) => ipcRenderer.invoke('studio:auth:login', input),

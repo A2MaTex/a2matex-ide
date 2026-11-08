@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { SaveProjectInput } from '@application/project/project-repository';
 import type { ProjectCloudClient } from '@application/project/project-cloud';
+import { ANDROID_SELECTOR_V1_FORMAT } from '@domain/android-inspector/android-selector';
+import type { NodeDefinition } from '@domain/workflow/node-definition';
 import { InMemoryProjectRepository } from '@infrastructure/persistence/in-memory-project-repository';
 import { createProjectStore, projectStoreIsDirty } from '@presentation/stores/project-store';
 
@@ -54,6 +56,90 @@ describe('project store local-first lifecycle', () => {
     );
     expect(store.getState().localSaveStatus).toBe('saved-local');
     expect(projectStoreIsDirty(store.getState())).toBe(false);
+  });
+
+  it('applies and locally round-trips an Android selector in one semantic revision', async () => {
+    vi.useFakeTimers();
+    const repository = new InMemoryProjectRepository();
+    const store = createProjectStore(repository);
+    const created = await store.getState().create({ name: 'Selector Project' });
+    const definition: NodeDefinition = {
+      type: 'android.tap_selector',
+      version: 1,
+      displayName: 'Tap element',
+      description: 'Tap an Android element by selector.',
+      category: 'Android',
+      icon: 'mouse-pointer-click',
+      inputs: [],
+      outputs: [],
+      properties: {
+        type: 'object',
+        required: ['target'],
+        properties: {
+          target: {
+            type: 'object',
+            title: 'Target',
+            format: ANDROID_SELECTOR_V1_FORMAT,
+            storage: 'binding',
+            ui: { control: 'android-selector' },
+          },
+        },
+      },
+      requiredCapabilities: [],
+      requiredPermissions: [],
+      runtimeHandler: 'android.tap_selector',
+      supportedErrorPolicies: ['STOP'],
+    };
+    const workflowPath = created!.document.manifest.entryWorkflow;
+
+    expect(
+      store.getState().executeWorkflowCommand(
+        workflowPath,
+        {
+          type: 'node.add',
+          payload: {
+            nodeId: 'tap-1',
+            nodeType: definition.type,
+            nodeVersion: definition.version,
+            position: { x: 100, y: 100 },
+          },
+        },
+        [definition],
+      ),
+    ).toBe(true);
+    const revisionBeforeSelector = store.getState().session!.workingRevision;
+    const selector = {
+      schemaVersion: 1,
+      strategy: 'resourceId',
+      value: 'com.example:id/submit',
+      packageName: 'com.example',
+    } as const;
+
+    expect(
+      store.getState().executeWorkflowCommand(
+        workflowPath,
+        {
+          type: 'node.updateParams',
+          payload: { nodeId: 'tap-1', changes: { target: selector } },
+        },
+        [definition],
+      ),
+    ).toBe(true);
+    expect(store.getState().session!.workingRevision).toBe(revisionBeforeSelector + 1);
+    expect(
+      store
+        .getState()
+        .session!.snapshot.document.workflows[workflowPath].nodes.find(
+          (candidate) => candidate.id === 'tap-1',
+        )?.bindings.target,
+    ).toEqual({ kind: 'constant', value: selector });
+
+    await expect(store.getState().flushLocalSave()).resolves.toBe(true);
+    const reopened = await repository.open(created!.localId);
+    expect(
+      reopened.document.workflows[workflowPath].nodes.find((candidate) => candidate.id === 'tap-1')
+        ?.bindings.target,
+    ).toEqual({ kind: 'constant', value: selector });
   });
 
   it('keeps a newer edit dirty while an older snapshot is being written', async () => {

@@ -3,16 +3,19 @@ import path from 'node:path';
 import { app, BrowserWindow, dialog, session } from 'electron';
 
 import { createAuthSessionService } from '@electron/main/auth/create-auth-session-service';
+import { ProcessAdbClient } from '@electron/main/adapters/android/adb-client';
 import { SqliteCloudProjectCache } from '@electron/main/adapters/project/sqlite-cloud-project-cache';
 import { SqliteLocalProjectRepository } from '@electron/main/adapters/project/sqlite-local-project-repository';
 import { createNodeCatalogService } from '@electron/main/catalog/create-node-catalog-service';
 import { registerAuthHandlers } from '@electron/main/ipc/register-auth-handlers';
+import { registerAndroidInspectorHandlers } from '@electron/main/ipc/register-android-inspector-handlers';
 import { registerCloudProjectHandlers } from '@electron/main/ipc/register-cloud-project-handlers';
 import { registerNodeCatalogHandlers } from '@electron/main/ipc/register-node-catalog-handlers';
 import { registerProjectHandlers } from '@electron/main/ipc/register-project-handlers';
 import { registerSystemHandlers } from '@electron/main/ipc/register-system-handlers';
 import { logMain } from '@electron/main/logger';
 import { createProjectCloudService } from '@electron/main/project/create-project-cloud-service';
+import { DefaultAndroidInspectorService } from '@electron/main/services/android-inspector/android-inspector-service';
 import {
   openStudioDatabase,
   type StudioDatabase,
@@ -60,6 +63,7 @@ app.whenReady().then(() => {
     callback(false);
   });
   registerSystemHandlers();
+  registerAndroidInspectorHandlers(new DefaultAndroidInspectorService(new ProcessAdbClient()));
   const appPath = app.getAppPath();
   const userDataPath = app.getPath('userData');
   const auth = createAuthSessionService({

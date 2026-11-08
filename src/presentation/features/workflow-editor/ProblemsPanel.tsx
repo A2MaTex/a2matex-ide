@@ -60,7 +60,7 @@ export function ProblemsPanel({ issues, revision, savedRevision }: ProblemsPanel
                     <span className="block text-[11px] text-secondary-foreground">
                       {entry.message}
                     </span>
-                    <span className="block font-mono text-[9px] text-muted-foreground">
+                    <span className="block font-mono text-[10px] text-muted-foreground">
                       {entry.code}
                       {entry.nodeId ? ' · ' + entry.nodeId : ''}
                     </span>

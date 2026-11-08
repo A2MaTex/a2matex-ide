@@ -7,6 +7,7 @@ import type {
   SaveProjectInput,
 } from '@application/project/project-repository';
 import type { AuthErrorCode, LoginInput, SessionState } from '@application/auth/auth-session';
+import type { AndroidInspectorErrorCode } from '@application/android-inspector/android-inspector';
 import type { NodeCatalogErrorCode } from '@application/node-catalog/node-catalog';
 import type {
   CloudProject,
@@ -16,6 +17,7 @@ import type {
 } from '@application/project/project-cloud';
 import type { HostInfo } from '@application/system/host-gateway';
 import type { NodeCatalogSnapshot } from '@domain/node-catalog/node-catalog';
+import type { AndroidDevice, InspectorSnapshot } from '@domain/android-inspector/android-inspector';
 
 export interface HostError<TCode extends string = string> {
   code: TCode;
@@ -29,6 +31,12 @@ export type HostResult<T, TCode extends string = string> =
 export interface StudioHostApi {
   system: {
     getInfo(): Promise<HostInfo>;
+  };
+  androidInspector: {
+    listDevices(): Promise<HostResult<AndroidDevice[], AndroidInspectorErrorCode>>;
+    capture(input: {
+      deviceId: string;
+    }): Promise<HostResult<InspectorSnapshot, AndroidInspectorErrorCode>>;
   };
   auth: {
     restore(): Promise<HostResult<SessionState, AuthErrorCode>>;

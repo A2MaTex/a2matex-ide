@@ -32,9 +32,11 @@ export interface PropertyDefinition {
   pattern?: string;
   secret?: boolean;
   expression?: boolean;
+  format?: string;
+  jsonSchema?: Record<string, JsonValue>;
   storage: 'binding' | 'config';
   ui?: {
-    control?: 'input' | 'textarea' | 'select' | 'switch' | 'code' | 'asset';
+    control?: 'input' | 'textarea' | 'select' | 'switch' | 'code' | 'asset' | 'android-selector';
     group?: string;
     order?: number;
     placeholder?: string;

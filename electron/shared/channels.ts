@@ -1,5 +1,7 @@
 export const IPC_CHANNELS = {
   systemGetInfo: 'studio:system:get-info',
+  androidInspectorListDevices: 'studio:android-inspector:list-devices',
+  androidInspectorCapture: 'studio:android-inspector:capture',
   authRestore: 'studio:auth:restore',
   authLogin: 'studio:auth:login',
   authLogout: 'studio:auth:logout',

@@ -33,12 +33,12 @@ export function AutomationNode({ data, selected }: NodeProps<AutomationFlowNode>
         </span>
         <div className="min-w-0 flex-1">
           <div className="truncate text-xs font-semibold">{data.displayName}</div>
-          <div className="truncate font-mono text-[9px] text-muted-foreground">
+          <div className="truncate font-mono text-[10px] text-muted-foreground">
             {data.nodeType}@{data.nodeVersion}
           </div>
         </div>
         {data.issueCount > 0 ? (
-          <span className="flex items-center gap-1 text-[9px] text-destructive">
+          <span className="flex items-center gap-1 text-[10px] text-destructive">
             <AlertTriangle className="size-3" /> {data.issueCount}
           </span>
         ) : null}
