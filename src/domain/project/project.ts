@@ -31,6 +31,7 @@ export interface ProjectManifest {
   entryWorkflow: string;
   minimumRuntimeVersion: string;
   workflows: string[];
+  workflowKinds?: Record<string, 'flow' | 'subflow'>;
   assets: AssetDeclaration[];
   permissions: PermissionDeclaration[];
   environment: EnvironmentVariableDeclaration[];
@@ -41,6 +42,10 @@ export interface ProjectManifest {
 export interface WorkflowNode {
   id: string;
   type: string;
+  name?: string;
+  labelMode?: 'icon' | 'icon-and-name';
+  description?: string;
+  disabled?: boolean;
   config: Record<string, JsonValue>;
   editor: { x: number; y: number };
   bindings: Record<string, WorkflowBinding>;
@@ -56,6 +61,7 @@ export interface WorkflowEdge {
   id: string;
   sourcePort: string;
   sourceNodeId: string;
+  targetPort?: string;
   targetNodeId: string;
 }
 

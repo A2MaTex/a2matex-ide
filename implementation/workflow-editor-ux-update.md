@@ -1,8 +1,10 @@
 # Workflow Editor UX Update — Palette, Node Detail, Variables, and Connections
 
-Status: Proposed  
+Status: Studio UX foundation implemented; Catalog/Runtime-dependent work remains  
+
 Date: 2026-10-26  
-Updated: 2026-11-07 — quick node configuration moves to a click-away drawer because the persistent right Inspector panel is assigned to Android UI snapshots<br>
+Updated: 2026-11-08 — Palette/Help, Node metadata detail, unlimited connections, suggestions, reconnect and deletion UX implemented; external contract gaps recorded  
+
 Owners: Product, Core/Editor, Catalog, Runtime  
 Related: ADR-001, ADR-002, ADR-003; docs/03_workflow_node_and_project_spec.md; docs/04_ide_ux_and_state_plan.md
 
@@ -15,7 +17,30 @@ This document specifies an update to the workflow authoring experience across fo
 3. Allow properties to reference variables in two scopes: **flow.** and **global.**.
 4. Allow unlimited connections on input/output ports, with node suggestions, reconnection, and independent deletion when dragging connections.
 
-This is a change specification, not a description of the current implementation. Once approved, the requirements here take precedence over the corresponding cardinality and interaction provisions of ADR-002, document 03, and document 04. Because ADR-002 is currently Accepted, it must be amended or superseded before merging an implementation that changes graph policy.
+This document now combines the target specification with implementation status. Implemented behavior
+takes precedence inside this repository. The ADR/document files referenced by the original draft are
+not present in this workspace, so they could not be amended here; repositories that still carry
+ADR-002 must supersede its single-cardinality policy before consuming the new workflow contract.
+
+### 1.1 Implementation snapshot
+
+- Implemented: sticky multi-field Palette search, collapse/expand all, compact items, hover/focus
+descriptions and Catalog-generated Help.
+- Implemented: quick config drawer, double-click Node detail metadata draft, custom name, icon label
+mode, Markdown source description, safe disable eligibility and dimmed disabled canvas state.
+- Implemented: unlimited compatible control connections, stable edge ordering, atomic add-and-connect,
+atomic reconnect, independent edge deletion and node-with-connections confirmation.
+- Implemented: persisted local flow/subflow documents, Explorer used-node trees, multi-flow tabs,
+canvas context actions, and the searchable Ctrl/Cmd+P Action List.
+- Compatibility boundary: the existing cloud draft contract still uploads only the entry workflow.
+Expanding cloud uploads to every flow requires explicit product/security approval; local save and
+project export retain the complete multi-flow document.
+- Not implemented because contracts are absent: semantic color/order/complete Help from Catalog,
+`flow.`/`global.` Runtime declarations and execution, generalized `disabledBehavior`, and Runtime
+fan-in/fan-out scheduling tests.
+- Partial: full Node detail currently owns metadata/description/enable draft; the schema-driven Config
+form remains in the quick drawer. The restricted Markdown toolbar and full focus trap remain follow-up
+accessibility work rather than being falsely marked complete.
 
 ## 2. Scope and Terminology
 
@@ -34,15 +59,15 @@ Out of scope: arbitrary cycles, a complete data-wire UI, variable synchronizatio
 
 | Area | Current | Requirements after update |
 | --- | --- | --- |
-| Palette | Search, categories, and per-category collapse are available | Sticky search; collapse/expand all; compact icon + name items; descriptions on hover; Help |
-| Canvas node | Shows icon, name, type/version, and port counts | Name is primary; colors; icon-only or icon + name |
-| Node editing | Single-click selects; fixed right Inspector edits params | Single-click opens a quick config drawer; double-click opens full Node detail with Config and Description |
-| Instance metadata | Optional name exists, but no editing UI | Rename, label mode, and description persist in the workflow |
-| Enable/disable | Model has optional `disabled`, but UI does not expose it | Node detail toggles state; disabled nodes are dimmed and use bypass semantics |
-| Variables | No scopes in model/editor | Typed `flow.name` and `global.name` references |
-| Connections | Cardinality `one` blocks fan-in/fan-out | Unlimited edges on compatible input/output ports |
-| Drag onto empty canvas | No node suggestions | Show compatible-node suggestions and atomically add + connect |
-| Deletion | Separate edge deletion; node deletion cascades to edges | Retain both behaviors with clear wording and appropriate confirmation |
+| Palette | Sticky search, categories, collapse/expand all, compact items, tooltip and generated Help implemented | Catalog still lacks explicit category/node order, semantic colors and complete port/property docs |
+| Canvas node | Effective custom/function label, icon-only mode, Help and disabled badge/dimming implemented | Definition color tokens are unavailable; neutral existing theme remains |
+| Node editing | Single-click quick drawer and double-click metadata/description Node detail implemented | Full draft-based Config tab and restricted Markdown toolbar remain |
+| Instance metadata | Name, label mode and Markdown description persist through schema/commands | Full compatibility test with older external workflow consumers remains |
+| Enable/disable | Eligible one-control-input/one-control-output nodes can be toggled and are dimmed | Runtime bypass and generalized Catalog `disabledBehavior` are outside this repo |
+| Variables | No declarations/runtime scope contract is available | Remains blocked; do not serialize guessed string references |
+| Connections | Unlimited compatible edges; duplicates/cycles/types still rejected; reconnect is atomic | Runtime ordered fan-out/fan-in execution requires external contract tests |
+| Drag onto empty canvas | Compatible-node suggestion panel atomically adds and connects | Search/category refinement and richer keyboard navigation remain |
+| Deletion | Edge-only deletion retained; node deletion confirms incident edge count | Context-menu wording can be expanded later |
 
 ## 4. Node Palette
 
@@ -83,7 +108,7 @@ Out of scope: arbitrary cycles, a complete data-wire UI, variable synchronizatio
   - each property with label, key, type, required/optional status, default/constraints, and description;
   - related capabilities/permissions, if any;
   - deprecation and replacement information for deprecated definitions.
-- Generate Help from catalog/schema data; do not hard-code it in React components. If required documentation is missing from the catalog, show **Documentation unavailable** rather than inventing content.
+- Generate Help from catalog/schema data; do not hard-code it in React components.
 - Render remote catalog content as sanitized text/Markdown; do not render raw HTML.
 
 ## 5. Canvas Nodes and Node Detail
@@ -181,6 +206,11 @@ Store descriptions as normalized Markdown, not rendered HTML. Links use an allow
 ### 7.1 Unlimited Connections per Port
 
 - Each input and output port accepts multiple edges. Authoring must not reject an edge merely because the port already has a connection.
+- A handle/dot represents one semantic port, not one connection. Multiple edges reuse the same handle;
+the UI must not add a dot per edge. Distinct Catalog ports such as **Success** and **Error** retain
+separate handles and accessible labels.
+- Compact node cards do not show permanent `N input · M output` text because that is a port count and
+can be mistaken for connection count. Exact port names remain available from handle labels and Help.
 - There is no business-level limit per node or port. The existing document-wide safety limit of 10,000 edges remains in place to protect the parser/UI and must not be characterized as cardinality.
 - Exact duplicate edges with the same source node/port and target node/port are still rejected.
 - Source and target ports must exist and have valid direction, kind, and value type.
@@ -361,7 +391,7 @@ model.
 - Keep an explicit placeholder where device controls and snapshots will be implemented.
 - Wrap the existing schema-driven node parameter form in `NodeConfigDrawer`.
 - Render the drawer inside the canvas panel so it overlays the canvas and remains immediately left of
-  Android UI Inspector.
+Android UI Inspector.
 - Keep existing workflow commands, validation, duplicate, and delete behavior.
 
 **Exit criteria:** selecting a node opens its parameter UI without changing panel sizes or covering the
@@ -381,16 +411,14 @@ Android Inspector placeholder.
 **Exit criteria:** quality commands pass and the workflow editor retains existing add/edit/delete,
 autosave, undo/redo, and panel-collapse behavior.
 
-Verification on 2026-11-07:
+Verification refreshed on 2026-11-08:
 
 - Changed files pass Prettier check.
 - ESLint passes.
 - Renderer and Electron TypeScript checks pass.
-- All 61 Vitest tests pass.
+- All 105 Vitest tests pass across 23 files.
 - Desktop production build passes.
-- The aggregate `npm run quality` command is still stopped by pre-existing formatting differences in
-  `AppShell.tsx`, `LoginPage.tsx`, `login.schema.ts`, and `logout.schema.ts`; those unrelated files were
-  intentionally not rewritten as part of this feature.
+- Inspector snapshot and selector tests remain green after the editor UX changes.
 
 ### Gate to Android UI Inspector implementation
 
@@ -398,3 +426,60 @@ After UX-F0 through UX-F3 pass, implementation can move directly to Inspector co
 enumeration, typed IPC, manual capture, snapshot rendering, hit-testing, and selector binding. The
 remaining sections of this UX document must not block that work unless Inspector explicitly depends on
 them.
+
+## 16. Post-Inspector UX implementation phases
+
+### UX-U1 — Palette and Help
+
+**Status:** Implemented in Studio.
+
+- Sticky search includes name, description, type, category and property keys.
+- Search temporarily expands matching categories and preserves the prior collapse state.
+- Collapse all / Expand all, compact icon + name items, hover/focus descriptions and independent Help
+actions are implemented.
+- Help is generated from the exact `NodeDefinition`; missing text is not invented.
+
+**External gap:** the current Catalog contract has no semantic color tokens, explicit ordering, port
+descriptions or complete Help metadata. Studio intentionally does not infer or inject them.
+
+### UX-U2 — Node metadata and detail
+
+**Status:** Core metadata implemented; advanced editor partial.
+
+- Workflow nodes accept optional `name`, `labelMode`, Markdown `description` and `disabled` fields.
+- Double-click opens Node detail; Cancel leaves domain state unchanged and Done submits one
+`node.updateMetadata` command.
+- Canvas uses effective labels, supports icon-only mode and shows a Disabled badge plus dimming.
+- Entry nodes and definitions without exactly one control input/output cannot be disabled.
+
+**Remaining:** move the schema-driven Config form into a combined draft, implement the restricted
+Markdown toolbar/focus trap, and add external Runtime bypass contract tests.
+
+### UX-U3 — Scoped variables
+
+**Status:** Blocked by missing Catalog/Runtime contract.
+
+No field in the current Catalog declares expression support, variable type, read/write permission or
+secret policy. Storing `flow.name`/`global.name` strings would contradict the typed representation in
+section 6, so Studio does not fabricate variable bindings. Implement this phase only after the shared
+declaration and execution contract exists.
+
+### UX-U4 — Connections
+
+**Status:** Studio authoring implemented; Runtime semantics pending.
+
+- Cardinality no longer blocks compatible control fan-in/fan-out; the 10,000-edge document safety
+limit remains.
+- One handle is rendered per Catalog port, never per edge. Success and Error remain distinct, while
+every handle can carry multiple edges.
+- Entry nodes expose no inferred input handle and reject incoming connections even though the current
+Catalog API lacks an explicit input-port list.
+- Duplicate edges, incompatible ports and unsupported cycles retain stable validation.
+- New edges append in source order; reconnect replaces an edge in place and preserves its array index.
+- Dropping a connection on empty canvas shows compatible definitions and commits node + edge in one
+command.
+- Edge deletion remains independent. Node deletion confirms the number of incident connections and
+cascades in one command.
+
+**External gap:** Runtime sequential scheduling/fan-in semantics and end-to-end execution-order tests
+are not present in this Studio repository.

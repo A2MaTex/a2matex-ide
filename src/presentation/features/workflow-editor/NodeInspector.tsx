@@ -1,4 +1,4 @@
-import { Copy, Settings2, Trash2, X } from 'lucide-react';
+import { Copy, HelpCircle, Settings2, Trash2, X } from 'lucide-react';
 
 import type { WorkflowNode } from '@domain/project/project';
 import type { NodeDefinition, PropertyDefinition } from '@domain/workflow/node-definition';
@@ -9,6 +9,7 @@ import { Button } from '@presentation/components/ui/button';
 import { AndroidSelectorControl } from '@presentation/features/android-inspector/AndroidSelectorControl';
 
 import { NodeIcon } from '@presentation/features/workflow-editor/node-icons';
+import { useEditorStore } from '@presentation/stores/editor-store';
 
 interface NodeInspectorProps {
   catalog: readonly NodeDefinition[];
@@ -56,6 +57,7 @@ export function NodeInspector({
   onDelete,
   onClose,
 }: NodeInspectorProps) {
+  const openHelp = useEditorStore((state) => state.openHelp);
   if (!node) {
     return (
       <section className="h-full bg-panel" aria-label="Node configuration">
@@ -97,7 +99,9 @@ export function NodeInspector({
             <NodeIcon icon={definition.icon} className="size-4" />
           </span>
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-sm font-semibold">{definition.displayName}</h2>
+            <h2 className="truncate text-sm font-semibold">
+              {node.name?.trim() || definition.displayName}
+            </h2>
             <p className="truncate font-mono text-[10px] text-muted-foreground">
               {definition.type}@{definition.version}
             </p>
@@ -105,6 +109,13 @@ export function NodeInspector({
         </div>
         <p className="mt-3 text-xs leading-4 text-muted-foreground">{definition.description}</p>
         <div className="mt-3 flex gap-1 text-sm">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => openHelp({ type: definition.type, version: definition.version })}
+          >
+            <HelpCircle /> Help
+          </Button>
           <Button size="sm" variant="ghost" onClick={onDuplicate}>
             <Copy /> Duplicate
           </Button>

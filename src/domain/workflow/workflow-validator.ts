@@ -3,7 +3,13 @@ import {
   ANDROID_SELECTOR_V1_FORMAT,
   isAndroidSelectorV1,
 } from '@domain/android-inspector/android-selector';
-import type { NodeDefinition, PropertyDefinition } from '@domain/workflow/node-definition';
+import {
+  connectionInputsFor,
+  connectionOutputsFor,
+  type NodeDefinition,
+  type PropertyDefinition,
+} from '@domain/workflow/node-definition';
+import { canDisableNode } from '@domain/workflow/workflow-commands';
 
 export interface WorkflowIssue {
   id: string;
@@ -128,8 +134,16 @@ function validateEdge(
   const sourceDefinition = definitions.get(source.id);
   const targetDefinition = definitions.get(target.id);
   if (!sourceDefinition || !targetDefinition) return issues;
-  const output = sourceDefinition.outputs.find((port) => port.name === edge.sourcePort);
-  const input = targetDefinition.inputs.find((port) => port.name === 'in');
+  const sourcePorts = connectionOutputsFor(sourceDefinition);
+  const targetPorts = connectionInputsFor(targetDefinition);
+  // Older documents stored catalog branch names (for example success/error) as
+  // handle IDs. A single structural connector can safely adopt those edges.
+  const output =
+    sourcePorts.find((port) => port.name === edge.sourcePort) ??
+    (sourcePorts.length === 1 ? sourcePorts[0] : undefined);
+  const input =
+    targetPorts.find((port) => port.name === (edge.targetPort ?? 'in')) ??
+    (targetPorts.length === 1 ? targetPorts[0] : undefined);
   if (!output || !input) {
     issues.push(
       issue(workflow, 'EDGE_PORT_MISSING', 'Connection references a missing port', {
@@ -206,7 +220,19 @@ export function validateWorkflow(
       continue;
     }
     definitions.set(node.id, definition);
-    issues.push(...validateNodeProperties(workflow, node, definition));
+    issues.push(
+      ...validateNodeProperties(workflow, node, definition).map((entry) =>
+        node.disabled ? { ...entry, severity: 'warning' as const } : entry,
+      ),
+    );
+    if (node.disabled && !canDisableNode(definition)) {
+      issues.push(
+        issue(workflow, 'DISABLED_BEHAVIOR_UNSUPPORTED', 'This node cannot be safely disabled', {
+          nodeId: node.id,
+        }),
+      );
+    }
+    if (node.disabled) continue;
     for (const permission of definition.requiredPermissions) {
       if (!manifestPermissions.includes(permission)) {
         issues.push(
@@ -236,7 +262,14 @@ export function validateWorkflow(
       );
     }
     edgeIds.add(edge.id);
-    const key = edge.sourceNodeId + ':' + edge.sourcePort + '->' + edge.targetNodeId;
+    const key =
+      edge.sourceNodeId +
+      ':' +
+      edge.sourcePort +
+      '->' +
+      edge.targetNodeId +
+      ':' +
+      (edge.targetPort ?? 'in');
     if (edgeKeys.has(key)) {
       issues.push(
         issue(workflow, 'EDGE_DUPLICATE', 'Connection is duplicated', { edgeId: edge.id }),
@@ -249,32 +282,13 @@ export function validateWorkflow(
   for (const node of workflow.nodes) {
     const definition = definitions.get(node.id);
     if (!definition) continue;
-    for (const input of definition.inputs.filter((port) => port.required)) {
+    for (const input of connectionInputsFor(definition).filter((port) => port.required)) {
       const incoming = workflow.edges.filter(
-        (edge) => edge.targetNodeId === node.id && input.name === 'in',
+        (edge) => edge.targetNodeId === node.id && (edge.targetPort ?? 'in') === input.name,
       );
       if (incoming.length === 0) {
         issues.push(
           issue(workflow, 'INPUT_REQUIRED', input.label + ' requires a connection', {
-            nodeId: node.id,
-          }),
-        );
-      }
-      if (input.cardinality === 'one' && incoming.length > 1) {
-        issues.push(
-          issue(workflow, 'INPUT_CARDINALITY', input.label + ' accepts only one connection', {
-            nodeId: node.id,
-          }),
-        );
-      }
-    }
-    for (const output of definition.outputs.filter((port) => port.cardinality === 'one')) {
-      const outgoing = workflow.edges.filter(
-        (edge) => edge.sourceNodeId === node.id && edge.sourcePort === output.name,
-      );
-      if (outgoing.length > 1) {
-        issues.push(
-          issue(workflow, 'OUTPUT_CARDINALITY', output.label + ' accepts only one connection', {
             nodeId: node.id,
           }),
         );

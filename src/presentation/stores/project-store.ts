@@ -32,6 +32,7 @@ import {
   saveProject,
 } from '@application/project/project-use-cases';
 import { editProjectWorkflow } from '@application/workflow/edit-workflow';
+import { addProjectWorkflow, type WorkflowKind } from '@application/workflow/manage-workflows';
 import type { ProjectDocument } from '@domain/project/project';
 import type { NodeDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
@@ -78,6 +79,7 @@ export interface ProjectStoreState {
     localId?: string,
   ): Promise<CloudProject | null>;
   updateProjectName(name: string): void;
+  createWorkflow(name: string, kind: WorkflowKind): string | null;
   executeWorkflowCommand(
     workflowPath: string,
     command: WorkflowCommand,
@@ -495,6 +497,26 @@ export function createProjectStore(
           };
         });
         if (changed) autosave.schedule();
+      },
+      createWorkflow(name, kind) {
+        let workflowPath: string | null = null;
+        set((state) => {
+          if (!state.session) return state;
+          try {
+            const result = addProjectWorkflow(state.session.snapshot.document, name, kind);
+            workflowPath = result.workflowPath;
+            return {
+              ...commitDocument(state, result.document),
+              error: null,
+              localSaveError: null,
+              localSaveStatus: 'dirty',
+            };
+          } catch (error) {
+            return { error: messageOf(error) };
+          }
+        });
+        if (workflowPath) autosave.schedule();
+        return workflowPath;
       },
       executeWorkflowCommand(workflowPath, command, catalog) {
         let applied = false;

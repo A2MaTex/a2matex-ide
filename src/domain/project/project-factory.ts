@@ -30,6 +30,7 @@ export function createEmptyProjectDocument(
       entryWorkflow: DEFAULT_WORKFLOW_PATH,
       minimumRuntimeVersion: '0.1.0',
       workflows: [DEFAULT_WORKFLOW_PATH],
+      workflowKinds: { [DEFAULT_WORKFLOW_PATH]: 'flow' },
       assets: [],
       permissions: [],
       environment: [],

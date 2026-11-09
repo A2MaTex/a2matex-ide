@@ -40,6 +40,7 @@ export const projectManifestV1Schema: z.ZodType<ProjectManifest> = z
     entryWorkflow: workflowPathSchema,
     minimumRuntimeVersion: z.string().min(1).max(64),
     workflows: z.array(workflowPathSchema).min(1).max(100),
+    workflowKinds: z.record(workflowPathSchema, z.enum(['flow', 'subflow'])).optional(),
     assets: z
       .array(z.object({ path: assetPathSchema, type: z.enum(['data', 'image']) }).passthrough())
       .max(1_000),
@@ -71,12 +72,22 @@ export const projectManifestV1Schema: z.ZodType<ProjectManifest> = z
   .refine((manifest) => manifest.workflows.includes(manifest.entryWorkflow), {
     message: 'Entry workflow must be declared in workflows',
     path: ['entryWorkflow'],
-  });
+  })
+  .refine(
+    (manifest) =>
+      !manifest.workflowKinds ||
+      Object.keys(manifest.workflowKinds).every((path) => manifest.workflows.includes(path)),
+    { message: 'Workflow kind references an undeclared workflow', path: ['workflowKinds'] },
+  );
 
 const workflowNodeSchema = z
   .object({
     id: z.string().min(1).max(128),
     type: z.string().min(1).max(128),
+    name: z.string().max(100).optional(),
+    labelMode: z.enum(['icon', 'icon-and-name']).optional(),
+    description: z.string().max(20_000).optional(),
+    disabled: z.boolean().optional(),
     config: z.record(z.string(), jsonValueSchema),
     editor: z.object({ x: z.number().finite(), y: z.number().finite() }).strict(),
     bindings: z.record(
@@ -92,6 +103,7 @@ const workflowEdgeSchema = z
     id: z.string().min(1).max(128),
     sourcePort: z.string().min(1).max(64),
     sourceNodeId: z.string().min(1).max(128),
+    targetPort: z.string().min(1).max(64).optional(),
     targetNodeId: z.string().min(1).max(128),
   })
   .strict();
@@ -107,6 +119,10 @@ const legacyWorkflowDocumentV1Schema = z
           id: z.string().min(1).max(128),
           type: z.string().min(1).max(128),
           params: z.record(z.string(), jsonValueSchema),
+          name: z.string().max(100).optional(),
+          labelMode: z.enum(['icon', 'icon-and-name']).optional(),
+          description: z.string().max(20_000).optional(),
+          disabled: z.boolean().optional(),
         })
         .passthrough(),
     ),
@@ -142,6 +158,10 @@ function migrateLegacyWorkflow(input: unknown): unknown {
     nodes: legacy.data.nodes.map((node) => ({
       id: node.id,
       type: node.type === 'trigger.start' ? 'flow.start' : node.type,
+      ...(node.name ? { name: node.name } : {}),
+      ...(node.labelMode ? { labelMode: node.labelMode } : {}),
+      ...(node.description ? { description: node.description } : {}),
+      ...(node.disabled ? { disabled: true } : {}),
       config: {},
       editor: legacy.data.layout.nodes[node.id] ?? { x: 0, y: 0 },
       bindings: Object.fromEntries(
@@ -153,6 +173,7 @@ function migrateLegacyWorkflow(input: unknown): unknown {
       id: edge.id,
       sourcePort: edge.source.port,
       sourceNodeId: edge.source.nodeId,
+      targetPort: edge.target.port,
       targetNodeId: edge.target.nodeId,
     })),
   };

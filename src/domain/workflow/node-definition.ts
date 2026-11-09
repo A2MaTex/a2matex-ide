@@ -56,8 +56,15 @@ export interface NodeDefinition {
   description: string;
   category: string;
   icon: string;
-  inputs: PortDefinition[];
-  outputs: PortDefinition[];
+  /** Control-flow handles. These are not the node's input/output data variables. */
+  connectionInputs?: PortDefinition[];
+  connectionOutputs?: PortDefinition[];
+  /** @deprecated Legacy aliases kept for older in-memory catalogs and tests. */
+  inputs?: PortDefinition[];
+  /** @deprecated Legacy aliases kept for older in-memory catalogs and tests. */
+  outputs?: PortDefinition[];
+  inputVariables?: PropertySchema;
+  outputVariables?: PropertySchema;
   properties: PropertySchema;
   requiredCapabilities: string[];
   requiredPermissions: string[];
@@ -67,4 +74,12 @@ export interface NodeDefinition {
     message: string;
     replacement?: { type: string; version: number };
   };
+}
+
+export function connectionInputsFor(definition: NodeDefinition): readonly PortDefinition[] {
+  return definition.connectionInputs ?? definition.inputs ?? [];
+}
+
+export function connectionOutputsFor(definition: NodeDefinition): readonly PortDefinition[] {
+  return definition.connectionOutputs ?? definition.outputs ?? [];
 }

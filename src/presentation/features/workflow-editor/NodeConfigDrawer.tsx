@@ -7,6 +7,7 @@ import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import { cn } from '@shared/utils/cn';
 
 import { NodeInspector } from '@presentation/features/workflow-editor/NodeInspector';
+import { useEditorStore } from '@presentation/stores/editor-store';
 
 interface NodeConfigDrawerProps {
   open: boolean;
@@ -44,6 +45,7 @@ export function NodeConfigDrawer({
   onDelete,
   onClose,
 }: NodeConfigDrawerProps) {
+  const helpTarget = useEditorStore((state) => state.helpTarget);
   const drawerRef = useRef<HTMLElement>(null);
   const nodeId = node?.id;
   const close = useCallback(() => {
@@ -55,10 +57,12 @@ export function NodeConfigDrawer({
     if (!open) return;
 
     const handlePointerDown = (event: PointerEvent) => {
+      if (helpTarget) return;
       if (drawerRef.current?.contains(event.target as globalThis.Node)) return;
       close();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (helpTarget) return;
       if (event.key !== 'Escape') return;
       event.preventDefault();
       event.stopPropagation();
@@ -71,7 +75,7 @@ export function NodeConfigDrawer({
       document.removeEventListener('pointerdown', handlePointerDown, true);
       document.removeEventListener('keydown', handleKeyDown, true);
     };
-  }, [close, open]);
+  }, [close, helpTarget, open]);
 
   return (
     <aside

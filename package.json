@@ -1,7 +1,7 @@
 {
   "name": "a2matex-studio",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
     "dev": "npm run dev:desktop",
@@ -21,7 +21,12 @@
     "test:watch": "vitest",
     "test:e2e": "npm run build:desktop && playwright test",
     "test:e2e:run": "playwright test",
-    "quality": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build:desktop"
+    "quality": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build:desktop",
+    "package": "npm run build:desktop && electron-builder --dir",
+    "dist": "npm run build:desktop && electron-builder",
+    "dist:win": "npm run build:desktop && electron-builder --win nsis --x64",
+    "dist:mac": "npm run build:desktop && electron-builder --mac dmg",
+    "dist:linux": "npm run build:desktop && electron-builder --linux AppImage"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -56,6 +61,7 @@
     "concurrently": "^10.0.5",
     "cross-env": "^10.1.0",
     "electron": "^44.6.0",
+    "electron-builder": "^26.18.0",
     "eslint": "^10.10.0",
     "eslint-plugin-react-hooks": "^7.1.1",
     "eslint-plugin-react-refresh": "^0.5.6",

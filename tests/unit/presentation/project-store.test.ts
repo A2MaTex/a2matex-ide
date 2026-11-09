@@ -10,6 +10,34 @@ import { createProjectStore, projectStoreIsDirty } from '@presentation/stores/pr
 afterEach(() => vi.useRealTimers());
 
 describe('project store local-first lifecycle', () => {
+  it('creates persisted flows and subflows as undoable project edits', async () => {
+    const repository = new InMemoryProjectRepository();
+    const store = createProjectStore(repository);
+    await store.getState().create({ name: 'Multi Flow Project' });
+
+    const flowPath = store.getState().createWorkflow('Checkout Flow', 'flow');
+    const subflowPath = store.getState().createWorkflow('Sign In Helper', 'subflow');
+
+    expect(flowPath).toBe('workflows/checkout-flow.workflow.json');
+    expect(subflowPath).toBe('workflows/sign-in-helper.workflow.json');
+    expect(store.getState().session?.snapshot.document.manifest.workflowKinds).toMatchObject({
+      [flowPath!]: 'flow',
+      [subflowPath!]: 'subflow',
+    });
+    expect(store.getState().session?.snapshot.document.workflows[subflowPath!].nodes).toMatchObject(
+      [{ type: 'flow.start' }],
+    );
+
+    store.getState().undo();
+    expect(store.getState().session?.snapshot.document.workflows[subflowPath!]).toBeUndefined();
+    await expect(store.getState().flushLocalSave()).resolves.toBe(true);
+    expect(
+      (await repository.open(store.getState().session!.snapshot.localId)).document.workflows[
+        flowPath!
+      ],
+    ).toBeDefined();
+  });
+
   it('loads recent projects and reopens them by local ID', async () => {
     const repository = new InMemoryProjectRepository();
     const created = await repository.create({ name: 'Recent Project' });

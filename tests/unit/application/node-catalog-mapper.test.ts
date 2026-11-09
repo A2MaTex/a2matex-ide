@@ -47,13 +47,28 @@ const node: CatalogNodeDefinition = {
     required: [],
     additionalProperties: false,
   },
-  outputPorts: [],
+  outputPorts: [
+    { key: 'success', kind: 'CONTROL', label: 'Success' },
+    { key: 'error', kind: 'ERROR', label: 'Error' },
+  ],
   editorHints: { icon: 'mouse-pointer-click', fieldOrder: ['target'] },
   supportedErrorPolicies: ['STOP'],
   capabilities: [],
 };
 
 describe('node catalog workflow mapper', () => {
+  it('gives Start only an outgoing handle and End only an incoming handle', () => {
+    const [start, end] = toWorkflowNodeCatalog([
+      { ...node, type: 'flow.start', displayName: 'Start' },
+      { ...node, type: 'flow.end', displayName: 'End' },
+    ]);
+
+    expect(start.connectionInputs).toEqual([]);
+    expect(start.connectionOutputs).toMatchObject([{ name: 'out', direction: 'output' }]);
+    expect(end.connectionInputs).toMatchObject([{ name: 'in', direction: 'input' }]);
+    expect(end.connectionOutputs).toEqual([]);
+  });
+
   it('preserves the Android selector marker and nested JSON schema', () => {
     const parsed = catalogNodeDefinitionSchema.parse(node);
     const [mapped] = toWorkflowNodeCatalog([parsed]);
@@ -70,5 +85,18 @@ describe('node catalog workflow mapper', () => {
         additionalProperties: false,
       },
     });
+    expect(mapped.connectionInputs).toMatchObject([
+      { name: 'in', direction: 'input', kind: 'control', cardinality: 'many' },
+    ]);
+    expect(mapped.connectionOutputs).toMatchObject([
+      { name: 'out', direction: 'output', kind: 'control', cardinality: 'many' },
+    ]);
+    expect(mapped.connectionOutputs).toHaveLength(1);
+    expect(mapped.inputVariables?.properties.target).toMatchObject({
+      type: 'object',
+      storage: 'binding',
+    });
+    expect(mapped.outputVariables?.properties).toEqual({});
+    expect(mapped.inputs).toBeUndefined();
   });
 });

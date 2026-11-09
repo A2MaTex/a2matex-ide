@@ -4,11 +4,15 @@ import {
   CirclePlay,
   CloudDownload,
   CloudUpload,
-  FileJson2,
+  Copy,
   Folder,
+  Network,
+  Plus,
   Redo2,
   Save,
   SaveAll,
+  Scissors,
+  Trash2,
   Undo2,
   X,
 } from 'lucide-react';
@@ -31,9 +35,16 @@ import { AndroidInspectorPanel } from '@presentation/features/android-inspector/
 import { useProjectCloseGuard } from '@presentation/features/project-session/use-project-close-guard';
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
 import { NodeConfigDrawer } from '@presentation/features/workflow-editor/NodeConfigDrawer';
+import { NodeDetailDialog } from '@presentation/features/workflow-editor/NodeDetailDialog';
+import { NodeHelpDialog } from '@presentation/features/workflow-editor/NodeHelpDialog';
 import { NodePalette } from '@presentation/features/workflow-editor/NodePalette';
 import { ProblemsPanel } from '@presentation/features/workflow-editor/ProblemsPanel';
 import { WorkflowCanvas } from '@presentation/features/workflow-editor/WorkflowCanvas';
+import {
+  WorkflowActionList,
+  type WorkflowAction,
+} from '@presentation/features/workflow-editor/WorkflowActionList';
+import { WorkflowExplorer } from '@presentation/features/workflow-editor/WorkflowExplorer';
 import { useEditorStore } from '@presentation/stores/editor-store';
 import { projectStoreIsDirty } from '@presentation/stores/project-store';
 
@@ -93,17 +104,24 @@ export function MainWorkflowPage() {
   const close = useProjectStore((state) => state.close);
   const discard = useProjectStore((state) => state.discard);
   const executeWorkflowCommand = useProjectStore((state) => state.executeWorkflowCommand);
+  const createWorkflow = useProjectStore((state) => state.createWorkflow);
   const undo = useProjectStore((state) => state.undo);
   const redo = useProjectStore((state) => state.redo);
   const selectedNodeId = useEditorStore((state) => state.selectedNodeId);
   const nodeConfigDrawerOpen = useEditorStore((state) => state.nodeConfigDrawerOpen);
+  const nodeDetailNodeId = useEditorStore((state) => state.nodeDetailNodeId);
+  const helpTarget = useEditorStore((state) => state.helpTarget);
+  const selectedEdgeId = useEditorStore((state) => state.selectedEdgeId);
   const copiedNodeId = useEditorStore((state) => state.copiedNodeId);
   const selectNode = useEditorStore((state) => state.selectNode);
   const closeNodeConfigDrawer = useEditorStore((state) => state.closeNodeConfigDrawer);
+  const closeNodeDetail = useEditorStore((state) => state.closeNodeDetail);
+  const openHelp = useEditorStore((state) => state.openHelp);
+  const closeHelp = useEditorStore((state) => state.closeHelp);
+  const selectEdge = useEditorStore((state) => state.selectEdge);
   const copyNode = useEditorStore((state) => state.copyNode);
   const resetWorkflowSession = useEditorStore((state) => state.resetWorkflowSession);
   const [explorerExpanded, setExplorerExpanded] = useState(true);
-  const [workflowsExpanded, setWorkflowsExpanded] = useState(true);
   const [nodePaletteExpanded, setNodePaletteExpanded] = useState(true);
   const [androidInspectorCollapsed, setAndroidInspectorCollapsed] = useState(false);
   const [nodeCatalog, setNodeCatalog] = useState<NodeDefinition[]>([]);
@@ -111,6 +129,12 @@ export function MainWorkflowPage() {
     'loading',
   );
   const [nodeCatalogError, setNodeCatalogError] = useState<string | null>(null);
+  const [activeWorkflowPath, setActiveWorkflowPath] = useState<string | null>(null);
+  const [openWorkflowPaths, setOpenWorkflowPaths] = useState<string[]>([]);
+  const [actionList, setActionList] = useState<{
+    mode: 'command' | 'context';
+    position?: { x: number; y: number };
+  } | null>(null);
   const explorerPanelRef = usePanelRef();
   const nodePalettePanelRef = usePanelRef();
   const androidInspectorPanelRef = usePanelRef();
@@ -165,8 +189,12 @@ export function MainWorkflowPage() {
   }, [loadNodeCatalog]);
 
   const document = session?.snapshot.document;
-  const workflowPath = document?.manifest.entryWorkflow ?? '';
+  const workflowPath =
+    activeWorkflowPath && document?.workflows[activeWorkflowPath]
+      ? activeWorkflowPath
+      : (document?.manifest.entryWorkflow ?? '');
   const workflow = document?.workflows[workflowPath];
+
   const permissionIds = useMemo(
     () => document?.manifest.permissions.map((permission) => permission.id) ?? [],
     [document?.manifest.permissions],
@@ -199,6 +227,30 @@ export function MainWorkflowPage() {
     [execute, selectNode],
   );
 
+  const deleteNode = useCallback(
+    (nodeId: string) => {
+      if (!workflow) return false;
+      const connectionCount = workflow.edges.filter(
+        (edge) => edge.sourceNodeId === nodeId || edge.targetNodeId === nodeId,
+      ).length;
+      if (
+        connectionCount > 0 &&
+        !window.confirm(
+          `Delete this node and ${connectionCount} connection${connectionCount === 1 ? '' : 's'}?`,
+        )
+      ) {
+        return false;
+      }
+      const removed = execute({ type: 'node.remove', payload: { nodeId } });
+      if (removed) {
+        selectNode(null);
+        closeNodeDetail();
+      }
+      return removed;
+    },
+    [closeNodeDetail, execute, selectNode, workflow],
+  );
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       const modifier = event.ctrlKey || event.metaKey;
@@ -208,6 +260,12 @@ export function MainWorkflowPage() {
         if (session && localSaveStatus !== 'saving-local') void flushLocalSave();
         return;
       }
+      if (modifier && key === 'p') {
+        event.preventDefault();
+        setActionList({ mode: 'command' });
+        return;
+      }
+      if (helpTarget || nodeDetailNodeId) return;
       if (isTextInput(event.target)) return;
       if (modifier && key === 'z') {
         event.preventDefault();
@@ -219,16 +277,26 @@ export function MainWorkflowPage() {
       } else if (modifier && key === 'c' && selectedNodeId) {
         event.preventDefault();
         copyNode(selectedNodeId);
+      } else if (modifier && key === 'x' && selectedNodeId) {
+        event.preventDefault();
+        copyNode(selectedNodeId);
+        deleteNode(selectedNodeId);
       } else if (modifier && key === 'v' && copiedNodeId) {
         event.preventDefault();
         duplicateNode(copiedNodeId);
       } else if (modifier && key === 'd' && selectedNodeId) {
         event.preventDefault();
         duplicateNode(selectedNodeId);
+      } else if (modifier && key === 'e') {
+        event.preventDefault();
+        void exportProject();
+      } else if ((event.key === 'Delete' || event.key === 'Backspace') && selectedEdgeId) {
+        event.preventDefault();
+        execute({ type: 'edge.remove', payload: { edgeId: selectedEdgeId } });
+        selectEdge(null);
       } else if ((event.key === 'Delete' || event.key === 'Backspace') && selectedNodeId) {
         event.preventDefault();
-        execute({ type: 'node.remove', payload: { nodeId: selectedNodeId } });
-        selectNode(null);
+        deleteNode(selectedNodeId);
       } else if (event.key === '/') {
         event.preventDefault();
         globalThis.document.getElementById('node-palette-search')?.focus();
@@ -240,12 +308,18 @@ export function MainWorkflowPage() {
     copiedNodeId,
     copyNode,
     document,
+    deleteNode,
     duplicateNode,
     execute,
+    exportProject,
     redo,
     flushLocalSave,
+    helpTarget,
     localSaveStatus,
+    nodeDetailNodeId,
+    selectEdge,
     selectNode,
+    selectedEdgeId,
     selectedNodeId,
     session,
     status,
@@ -282,6 +356,8 @@ export function MainWorkflowPage() {
   }
 
   const { manifest } = document;
+  const visibleOpenWorkflowPaths = openWorkflowPaths.filter((path) => document.workflows[path]);
+  if (visibleOpenWorkflowPaths.length === 0) visibleOpenWorkflowPaths.push(workflowPath);
   const saving = localSaveStatus === 'saving-local';
   const exporting = status === 'exporting';
   const syncing = cloudStatus === 'syncing';
@@ -289,6 +365,10 @@ export function MainWorkflowPage() {
   const selectedNodeDefinition = selectedNode
     ? nodeCatalog.find((definition) => definition.type === selectedNode.type)
     : undefined;
+  const detailNode = workflow.nodes.find((node) => node.id === nodeDetailNodeId) ?? null;
+  const detailNodeDefinition = detailNode
+    ? nodeCatalog.find((definition) => definition.type === detailNode.type)
+    : null;
   const androidSelectorTargets = getAndroidSelectorTargets(selectedNode, selectedNodeDefinition);
   const localSaveLabel = {
     dirty: 'Unsaved changes',
@@ -348,6 +428,130 @@ export function MainWorkflowPage() {
       selectNode(nodeId);
     }
   };
+  const openWorkflow = (path: string) => {
+    if (!path) return;
+    setOpenWorkflowPaths((paths) => (paths.includes(path) ? paths : [...paths, path]));
+    setActiveWorkflowPath(path);
+    selectNode(null);
+    selectEdge(null);
+    copyNode(null);
+    closeNodeDetail();
+    closeNodeConfigDrawer();
+  };
+  const closeWorkflowTab = (path: string) => {
+    if (visibleOpenWorkflowPaths.length === 1) return;
+    const index = visibleOpenWorkflowPaths.indexOf(path);
+    const next = visibleOpenWorkflowPaths.filter((candidate) => candidate !== path);
+    setOpenWorkflowPaths(next);
+    if (path === workflowPath) {
+      setActiveWorkflowPath(next[Math.max(0, index - 1)] ?? manifest.entryWorkflow);
+    }
+  };
+  const promptCreateWorkflow = (kind: 'flow' | 'subflow') => {
+    const fallback = `${kind === 'flow' ? 'flow' : 'subflow'}-${document.manifest.workflows.length + 1}`;
+    const name = window.prompt(`Name for the new ${kind}`, fallback);
+    if (!name) return;
+    const path = createWorkflow(name, kind);
+    if (path) openWorkflow(path);
+  };
+  const deleteSelectedEdge = () => {
+    if (!selectedEdgeId) return;
+    if (execute({ type: 'edge.remove', payload: { edgeId: selectedEdgeId } })) selectEdge(null);
+  };
+  const actions: WorkflowAction[] = [
+    {
+      id: 'show-actions',
+      label: 'Show action list',
+      shortcut: 'Ctrl+P',
+      run: () => window.setTimeout(() => setActionList({ mode: 'command' }), 0),
+    },
+    {
+      id: 'new-flow',
+      label: 'Insert: New flow',
+      icon: Plus,
+      run: () => promptCreateWorkflow('flow'),
+    },
+    {
+      id: 'new-subflow',
+      label: 'Insert: New subflow',
+      icon: Network,
+      run: () => promptCreateWorkflow('subflow'),
+    },
+    {
+      id: 'add-node',
+      label: 'Insert: Add node from catalog',
+      icon: Plus,
+      disabled: nodeCatalogStatus !== 'ready',
+      run: () => globalThis.document.getElementById('node-palette-search')?.focus(),
+    },
+    {
+      id: 'undo',
+      label: 'Undo',
+      shortcut: 'Ctrl+Z',
+      icon: Undo2,
+      disabled: undoStack.length === 0,
+      run: undo,
+    },
+    {
+      id: 'redo',
+      label: 'Redo',
+      shortcut: 'Ctrl+Y',
+      icon: Redo2,
+      disabled: redoStack.length === 0,
+      run: redo,
+    },
+    {
+      id: 'cut-node',
+      label: 'Cut selected node',
+      shortcut: 'Ctrl+X',
+      icon: Scissors,
+      disabled: !selectedNodeId,
+      run: () => {
+        if (!selectedNodeId) return;
+        copyNode(selectedNodeId);
+        deleteNode(selectedNodeId);
+      },
+    },
+    {
+      id: 'copy-node',
+      label: 'Copy selected node',
+      shortcut: 'Ctrl+C',
+      icon: Copy,
+      disabled: !selectedNodeId,
+      run: () => selectedNodeId && copyNode(selectedNodeId),
+    },
+    {
+      id: 'paste-node',
+      label: 'Paste node',
+      shortcut: 'Ctrl+V',
+      icon: Copy,
+      disabled: !copiedNodeId,
+      run: () => copiedNodeId && duplicateNode(copiedNodeId),
+    },
+    {
+      id: 'delete-edge',
+      label: 'Delete connection',
+      shortcut: 'Delete',
+      icon: Trash2,
+      disabled: !selectedEdgeId,
+      run: deleteSelectedEdge,
+    },
+    {
+      id: 'delete-node',
+      label: 'Delete node and connections',
+      shortcut: 'Delete',
+      icon: Trash2,
+      disabled: !selectedNodeId,
+      run: () => selectedNodeId && deleteNode(selectedNodeId),
+    },
+    {
+      id: 'export',
+      label: 'Export project',
+      shortcut: 'Ctrl+E',
+      icon: SaveAll,
+      run: () => void exportProject(),
+    },
+  ];
 
   return (
     <div className="flex h-full min-h-130 flex-col overflow-hidden bg-editor-canvas">
@@ -496,38 +700,13 @@ export function MainWorkflowPage() {
                         <span className="font-semibold text-xs">Explorer</span>
                       </button>
                       {explorerExpanded ? (
-                        <div
-                          id="project-explorer-tree"
-                          className="min-h-0 flex-1 overflow-y-auto px-2 text-[11px]"
-                        >
-                          <div className="flex items-center gap-1.5 rounded px-1.5 py-1 text-secondary-foreground">
-                            <span className="size-3" aria-hidden="true" />
-                            <FileJson2 className="size-3.5 text-cyan-400" />
-                            <span className="truncate">a2matex.project.json</span>
-                          </div>
-                          <button
-                            type="button"
-                            aria-expanded={workflowsExpanded}
-                            aria-controls="workflows-tree"
-                            onClick={() => setWorkflowsExpanded((expanded) => !expanded)}
-                            className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-secondary-foreground transition-colors hover:bg-accent/50"
-                          >
-                            {workflowsExpanded ? (
-                              <ChevronDown className="size-3" />
-                            ) : (
-                              <ChevronRight className="size-3" />
-                            )}
-                            <Folder className="size-3.5 text-cyan-400" /> workflows
-                          </button>
-                          {workflowsExpanded ? (
-                            <div id="workflows-tree" className="ml-5">
-                              <div className="flex items-center gap-1.5 rounded bg-accent px-1.5 py-1">
-                                <FileJson2 className="size-3.5 text-warning" />
-                                <span className="truncate">{workflowPath.split('/').at(-1)}</span>
-                              </div>
-                            </div>
-                          ) : null}
-                        </div>
+                        <WorkflowExplorer
+                          document={document}
+                          catalog={nodeCatalog}
+                          activeWorkflowPath={workflowPath}
+                          onOpenWorkflow={openWorkflow}
+                          onCreate={promptCreateWorkflow}
+                        />
                       ) : null}
                     </section>
                   </Panel>
@@ -580,18 +759,52 @@ export function MainWorkflowPage() {
                   className="flex h-full flex-col bg-editor-canvas"
                   aria-label="Workflow canvas"
                 >
-                  <div className="flex h-9 shrink-0 items-center border-b border-border bg-panel/80 px-3 text-xs">
-                    <span className="border-b-2 border-primary px-2 py-2.5 font-medium">
-                      {workflowPath.split('/').at(-1)?.replace('.workflow.json', '') ?? 'Workflow'}
-                    </span>
+                  <div className="flex h-9 shrink-0 items-end overflow-x-auto border-b border-border bg-panel/80 px-1 text-xs">
+                    {visibleOpenWorkflowPaths.map((path) => (
+                      <div
+                        key={path}
+                        className={
+                          'flex h-9 shrink-0 items-center border-r border-border px-2 ' +
+                          (path === workflowPath
+                            ? 'border-b-2 border-b-primary bg-editor-canvas text-foreground'
+                            : 'text-muted-foreground hover:bg-accent/40')
+                        }
+                      >
+                        <button type="button" onClick={() => openWorkflow(path)} className="px-1">
+                          {path.split('/').at(-1)?.replace('.workflow.json', '') ?? 'Workflow'}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => closeWorkflowTab(path)}
+                          disabled={visibleOpenWorkflowPaths.length === 1}
+                          aria-label={`Close ${path.split('/').at(-1)} tab`}
+                          className="ml-1 rounded p-0.5 hover:bg-accent disabled:opacity-30"
+                        >
+                          <X className="size-3" />
+                        </button>
+                      </div>
+                    ))}
+                    <button
+                      type="button"
+                      onClick={() => promptCreateWorkflow('flow')}
+                      aria-label="Create flow"
+                      title="Create flow"
+                      className="grid h-8 w-8 shrink-0 place-items-center rounded hover:bg-accent"
+                    >
+                      <Plus className="size-3.5" />
+                    </button>
                   </div>
                   <div className="min-h-0 flex-1">
-                    <ReactFlowProvider>
+                    <ReactFlowProvider key={workflowPath}>
                       <WorkflowCanvas
                         catalog={nodeCatalog}
                         workflow={workflow}
                         issues={issues}
                         execute={execute}
+                        onDeleteNode={deleteNode}
+                        onOpenContextMenu={(position) =>
+                          setActionList({ mode: 'context', position })
+                        }
                       />
                     </ReactFlowProvider>
                   </div>
@@ -605,8 +818,7 @@ export function MainWorkflowPage() {
                   onDuplicate={() => selectedNode && duplicateNode(selectedNode.id)}
                   onDelete={() => {
                     if (!selectedNode) return;
-                    execute({ type: 'node.remove', payload: { nodeId: selectedNode.id } });
-                    selectNode(null);
+                    deleteNode(selectedNode.id);
                   }}
                   onClose={closeNodeConfigDrawer}
                 />
@@ -657,6 +869,38 @@ export function MainWorkflowPage() {
           />
         </Panel>
       </Group>
+      <NodeDetailDialog
+        key={nodeDetailNodeId ?? 'closed-node-detail'}
+        node={detailNode}
+        definition={detailNodeDefinition ?? null}
+        execute={execute}
+        onHelp={() => {
+          if (detailNodeDefinition) {
+            openHelp({ type: detailNodeDefinition.type, version: detailNodeDefinition.version });
+          }
+        }}
+        onDelete={() => nodeDetailNodeId && deleteNode(nodeDetailNodeId)}
+        onClose={closeNodeDetail}
+      />
+      <NodeHelpDialog
+        target={helpTarget}
+        definition={
+          nodeCatalog.find(
+            (definition) =>
+              definition.type === helpTarget?.type && definition.version === helpTarget.version,
+          ) ?? null
+        }
+        onClose={closeHelp}
+      />
+      {actionList ? (
+        <WorkflowActionList
+          open
+          mode={actionList.mode}
+          position={actionList.position}
+          actions={actions}
+          onClose={() => setActionList(null)}
+        />
+      ) : null}
     </div>
   );
 }

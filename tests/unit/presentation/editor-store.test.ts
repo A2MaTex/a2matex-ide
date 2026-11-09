@@ -39,6 +39,9 @@ describe('editor store node configuration drawer', () => {
     expect(useEditorStore.getState()).toMatchObject({
       selectedNodeId: null,
       nodeConfigDrawerOpen: false,
+      nodeDetailNodeId: null,
+      helpTarget: null,
+      selectedEdgeId: null,
     });
   });
 });

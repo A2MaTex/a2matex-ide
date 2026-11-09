@@ -13,14 +13,25 @@ const CATEGORY_LABELS: Record<CatalogNodeDefinition['category'], string> = {
   ANDROID: 'Android',
 };
 
+const START_NODE_TYPES = new Set(['flow.start', 'trigger.start']);
+const END_NODE_TYPES = new Set(['flow.end', 'trigger.end']);
+
 const flowInput: PortDefinition = {
   name: 'in',
   label: 'In',
   direction: 'input',
   kind: 'control',
   valueType: 'flow',
-  cardinality: 'one',
-  required: true,
+  cardinality: 'many',
+};
+
+const flowOutput: PortDefinition = {
+  name: 'out',
+  label: 'Out',
+  direction: 'output',
+  kind: 'control',
+  valueType: 'flow',
+  cardinality: 'many',
 };
 
 function titleFromName(name: string) {
@@ -109,6 +120,18 @@ function toProperties(node: CatalogNodeDefinition): NodeDefinition['properties']
   };
 }
 
+function toVariableSchema(
+  schema: CatalogNodeDefinition['inputSchema'] | CatalogNodeDefinition['outputSchema'],
+): NodeDefinition['inputVariables'] {
+  const properties = Object.fromEntries(
+    Object.entries(schema.properties).flatMap(([name, definition], index) => {
+      const property = toProperty(name, definition, index, 'binding');
+      return property ? [[name, property]] : [];
+    }),
+  );
+  return { type: 'object', required: schema.required, properties };
+}
+
 export function toWorkflowNodeCatalog(nodes: readonly CatalogNodeDefinition[]): NodeDefinition[] {
   return nodes.map((node) => ({
     type: node.type,
@@ -117,15 +140,10 @@ export function toWorkflowNodeCatalog(nodes: readonly CatalogNodeDefinition[]): 
     description: node.description,
     category: CATEGORY_LABELS[node.category],
     icon: node.editorHints.icon,
-    inputs: [flowInput],
-    outputs: node.outputPorts.map((port) => ({
-      name: port.key,
-      label: port.label,
-      direction: 'output',
-      kind: 'control',
-      valueType: 'flow',
-      cardinality: 'one',
-    })),
+    connectionInputs: START_NODE_TYPES.has(node.type) ? [] : [flowInput],
+    connectionOutputs: END_NODE_TYPES.has(node.type) ? [] : [flowOutput],
+    inputVariables: toVariableSchema(node.inputSchema),
+    outputVariables: toVariableSchema(node.outputSchema),
     properties: toProperties(node),
     requiredCapabilities: node.capabilities.map((capability) => capability.code),
     requiredPermissions: [],

@@ -1,6 +1,11 @@
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
 import { defaultNodeValuesFor, findNodeDefinition } from '@domain/workflow/node-catalog';
-import type { NodeDefinition, PortDefinition } from '@domain/workflow/node-definition';
+import {
+  connectionInputsFor,
+  connectionOutputsFor,
+  type NodeDefinition,
+  type PortDefinition,
+} from '@domain/workflow/node-definition';
 import type { JsonValue } from '@shared/types/json-value';
 
 export type WorkflowCommand =
@@ -21,6 +26,16 @@ export type WorkflowCommand =
       type: 'node.updateParams';
       payload: { nodeId: string; changes: Record<string, JsonValue> };
     }
+  | {
+      type: 'node.updateMetadata';
+      payload: {
+        nodeId: string;
+        name?: string;
+        labelMode: 'icon' | 'icon-and-name';
+        description?: string;
+        disabled: boolean;
+      };
+    }
   | { type: 'node.remove'; payload: { nodeId: string } }
   | {
       type: 'node.duplicate';
@@ -34,13 +49,34 @@ export type WorkflowCommand =
         target: { nodeId: string; port: string };
       };
     }
+  | {
+      type: 'node.addConnected';
+      payload: {
+        nodeId: string;
+        nodeType: string;
+        nodeVersion: number;
+        position: { x: number; y: number };
+        edgeId: string;
+        source: { nodeId: string; port: string };
+        targetPort: string;
+      };
+    }
+  | {
+      type: 'edge.reconnect';
+      payload: {
+        edgeId: string;
+        source: { nodeId: string; port: string };
+        target: { nodeId: string; port: string };
+      };
+    }
   | { type: 'edge.remove'; payload: { edgeId: string } };
 
 export type WorkflowCommandErrorCode =
   | 'DUPLICATE_EDGE'
   | 'DUPLICATE_NODE'
-  | 'EDGE_CARDINALITY'
+  | 'EDGE_NOT_FOUND'
   | 'GRAPH_CYCLE'
+  | 'INVALID_NODE_METADATA'
   | 'NODE_DEFINITION_MISSING'
   | 'NODE_NOT_FOUND'
   | 'PORT_INCOMPATIBLE'
@@ -78,9 +114,9 @@ function portFor(
   direction: 'input' | 'output',
   name: string,
 ): PortDefinition {
-  const port = (direction === 'input' ? definition.inputs : definition.outputs).find(
-    (candidate) => candidate.name === name,
-  );
+  const port = (
+    direction === 'input' ? connectionInputsFor(definition) : connectionOutputsFor(definition)
+  ).find((candidate) => candidate.name === name);
   if (!port) {
     throw new WorkflowCommandError(
       'PORT_NOT_FOUND',
@@ -92,6 +128,15 @@ function portFor(
 
 function valueTypesEqual(left: PortDefinition['valueType'], right: PortDefinition['valueType']) {
   return JSON.stringify(left) === JSON.stringify(right);
+}
+
+export function portsAreCompatible(source: PortDefinition, target: PortDefinition) {
+  return (
+    source.direction === 'output' &&
+    target.direction === 'input' &&
+    source.kind === target.kind &&
+    valueTypesEqual(source.valueType, target.valueType)
+  );
 }
 
 function wouldCreateCycle(workflow: WorkflowDocument, sourceNodeId: string, targetNodeId: string) {
@@ -118,14 +163,18 @@ export function assertValidConnection(
   workflow: WorkflowDocument,
   edge: WorkflowEdge,
   catalog: readonly NodeDefinition[],
-  targetPort = 'in',
+  targetPort = edge.targetPort ?? 'in',
 ) {
+  if (workflow.edges.some((candidate) => candidate.id === edge.id)) {
+    throw new WorkflowCommandError('DUPLICATE_EDGE', 'Connection ID already exists');
+  }
   if (
     workflow.edges.some(
       (candidate) =>
         candidate.sourceNodeId === edge.sourceNodeId &&
         candidate.sourcePort === edge.sourcePort &&
-        candidate.targetNodeId === edge.targetNodeId,
+        candidate.targetNodeId === edge.targetNodeId &&
+        (candidate.targetPort ?? 'in') === targetPort,
     )
   ) {
     throw new WorkflowCommandError('DUPLICATE_EDGE', 'This connection already exists');
@@ -135,27 +184,35 @@ export function assertValidConnection(
   const targetNode = findNode(workflow, edge.targetNodeId);
   const output = portFor(definitionFor(sourceNode, catalog), 'output', edge.sourcePort);
   const input = portFor(definitionFor(targetNode, catalog), 'input', targetPort);
-  if (output.kind !== input.kind || !valueTypesEqual(output.valueType, input.valueType)) {
+  if (!portsAreCompatible(output, input)) {
     throw new WorkflowCommandError('PORT_INCOMPATIBLE', 'The selected ports are incompatible');
-  }
-  if (
-    input.cardinality === 'one' &&
-    workflow.edges.some((candidate) => candidate.targetNodeId === edge.targetNodeId)
-  ) {
-    throw new WorkflowCommandError('EDGE_CARDINALITY', 'The input already has a connection');
-  }
-  if (
-    output.cardinality === 'one' &&
-    workflow.edges.some(
-      (candidate) =>
-        candidate.sourceNodeId === edge.sourceNodeId && candidate.sourcePort === edge.sourcePort,
-    )
-  ) {
-    throw new WorkflowCommandError('EDGE_CARDINALITY', 'The output already has a connection');
   }
   if (wouldCreateCycle(workflow, edge.sourceNodeId, edge.targetNodeId)) {
     throw new WorkflowCommandError('GRAPH_CYCLE', 'This connection would create a cycle');
   }
+}
+
+export function canDisableNode(definition: NodeDefinition) {
+  if (definition.type === 'flow.start') return false;
+  const controlInputs = connectionInputsFor(definition).filter((port) => port.kind === 'control');
+  const controlOutputs = connectionOutputsFor(definition).filter((port) => port.kind === 'control');
+  return controlInputs.length === 1 && controlOutputs.length === 1;
+}
+
+function createNode(
+  nodeId: string,
+  definition: NodeDefinition,
+  position: { x: number; y: number },
+): WorkflowNode {
+  const defaults = defaultNodeValuesFor(definition);
+  return {
+    id: nodeId,
+    type: definition.type,
+    config: defaults.config,
+    editor: position,
+    bindings: defaults.bindings,
+    errorPolicy: 'STOP',
+  };
 }
 
 export function applyWorkflowCommand(
@@ -176,15 +233,7 @@ export function applyWorkflowCommand(
       if (!definition) {
         throw new WorkflowCommandError('NODE_DEFINITION_MISSING', 'Node definition is unavailable');
       }
-      const defaults = defaultNodeValuesFor(definition);
-      const node = {
-        id: command.payload.nodeId,
-        type: definition.type,
-        config: defaults.config,
-        editor: command.payload.position,
-        bindings: defaults.bindings,
-        errorPolicy: 'STOP' as const,
-      };
+      const node = createNode(command.payload.nodeId, definition, command.payload.position);
       return {
         ...workflow,
         entryNodeId:
@@ -219,6 +268,44 @@ export function applyWorkflowCommand(
           }
           return { ...node, config, bindings };
         }),
+      };
+    }
+    case 'node.updateMetadata': {
+      const current = findNode(workflow, command.payload.nodeId);
+      const definition = definitionFor(current, catalog);
+      const name = command.payload.name?.trim() || undefined;
+      const description = command.payload.description?.replace(/\r\n/g, '\n').trim() || undefined;
+      if (name && name.length > 100) {
+        throw new WorkflowCommandError(
+          'INVALID_NODE_METADATA',
+          'Node name must not exceed 100 characters',
+        );
+      }
+      if (description && description.length > 20_000) {
+        throw new WorkflowCommandError(
+          'INVALID_NODE_METADATA',
+          'Node description must not exceed 20,000 characters',
+        );
+      }
+      if (command.payload.disabled && !canDisableNode(definition)) {
+        throw new WorkflowCommandError(
+          'INVALID_NODE_METADATA',
+          'This node does not declare safe disable behavior',
+        );
+      }
+      return {
+        ...workflow,
+        nodes: workflow.nodes.map((node) =>
+          node.id === command.payload.nodeId
+            ? {
+                ...node,
+                ...(name ? { name } : { name: undefined }),
+                labelMode: command.payload.labelMode,
+                ...(description ? { description } : { description: undefined }),
+                disabled: command.payload.disabled,
+              }
+            : node,
+        ),
       };
     }
     case 'node.remove': {
@@ -262,10 +349,56 @@ export function applyWorkflowCommand(
         id: command.payload.edgeId,
         sourcePort: command.payload.source.port,
         sourceNodeId: command.payload.source.nodeId,
+        targetPort: command.payload.target.port,
         targetNodeId: command.payload.target.nodeId,
       };
       assertValidConnection(workflow, edge, catalog, command.payload.target.port);
       return { ...workflow, edges: [...workflow.edges, edge] };
+    }
+    case 'node.addConnected': {
+      if (workflow.nodes.some((node) => node.id === command.payload.nodeId)) {
+        throw new WorkflowCommandError('DUPLICATE_NODE', 'Node ID already exists');
+      }
+      const definition = findNodeDefinition(
+        command.payload.nodeType,
+        command.payload.nodeVersion,
+        catalog,
+      );
+      if (!definition) {
+        throw new WorkflowCommandError('NODE_DEFINITION_MISSING', 'Node definition is unavailable');
+      }
+      const node = createNode(command.payload.nodeId, definition, command.payload.position);
+      const candidate = { ...workflow, nodes: [...workflow.nodes, node] };
+      const edge = {
+        id: command.payload.edgeId,
+        sourcePort: command.payload.source.port,
+        sourceNodeId: command.payload.source.nodeId,
+        targetPort: command.payload.targetPort,
+        targetNodeId: command.payload.nodeId,
+      };
+      assertValidConnection(candidate, edge, catalog, command.payload.targetPort);
+      return { ...candidate, edges: [...candidate.edges, edge] };
+    }
+    case 'edge.reconnect': {
+      const edgeIndex = workflow.edges.findIndex((edge) => edge.id === command.payload.edgeId);
+      if (edgeIndex < 0) {
+        throw new WorkflowCommandError('EDGE_NOT_FOUND', 'Connection was not found');
+      }
+      const edge = {
+        id: command.payload.edgeId,
+        sourcePort: command.payload.source.port,
+        sourceNodeId: command.payload.source.nodeId,
+        targetPort: command.payload.target.port,
+        targetNodeId: command.payload.target.nodeId,
+      };
+      const withoutOriginal = {
+        ...workflow,
+        edges: workflow.edges.filter((candidate) => candidate.id !== command.payload.edgeId),
+      };
+      assertValidConnection(withoutOriginal, edge, catalog, command.payload.target.port);
+      const edges = [...workflow.edges];
+      edges[edgeIndex] = edge;
+      return { ...workflow, edges };
     }
     case 'edge.remove':
       return {
