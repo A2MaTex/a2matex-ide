@@ -28,3 +28,4 @@ dist-electron
 *.sw?
 
 test-results
+release

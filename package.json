@@ -2,6 +2,12 @@
   "name": "a2matex-studio",
   "private": true,
   "version": "0.1.0",
+  "description": "Desktop IDE for building and managing A2MaTeX Android automation workflows.",
+  "author": {
+    "name": "ngocmaii00",
+    "email": "mailyngoc2301@gmail.com"
+  },
+  "desktopName": "com.a2matex.studio",
   "type": "module",
   "scripts": {
     "dev": "npm run dev:desktop",
@@ -26,7 +32,7 @@
     "dist": "npm run build:desktop && electron-builder",
     "dist:win": "npm run build:desktop && electron-builder --win nsis --x64",
     "dist:mac": "npm run build:desktop && electron-builder --mac dmg",
-    "dist:linux": "npm run build:desktop && electron-builder --linux AppImage"
+    "dist:linux": "npm run build:desktop && electron-builder --linux AppImage deb --x64"
   },
   "dependencies": {
     "@monaco-editor/react": "^4.7.0",
@@ -78,5 +84,29 @@
   "overrides": {
     "dompurify": "3.4.16",
     "shell-quote": "1.12.0"
+  },
+  "build": {
+    "appId": "com.a2matex.studio",
+    "productName": "A2MaTeX Studio",
+    "asar": true,
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*",
+      "prisma/migration/**/*",
+      "package.json",
+      ".env"
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "syncDesktopName": true,
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
+    }
   }
 }

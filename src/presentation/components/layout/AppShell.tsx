@@ -17,7 +17,7 @@ export function AppShell() {
   const navItems = [
     { to: URL.ProjectHome, label: 'Projects', icon: FolderKanban },
     {
-      to: projectSession ? `/workspace/${projectSession.snapshot.localId}` : URL.ProjectHome,
+      to: URL.MainWorkflowHome.replace(':projectId', projectSession ? projectSession.snapshot.localId : '0'),
       label: 'Workspace',
       icon: Workflow,
     },
@@ -78,7 +78,7 @@ export function AppShell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-panel/90 px-4 backdrop-blur">
           <div className="flex items-center">
-            <img src="/full-logo.webp" alt="" aria-hidden="true" className="object-contain w-32" />
+            <img src="/src/assets/full-logo.webp" alt="" aria-hidden="true" className="object-contain w-32" />
             <div className="truncate text-xl mt-1.5 font-medium tracking-tight text-white/60">
               Studio
             </div>

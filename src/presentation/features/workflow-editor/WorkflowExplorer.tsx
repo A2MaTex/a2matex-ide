@@ -2,7 +2,6 @@ import {
   ChevronDown,
   ChevronRight,
   Circle,
-  FileJson2,
   FolderTree,
   Plus,
   Search,
@@ -153,10 +152,6 @@ export function WorkflowExplorer({
           className="min-w-0 flex-1 bg-transparent text-xs outline-none"
         />
       </label>
-      <div className="flex items-center gap-1.5 rounded px-1.5 py-1 text-secondary-foreground">
-        <FileJson2 className="size-3.5 text-cyan-400" />
-        <span className="truncate">a2matex.project.json</span>
-      </div>
       {section('flows', 'Flows', flows, 'flow')}
       {section('subflows', 'Subflows', subflows, 'subflow')}
       <section>

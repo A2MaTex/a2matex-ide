@@ -65,7 +65,7 @@ export function ProjectHomePage() {
       <div className="mx-auto flex max-w-6xl flex-col gap-8 px-6 py-10 lg:px-10">
         <section className="flex flex-col justify-between gap-6 md:flex-row md:items-end">
           <div>
-            <h1 className="max-w-3xl text-2xl font-black tracking-[0.03em] md:text-4xl">
+            <h1 className="max-w-3xl text-2xl font-black md:text-4xl">
               Every Action, Under Your Control.
             </h1>
             <p className="mt-3 max-w-2xl text-sm leading-6 text-muted-foreground">
@@ -182,7 +182,7 @@ export function ProjectHomePage() {
               </div>
             )}
           </article>
-          <aside className="rounded-xl border border-border bg-card p-5">
+          <aside className="rounded-xl  p-5">
             <p className="text-xs font-medium uppercase tracking-[0.18em] text-cyan-400">
               Project contract
             </p>

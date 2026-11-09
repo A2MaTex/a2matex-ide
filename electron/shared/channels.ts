@@ -1,5 +1,11 @@
 export const IPC_CHANNELS = {
   systemGetInfo: 'studio:system:get-info',
+  systemOpenExternal: 'studio:system:open-external',
+  systemQuit: 'studio:system:quit',
+  onboardingGetState: 'studio:onboarding:get-state',
+  onboardingGetPolicies: 'studio:onboarding:get-policies',
+  onboardingChooseWorkspace: 'studio:onboarding:choose-workspace',
+  onboardingComplete: 'studio:onboarding:complete',
   androidInspectorListDevices: 'studio:android-inspector:list-devices',
   androidInspectorCapture: 'studio:android-inspector:capture',
   authRestore: 'studio:auth:restore',

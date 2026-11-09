@@ -358,7 +358,7 @@ export function AndroidInspectorPanel({
               selectedNode={selectedNode}
               onSelectPoint={inspectPoint}
             />
-            <p className="text-[10px] leading-4 text-muted-foreground">
+            <p className="text-xs leading-4 text-muted-foreground">
               Snapshot is static. Press Inspect to capture the current screen.
             </p>
 
@@ -391,7 +391,7 @@ export function AndroidInspectorPanel({
                   No inspectable element at ({imagePoint.x}, {imagePoint.y}).
                 </p>
               ) : (
-                <div className="max-h-40 space-y-1 overflow-y-auto">
+                <div className="max-h-40 space-y-1 overflow-y-auto text-xs">
                   {candidates.map((candidate, index) => (
                     <button
                       key={candidate.nodeId}
@@ -407,8 +407,8 @@ export function AndroidInspectorPanel({
                       }`}
                     >
                       <span className="font-mono">{index + 1}</span>
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate text-foreground text-sm">
+                      <span className="min-w-0 flex-1 space-y-1">
+                        <span className="block truncate text-foreground text-xs">
                           {shortClassName(candidate.className)}
                         </span>
                         <span className="block truncate font-mono text-[10px]">
@@ -423,7 +423,7 @@ export function AndroidInspectorPanel({
             </div>
 
             {selectedNode ? (
-              <div className="space-y-2 border-t border-border pt-3 text-sm">
+              <div className="space-y-2 border-t border-border pt-3 text-xs">
                 <dl className="space-y-1.5">
                   <DetailRow label="Package" value={selectedNode.packageName ?? ''} />
                   <DetailRow label="Resource ID" value={selectedNode.resourceId ?? ''} />
@@ -488,7 +488,7 @@ export function AndroidInspectorPanel({
                   {feedback === 'applied' ? <Check /> : null}
                   {feedback === 'applied' ? 'Used in node' : 'Use in node'}
                 </Button>
-                <p className="text-[10px] leading-4 text-muted-foreground">
+                <p className="text-xs leading-4 text-muted-foreground py-1">
                   {selectedSelectorTarget
                     ? `Target: ${selectedSelectorTarget.nodeLabel} · ${selectedSelectorTarget.propertyTitle}`
                     : 'Select a workflow node with an android-selector-v1 property to enable this action.'}
@@ -502,7 +502,7 @@ export function AndroidInspectorPanel({
               <Smartphone className="size-6" />
             </span>
             <h2 className="mt-4 text-sm font-semibold">Android snapshot</h2>
-            <p className="mt-2 max-w-56 text-[10px] leading-4 text-muted-foreground">
+            <p className="mt-2 max-w-56 text-xs leading-4 text-muted-foreground">
               Select a usable device and press Inspect to capture its current screen.
             </p>
           </div>

@@ -17,22 +17,54 @@ function mapAuthRequestError(error: unknown, operation: AuthOperation): AuthErro
 
   if (axios.isAxiosError(error)) {
     const status = error.response?.status;
-    if (operation === 'login' && (status === 401 || status === 403 || status === 422)) {
-      return new AuthError(
-        'AUTH_INVALID_CREDENTIALS',
-        'The account or password is incorrect.',
-        false,
-      );
+    const data = error.response?.data as
+      | {
+          message?: string;
+          error?: string;
+          statusCode?: number;
+        }
+      | undefined;
+
+    const serverMessage = data?.message;
+
+    if (operation === 'login') {
+      if (status === 403 && serverMessage === 'Error.AccountBlocked') {
+        return new AuthError(
+          'AUTH_ACCOUNT_BLOCKED',
+          'Your account has been blocked. Please contact support.',
+          false,
+        );
+      }
+
+      if (status === 401 || status === 422) {
+        return new AuthError(
+          'AUTH_INVALID_CREDENTIALS',
+          'The account or password is incorrect.',
+          false,
+        );
+      }
+
+      if (status === 403) {
+        return new AuthError(
+          'AUTH_ACCESS_DENIED',
+          'You do not have permission to access this account.',
+          false,
+        );
+      }
     }
+
     if (
-      operation === 'refresh' &&
-      (status === 400 || status === 401 || status === 403 || status === 422)
+      (status === 403 && serverMessage === 'Error.UnauthorizedAccess') ||
+      (operation === 'refresh' &&
+        (status === 400 || status === 401 || status === 403 || status === 422))
     ) {
       return new AuthError('AUTH_SESSION_EXPIRED', 'The saved session is no longer valid.', false);
     }
+
     if (error.code === 'ECONNABORTED' || error.code === 'ETIMEDOUT') {
       return new AuthError('AUTH_TIMEOUT', `The ${operation} request timed out.`, true);
     }
+
     if (status !== undefined) {
       return new AuthError(
         'AUTH_SERVER_ERROR',

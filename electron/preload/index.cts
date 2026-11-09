@@ -6,6 +6,14 @@ import type { StudioHostApi } from '@infrastructure/electron/studio-host-api';
 const studioHost = {
   system: {
     getInfo: () => ipcRenderer.invoke('studio:system:get-info'),
+    openExternal: (url) => ipcRenderer.invoke('studio:system:open-external', url),
+    quit: () => ipcRenderer.invoke('studio:system:quit'),
+  },
+  onboarding: {
+    getState: () => ipcRenderer.invoke('studio:onboarding:get-state'),
+    getPolicies: () => ipcRenderer.invoke('studio:onboarding:get-policies'),
+    chooseWorkspace: () => ipcRenderer.invoke('studio:onboarding:choose-workspace'),
+    complete: (input) => ipcRenderer.invoke('studio:onboarding:complete', input),
   },
   androidInspector: {
     listDevices: () => ipcRenderer.invoke('studio:android-inspector:list-devices'),

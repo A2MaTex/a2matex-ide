@@ -341,7 +341,7 @@ export function MainWorkflowPage() {
   if (!session || !document || !workflow || session.snapshot.localId !== projectId) {
     return (
       <div className="grid h-full place-items-center bg-editor-canvas p-8 text-center">
-        <div className="max-w-md rounded-xl border border-border bg-card p-7 shadow-xl">
+        <div className="max-w-md">
           <Folder className="mx-auto size-7 text-muted-foreground" />
           <h1 className="mt-4 text-lg font-semibold">No project is loaded</h1>
           <p className="mt-2 text-xs leading-5 text-muted-foreground">

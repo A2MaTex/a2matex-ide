@@ -3,6 +3,7 @@ import path from 'node:path';
 import { app, BrowserWindow, dialog, session } from 'electron';
 
 import { createAuthSessionService } from '@electron/main/auth/create-auth-session-service';
+import { getCurrentPolicies } from '@electron/main/api/policy.api';
 import { ProcessAdbClient } from '@electron/main/adapters/android/adb-client';
 import { SqliteCloudProjectCache } from '@electron/main/adapters/project/sqlite-cloud-project-cache';
 import { SqliteLocalProjectRepository } from '@electron/main/adapters/project/sqlite-local-project-repository';
@@ -11,11 +12,17 @@ import { registerAuthHandlers } from '@electron/main/ipc/register-auth-handlers'
 import { registerAndroidInspectorHandlers } from '@electron/main/ipc/register-android-inspector-handlers';
 import { registerCloudProjectHandlers } from '@electron/main/ipc/register-cloud-project-handlers';
 import { registerNodeCatalogHandlers } from '@electron/main/ipc/register-node-catalog-handlers';
+import { registerOnboardingHandlers } from '@electron/main/ipc/register-onboarding-handlers';
 import { registerProjectHandlers } from '@electron/main/ipc/register-project-handlers';
 import { registerSystemHandlers } from '@electron/main/ipc/register-system-handlers';
+import { loadApiConfig } from '@electron/main/config/api-config';
 import { logMain } from '@electron/main/logger';
 import { createProjectCloudService } from '@electron/main/project/create-project-cloud-service';
 import { DefaultAndroidInspectorService } from '@electron/main/services/android-inspector/android-inspector-service';
+import {
+  OnboardingError,
+  OnboardingStateService,
+} from '@electron/main/services/onboarding-state-service';
 import {
   openStudioDatabase,
   type StudioDatabase,
@@ -66,6 +73,20 @@ app.whenReady().then(() => {
   registerAndroidInspectorHandlers(new DefaultAndroidInspectorService(new ProcessAdbClient()));
   const appPath = app.getAppPath();
   const userDataPath = app.getPath('userData');
+  let loadPolicies;
+  try {
+    const apiConfig = loadApiConfig({ appPath, isPackaged: app.isPackaged });
+    loadPolicies = () => getCurrentPolicies(apiConfig.baseUrl, apiConfig.timeoutMs);
+  } catch {
+    loadPolicies = () =>
+      Promise.reject(
+        new OnboardingError(
+          'ONBOARDING_CONFIGURATION_INVALID',
+          'The A2MaTeX API is not configured.',
+        ),
+      );
+  }
+  registerOnboardingHandlers(new OnboardingStateService(userDataPath), loadPolicies);
   const auth = createAuthSessionService({
     appPath,
     userDataPath,

@@ -18,6 +18,13 @@ import type {
 import type { HostInfo } from '@application/system/host-gateway';
 import type { NodeCatalogSnapshot } from '@domain/node-catalog/node-catalog';
 import type { AndroidDevice, InspectorSnapshot } from '@domain/android-inspector/android-inspector';
+import type {
+  CompleteOnboardingInput,
+  OnboardingErrorCode,
+  OnboardingSnapshot,
+  WorkspaceChoice,
+} from '@application/onboarding/onboarding';
+import type { PolicyManifest } from '@application/onboarding/policy-manifest';
 
 export interface HostError<TCode extends string = string> {
   code: TCode;
@@ -31,6 +38,16 @@ export type HostResult<T, TCode extends string = string> =
 export interface StudioHostApi {
   system: {
     getInfo(): Promise<HostInfo>;
+    openExternal(url: string): Promise<boolean>;
+    quit(): Promise<void>;
+  };
+  onboarding: {
+    getState(): Promise<HostResult<OnboardingSnapshot, OnboardingErrorCode>>;
+    getPolicies(): Promise<HostResult<PolicyManifest, OnboardingErrorCode>>;
+    chooseWorkspace(): Promise<HostResult<WorkspaceChoice | null, OnboardingErrorCode>>;
+    complete(
+      input: CompleteOnboardingInput,
+    ): Promise<HostResult<OnboardingSnapshot, OnboardingErrorCode>>;
   };
   androidInspector: {
     listDevices(): Promise<HostResult<AndroidDevice[], AndroidInspectorErrorCode>>;

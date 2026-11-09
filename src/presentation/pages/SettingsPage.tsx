@@ -30,11 +30,11 @@ export function SettingsPage() {
         Foundation settings are visible now; persisted preferences arrive with project resilience.
       </p>
 
-      <div className="mt-8 overflow-hidden rounded-xl border border-border bg-card">
+      <div className="mt-8 overflow-hidden">
         {sections.map(({ detail, icon: Icon, status, title }) => (
           <div
             key={title}
-            className="flex items-center gap-4 border-b border-border px-5 py-4 last:border-b-0"
+            className="flex items-center gap-4 border-b border-border py-4 last:border-b-0"
           >
             <div className="grid size-9 place-items-center rounded-lg bg-secondary text-cyan-400">
               <Icon className="size-4" />

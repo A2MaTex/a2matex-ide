@@ -1,4 +1,5 @@
 const URL = {
+  Onboarding: '/onboarding',
   Login: '/login',
   ProjectHome: '/projects',
   MainWorkflowHome: '/workspace/:projectId',
