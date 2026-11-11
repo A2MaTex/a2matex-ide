@@ -155,7 +155,7 @@ export class NodeCatalogService implements NodeCatalogClient {
         result.status === 'not-modified'
           ? { ...cached!, fetchedAt, status: 'fresh' }
           : {
-              schemaVersion: 1,
+              schemaVersion: 2,
               scope,
               catalogHash: result.catalogHash,
               fetchedAt,

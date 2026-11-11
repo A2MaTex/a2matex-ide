@@ -1,11 +1,25 @@
-import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
+import type {
+  WorkflowBinding,
+  WorkflowDocument,
+  WorkflowEdge,
+  WorkflowNode,
+} from '@domain/project/project';
+import {
+  fieldValueIsValid,
+  objectValueSchemasEqual,
+  objectValueSchema,
+  validateObjectValue,
+  type ObjectValueSchema,
+} from '@domain/schema/object-value-schema';
 import { defaultNodeValuesFor, findNodeDefinition } from '@domain/workflow/node-catalog';
 import {
   connectionInputsFor,
   connectionOutputsFor,
+  logicalOutputPortsFor,
   type NodeDefinition,
   type PortDefinition,
 } from '@domain/workflow/node-definition';
+import { isLiteralBinding, literalBinding } from '@domain/workflow/workflow-binding';
 import type { JsonValue } from '@shared/types/json-value';
 
 export type WorkflowCommand =
@@ -25,6 +39,17 @@ export type WorkflowCommand =
   | {
       type: 'node.updateParams';
       payload: { nodeId: string; changes: Record<string, JsonValue> };
+    }
+  | {
+      type: 'node.commitConfiguration';
+      payload: {
+        nodeId: string;
+        baseRevision: number;
+        config: Record<string, JsonValue>;
+        inputSchema: ObjectValueSchema;
+        bindings: Record<string, WorkflowBinding>;
+        errorPolicy: WorkflowNode['errorPolicy'];
+      };
     }
   | {
       type: 'node.updateMetadata';
@@ -76,6 +101,7 @@ export type WorkflowCommandErrorCode =
   | 'DUPLICATE_NODE'
   | 'EDGE_NOT_FOUND'
   | 'GRAPH_CYCLE'
+  | 'INVALID_NODE_CONFIGURATION'
   | 'INVALID_NODE_METADATA'
   | 'NODE_DEFINITION_MISSING'
   | 'NODE_NOT_FOUND'
@@ -114,9 +140,14 @@ function portFor(
   direction: 'input' | 'output',
   name: string,
 ): PortDefinition {
-  const port = (
-    direction === 'input' ? connectionInputsFor(definition) : connectionOutputsFor(definition)
-  ).find((candidate) => candidate.name === name);
+  const ports =
+    direction === 'input' ? connectionInputsFor(definition) : connectionOutputsFor(definition);
+  const structuralPort = ports.find((candidate) => candidate.name === name);
+  const port =
+    structuralPort ??
+    (direction === 'output' && logicalOutputPortsFor(definition).includes(name) && ports[0]
+      ? { ...ports[0], name }
+      : undefined);
   if (!port) {
     throw new WorkflowCommandError(
       'PORT_NOT_FOUND',
@@ -209,6 +240,14 @@ function createNode(
     id: nodeId,
     type: definition.type,
     config: defaults.config,
+    inputSchema: structuredClone(
+      definition.instanceInputSchema ?? {
+        type: 'object',
+        properties: {},
+        required: [],
+        additionalProperties: false,
+      },
+    ),
     editor: position,
     bindings: defaults.bindings,
     errorPolicy: 'STOP',
@@ -264,10 +303,77 @@ export function applyWorkflowCommand(
           for (const [name, value] of Object.entries(command.payload.changes)) {
             const property = definition.properties.properties[name];
             if (property?.storage === 'config') config[name] = value;
-            else bindings[name] = { kind: 'constant', value };
+            else bindings[name] = literalBinding(value);
           }
           return { ...node, config, bindings };
         }),
+      };
+    }
+    case 'node.commitConfiguration': {
+      const current = findNode(workflow, command.payload.nodeId);
+      const definition = definitionFor(current, catalog);
+      const parsedSchema = objectValueSchema.safeParse(command.payload.inputSchema);
+      if (!parsedSchema.success) {
+        throw new WorkflowCommandError(
+          'INVALID_NODE_CONFIGURATION',
+          'The node input schema is invalid',
+        );
+      }
+      if (!definition.supportedErrorPolicies.includes(command.payload.errorPolicy)) {
+        throw new WorkflowCommandError(
+          'INVALID_NODE_CONFIGURATION',
+          'The selected error policy is not supported',
+        );
+      }
+      if (
+        definition.configSchema &&
+        validateObjectValue(definition.configSchema, command.payload.config).length > 0
+      ) {
+        throw new WorkflowCommandError(
+          'INVALID_NODE_CONFIGURATION',
+          'The node configuration values are invalid',
+        );
+      }
+      const invalidBinding =
+        parsedSchema.data.required.some((field) => !command.payload.bindings[field]) ||
+        Object.entries(command.payload.bindings).some(([field, binding]) => {
+          const property = parsedSchema.data.properties[field];
+          return (
+            !property || (isLiteralBinding(binding) && !fieldValueIsValid(property, binding.value))
+          );
+        });
+      if (invalidBinding) {
+        throw new WorkflowCommandError(
+          'INVALID_NODE_CONFIGURATION',
+          'The node binding values are invalid',
+        );
+      }
+      if (definition.targeting) {
+        const targetMode = command.payload.config.targetMode;
+        const mode =
+          typeof targetMode === 'string'
+            ? definition.targeting.modes.find((entry) => entry.mode === targetMode)
+            : undefined;
+        if (!mode || !objectValueSchemasEqual(mode.bindingSchema, parsedSchema.data)) {
+          throw new WorkflowCommandError(
+            'INVALID_NODE_CONFIGURATION',
+            'The selected target mode does not match the input schema',
+          );
+        }
+      }
+      return {
+        ...workflow,
+        nodes: workflow.nodes.map((node) =>
+          node.id === command.payload.nodeId
+            ? {
+                ...node,
+                config: structuredClone(command.payload.config),
+                inputSchema: structuredClone(parsedSchema.data),
+                bindings: structuredClone(command.payload.bindings),
+                errorPolicy: command.payload.errorPolicy,
+              }
+            : node,
+        ),
       };
     }
     case 'node.updateMetadata': {
@@ -335,6 +441,7 @@ export function applyWorkflowCommand(
             ...source,
             id: command.payload.nodeId,
             config: structuredClone(source.config),
+            inputSchema: structuredClone(source.inputSchema),
             bindings: structuredClone(source.bindings),
             editor: command.payload.position ?? {
               x: sourcePosition.x + 48,

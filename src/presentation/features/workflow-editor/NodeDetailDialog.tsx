@@ -77,7 +77,7 @@ export function NodeDetailDialog({
               {name.trim() || definition.displayName}
             </h2>
             <p className="font-mono text-[10px] text-muted-foreground">
-              {definition.type}@{definition.version}
+              {definition.type}
             </p>
           </div>
           <Button size="sm" variant="ghost" onClick={onHelp}>
@@ -93,16 +93,16 @@ export function NodeDetailDialog({
           </button>
         </header>
 
-        <div className="flex border-b border-border px-5">
+        <div className="flex border-b border-border px-5 text-sm">
           {(['config', 'description'] as const).map((value) => (
             <button
               key={value}
               type="button"
               onClick={() => setTab(value)}
               className={
-                'border-b-2 px-4 py-3 text-xs font-medium capitalize ' +
+                'px-4 pt-3 pb-2 text-xs font-medium capitalize ' +
                 (tab === value
-                  ? 'border-primary text-foreground'
+                  ? 'border-b-2 border-primary text-foreground'
                   : 'border-transparent text-muted-foreground')
               }
             >
@@ -114,7 +114,7 @@ export function NodeDetailDialog({
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {tab === 'config' ? (
             <div className="space-y-5">
-              <div>
+              <div className='text-sm'>
                 <label htmlFor="node-detail-name" className="text-xs font-medium">
                   Name
                 </label>
@@ -151,13 +151,13 @@ export function NodeDetailDialog({
                   </label>
                 </div>
               </fieldset>
-              <div className="rounded-md border border-border bg-background p-3 text-[10px] leading-4 text-muted-foreground">
+              <div className="rounded-md border border-border bg-background p-3 text-xs leading-4 text-muted-foreground">
                 <Settings2 className="mr-2 inline size-3.5" />
                 Execution parameters remain available in the quick configuration drawer.
               </div>
             </div>
           ) : (
-            <div>
+            <div className='text-sm'>
               <label htmlFor="node-detail-description" className="text-xs font-medium">
                 Markdown description
               </label>
@@ -166,7 +166,7 @@ export function NodeDetailDialog({
                 value={description}
                 maxLength={20_000}
                 onChange={(event) => setDescription(event.target.value)}
-                className="mt-2 min-h-72 w-full resize-y rounded-md border border-border bg-background p-3 font-mono text-xs leading-5 outline-none focus:border-primary"
+                className="mt-2 min-h-60 w-full resize-y rounded-md border border-border bg-background p-3 font-mono leading-5 outline-none focus:border-primary"
                 placeholder="Record this node's purpose, assumptions, or operating instructions."
               />
               <p className="mt-1 text-right text-[10px] text-muted-foreground">
@@ -176,7 +176,7 @@ export function NodeDetailDialog({
           )}
         </div>
 
-        <footer className="flex items-center gap-2 border-t border-border px-5 py-3">
+        <footer className="flex items-center gap-2 border-t border-border px-5 py-3 text-sm">
           <Button
             variant="ghost"
             onClick={() => setDisabled((value) => !value)}

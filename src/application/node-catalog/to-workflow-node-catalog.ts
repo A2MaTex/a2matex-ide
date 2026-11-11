@@ -14,21 +14,29 @@ const CATEGORY_LABELS: Record<CatalogNodeDefinition['category'], string> = {
 };
 
 const START_NODE_TYPES = new Set(['flow.start', 'trigger.start']);
-const END_NODE_TYPES = new Set(['flow.end', 'trigger.end']);
+
+const NODE_ICONS: Record<string, string> = {
+  'flow.start': 'play',
+  'flow.end': 'square',
+  'flow.delay': 'timer',
+  'flow.switch': 'git-branch',
+  'flow.set_variable': 'variable',
+  'flow.wait_for_variable': 'hourglass',
+  'android.tap': 'mouse-pointer-click',
+  'android.input_text': 'keyboard',
+  'android.launch_app': 'smartphone',
+  'android.long_press': 'hand',
+  'android.press_back': 'arrow-left',
+  'android.press_home': 'house',
+  'android.screenshot': 'camera',
+  'android.swipe': 'move',
+  'utility.log': 'message-square-text',
+};
 
 const flowInput: PortDefinition = {
   name: 'in',
   label: 'In',
   direction: 'input',
-  kind: 'control',
-  valueType: 'flow',
-  cardinality: 'many',
-};
-
-const flowOutput: PortDefinition = {
-  name: 'out',
-  label: 'Out',
-  direction: 'output',
   kind: 'control',
   valueType: 'flow',
   cardinality: 'many',
@@ -40,6 +48,15 @@ function titleFromName(name: string) {
     .replace(/[_-]+/g, ' ')
     .replace(/^./, (character) => character.toUpperCase());
 }
+
+const flowOutput: PortDefinition = {
+  name: 'out',
+  label: 'Out',
+  direction: 'output',
+  kind: 'control',
+  valueType: 'flow',
+  cardinality: 'many',
+};
 
 function toProperty(
   name: string,
@@ -99,16 +116,9 @@ function toProperties(node: CatalogNodeDefinition): NodeDefinition['properties']
       ([name, schema]) => [name, schema, 'binding'] as const,
     ),
   ];
-  const fieldOrder = node.editorHints.fieldOrder;
   const properties = Object.fromEntries(
     schemas.flatMap(([name, schema, storage], index) => {
-      const configuredOrder = fieldOrder.indexOf(name);
-      const property = toProperty(
-        name,
-        schema,
-        configuredOrder >= 0 ? configuredOrder : index,
-        storage,
-      );
+      const property = toProperty(name, schema, index, storage);
       return property ? [[name, property]] : [];
     }),
   );
@@ -139,15 +149,21 @@ export function toWorkflowNodeCatalog(nodes: readonly CatalogNodeDefinition[]): 
     displayName: node.displayName,
     description: node.description,
     category: CATEGORY_LABELS[node.category],
-    icon: node.editorHints.icon,
+    icon: NODE_ICONS[node.type] ?? 'workflow',
     connectionInputs: START_NODE_TYPES.has(node.type) ? [] : [flowInput],
-    connectionOutputs: END_NODE_TYPES.has(node.type) ? [] : [flowOutput],
+    connectionOutputs: node.outputPorts.length > 0 ? [flowOutput] : [],
     inputVariables: toVariableSchema(node.inputSchema),
     outputVariables: toVariableSchema(node.outputSchema),
+    instanceInputSchema: structuredClone(node.inputSchema),
+    configSchema: structuredClone(node.configSchema),
+    ...(node.targeting ? { targeting: structuredClone(node.targeting) } : {}),
+    outputPortKeys: [...node.outputPorts],
     properties: toProperties(node),
-    requiredCapabilities: node.capabilities.map((capability) => capability.code),
+    requiredCapabilities: node.capabilities.map((capability) => ({ ...capability })),
     requiredPermissions: [],
     runtimeHandler: node.runtimeHandler,
-    supportedErrorPolicies: node.supportedErrorPolicies,
+    supportedErrorPolicies: node.outputPorts.includes('error')
+      ? ['STOP', 'ERROR_BRANCH']
+      : ['STOP'],
   }));
 }

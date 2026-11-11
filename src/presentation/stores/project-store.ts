@@ -34,6 +34,8 @@ import {
 import { editProjectWorkflow } from '@application/workflow/edit-workflow';
 import { addProjectWorkflow, type WorkflowKind } from '@application/workflow/manage-workflows';
 import type { ProjectDocument } from '@domain/project/project';
+import { migrateWorkflowNodeInputSchemas } from '@domain/project/workflow-input-schema-migration';
+import { migrateLegacyWorkflowOutputPorts } from '@domain/project/workflow-output-port-migration';
 import type { NodeDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 
@@ -58,6 +60,7 @@ export interface ProjectStoreState {
   error: string | null;
   localSaveError: string | null;
   localSaveStatus: LocalSaveStatus;
+  pendingNodeConfigurationId: string | null;
   undoStack: ProjectHistoryEntry[];
   redoStack: ProjectHistoryEntry[];
   nextRevision: number;
@@ -85,6 +88,11 @@ export interface ProjectStoreState {
     command: WorkflowCommand,
     catalog: readonly NodeDefinition[],
   ): boolean;
+  migrateCatalogGraph(catalog: readonly NodeDefinition[]): {
+    unresolvedEdgeIds: string[];
+    unresolvedNodeIds: string[];
+  };
+  setPendingNodeConfiguration(nodeId: string | null): void;
   undo(): void;
   redo(): void;
   clearCommandError(): void;
@@ -188,6 +196,10 @@ export function createProjectStore(
       }
     };
     const prepareForProjectChange = async () => {
+      if (get().pendingNodeConfigurationId) {
+        set({ error: 'Save or discard the pending node configuration first.' });
+        return false;
+      }
       if (!(await flushLocalSave())) return false;
       autosave.cancel();
       return true;
@@ -202,6 +214,7 @@ export function createProjectStore(
         error: null,
         localSaveError: null,
         localSaveStatus: 'saved-local',
+        pendingNodeConfigurationId: null,
       }));
     };
 
@@ -216,6 +229,7 @@ export function createProjectStore(
       error: null,
       localSaveError: null,
       localSaveStatus: 'saved-local',
+      pendingNodeConfigurationId: null,
       ...emptyHistory(null),
       async loadRecent() {
         set({ status: 'loading', error: null });
@@ -311,6 +325,10 @@ export function createProjectStore(
         }
       },
       async syncCloud() {
+        if (get().pendingNodeConfigurationId) {
+          set({ cloudError: 'Save or discard the pending node configuration before syncing.' });
+          return false;
+        }
         if (!options.cloud || !(await flushLocalSave())) return false;
         const startingSession = get().session;
         if (!startingSession) return false;
@@ -359,6 +377,10 @@ export function createProjectStore(
         }
       },
       async updateFromCloud() {
+        if (get().pendingNodeConfigurationId) {
+          set({ cloudError: 'Save or discard the pending node configuration first.' });
+          return false;
+        }
         if (!options.cloud || !(await flushLocalSave())) return false;
         const localId = get().session?.snapshot.localId;
         if (!localId) return false;
@@ -523,6 +545,12 @@ export function createProjectStore(
         set((state) => {
           if (!state.session) return state;
           try {
+            if (
+              command.type === 'node.commitConfiguration' &&
+              command.payload.baseRevision !== state.session.workingRevision
+            ) {
+              throw new Error('The node changed while its configuration form was open.');
+            }
             const document = editProjectWorkflow(
               state.session.snapshot.document,
               workflowPath,
@@ -542,6 +570,40 @@ export function createProjectStore(
         });
         if (applied) autosave.schedule();
         return applied;
+      },
+      migrateCatalogGraph(catalog) {
+        let changed = false;
+        let unresolvedNodeIds: string[] = [];
+        let unresolvedEdgeIds: string[] = [];
+        set((state) => {
+          if (!state.session) return state;
+          const nodeResult = migrateWorkflowNodeInputSchemas(
+            state.session.snapshot.document,
+            catalog,
+          );
+          const portResult = migrateLegacyWorkflowOutputPorts(nodeResult.document, catalog);
+          unresolvedNodeIds = nodeResult.unresolvedNodeIds;
+          unresolvedEdgeIds = portResult.unresolvedEdgeIds;
+          const reviewCount = unresolvedNodeIds.length + unresolvedEdgeIds.length;
+          const reviewError = reviewCount
+            ? `${reviewCount} legacy graph item(s) need review before execution.`
+            : null;
+          if (!nodeResult.changed && !portResult.changed) {
+            return reviewError === state.error ? state : { error: reviewError };
+          }
+          changed = true;
+          return {
+            ...commitDocument(state, portResult.document),
+            error: reviewError,
+            localSaveError: null,
+            localSaveStatus: 'dirty',
+          };
+        });
+        if (changed) autosave.schedule();
+        return { unresolvedEdgeIds, unresolvedNodeIds };
+      },
+      setPendingNodeConfiguration(pendingNodeConfigurationId) {
+        set({ pendingNodeConfigurationId });
       },
       undo() {
         let changed = false;
@@ -601,6 +663,7 @@ export function createProjectStore(
           error: null,
           localSaveError: null,
           localSaveStatus: 'saved-local',
+          pendingNodeConfigurationId: null,
           ...emptyHistory(null),
         });
       },

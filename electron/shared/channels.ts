@@ -1,6 +1,7 @@
 export const IPC_CHANNELS = {
   systemGetInfo: 'studio:system:get-info',
   systemOpenExternal: 'studio:system:open-external',
+  systemWriteClipboardText: 'studio:system:write-clipboard-text',
   systemQuit: 'studio:system:quit',
   onboardingGetState: 'studio:onboarding:get-state',
   onboardingGetPolicies: 'studio:onboarding:get-policies',

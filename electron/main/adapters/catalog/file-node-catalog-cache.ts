@@ -23,7 +23,7 @@ export class FileNodeCatalogCache implements NodeCatalogCache {
   private readonly directory: string;
 
   constructor(userDataPath: string) {
-    this.directory = path.join(userDataPath, 'catalog-cache-v3');
+    this.directory = path.join(userDataPath, 'catalog-cache-v4');
   }
 
   async read(scope: NodeCatalogScope): Promise<NodeCatalogSnapshot | null> {

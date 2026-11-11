@@ -58,8 +58,6 @@ export function toReactFlowEdges(
   return workflow.edges.map((edge) => ({
     id: edge.id,
     source: edge.sourceNodeId,
-    // The canvas exposes one structural handle per direction. Stored legacy port
-    // names remain intact until the edge is explicitly reconnected.
     sourceHandle: 'out',
     target: edge.targetNodeId,
     targetHandle: 'in',

@@ -22,7 +22,11 @@ import {
 
 import type { WorkflowDocument } from '@domain/project/project';
 import { findNodeDefinition } from '@domain/workflow/node-catalog';
-import { connectionOutputsFor, type NodeDefinition } from '@domain/workflow/node-definition';
+import {
+  connectionOutputsFor,
+  defaultLogicalOutputPortFor,
+  type NodeDefinition,
+} from '@domain/workflow/node-definition';
 import { assertValidConnection, type WorkflowCommand } from '@domain/workflow/workflow-commands';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import { useEditorStore } from '@presentation/stores/editor-store';
@@ -99,6 +103,15 @@ export function WorkflowCanvas({
     [selectedEdgeId, workflow],
   );
 
+  const logicalSourcePort = (sourceNodeId: string, sourceHandle: string) => {
+    if (sourceHandle !== 'out') return sourceHandle;
+    const sourceNode = workflow.nodes.find(({ id }) => id === sourceNodeId);
+    const definition = sourceNode
+      ? catalog.find(({ type }) => type === sourceNode.type)
+      : undefined;
+    return definition ? defaultLogicalOutputPortFor(definition) : undefined;
+  };
+
   useEffect(() => {
     if (workflow.nodes.length === 0) return;
     const frame = requestAnimationFrame(() => {
@@ -128,11 +141,13 @@ export function WorkflowCanvas({
     ) {
       return;
     }
+    const sourcePort = logicalSourcePort(connection.source, connection.sourceHandle);
+    if (!sourcePort) return;
     execute({
       type: 'edge.connect',
       payload: {
         edgeId: 'edge-' + crypto.randomUUID().slice(0, 8),
-        source: { nodeId: connection.source, port: connection.sourceHandle },
+        source: { nodeId: connection.source, port: sourcePort },
         target: { nodeId: connection.target, port: connection.targetHandle },
       },
     });
@@ -147,11 +162,17 @@ export function WorkflowCanvas({
     ) {
       return;
     }
+    const persistedEdge = workflow.edges.find(({ id }) => id === edge.id);
+    const sourcePort =
+      connection.sourceHandle === 'out' && persistedEdge?.sourceNodeId === connection.source
+        ? persistedEdge.sourcePort
+        : logicalSourcePort(connection.source, connection.sourceHandle);
+    if (!sourcePort) return;
     execute({
       type: 'edge.reconnect',
       payload: {
         edgeId: edge.id,
-        source: { nodeId: connection.source, port: connection.sourceHandle },
+        source: { nodeId: connection.source, port: sourcePort },
         target: { nodeId: connection.target, port: connection.targetHandle },
       },
     });
@@ -166,12 +187,14 @@ export function WorkflowCanvas({
     ) {
       return false;
     }
+    const sourcePort = logicalSourcePort(connection.source, connection.sourceHandle);
+    if (!sourcePort) return false;
     try {
       assertValidConnection(
         workflow,
         {
           id: 'connection-preview',
-          sourcePort: connection.sourceHandle,
+          sourcePort,
           sourceNodeId: connection.source,
           targetNodeId: connection.target,
         },
@@ -204,9 +227,11 @@ export function WorkflowCanvas({
     const point = clientPoint(event);
     const bounds = containerRef.current?.getBoundingClientRect();
     if (!point || !bounds || !state.fromHandle.id) return;
+    const sourcePort = logicalSourcePort(state.fromHandle.nodeId, state.fromHandle.id);
+    if (!sourcePort) return;
     setPendingConnection({
       sourceNodeId: state.fromHandle.nodeId,
-      sourcePort: state.fromHandle.id,
+      sourcePort,
       panelPosition: {
         x: Math.min(Math.max(8, point.x - bounds.left), Math.max(8, bounds.width - 296)),
         y: Math.min(Math.max(8, point.y - bounds.top), Math.max(8, bounds.height - 360)),
@@ -263,9 +288,7 @@ export function WorkflowCanvas({
     : undefined;
   const suggestionSourcePort =
     pendingConnection && suggestionSourceDefinition
-      ? connectionOutputsFor(suggestionSourceDefinition).find(
-          (port) => port.name === pendingConnection.sourcePort,
-        )
+      ? connectionOutputsFor(suggestionSourceDefinition)[0]
       : undefined;
 
   return (

@@ -9,6 +9,7 @@ import {
   type ProjectManifest,
   type WorkflowDocument,
 } from '@domain/project/project';
+import { emptyObjectValueSchema, objectValueSchema } from '@domain/schema/object-value-schema';
 
 const jsonValueSchema: z.ZodType<JsonValue> = z.lazy(() =>
   z.union([
@@ -89,6 +90,7 @@ const workflowNodeSchema = z
     description: z.string().max(20_000).optional(),
     disabled: z.boolean().optional(),
     config: z.record(z.string(), jsonValueSchema),
+    inputSchema: objectValueSchema,
     editor: z.object({ x: z.number().finite(), y: z.number().finite() }).strict(),
     bindings: z.record(
       z.string(),
@@ -163,6 +165,7 @@ function migrateLegacyWorkflow(input: unknown): unknown {
       ...(node.description ? { description: node.description } : {}),
       ...(node.disabled ? { disabled: true } : {}),
       config: {},
+      inputSchema: emptyObjectValueSchema(),
       editor: legacy.data.layout.nodes[node.id] ?? { x: 0, y: 0 },
       bindings: Object.fromEntries(
         Object.entries(node.params).map(([name, value]) => [name, { kind: 'constant', value }]),
@@ -179,8 +182,27 @@ function migrateLegacyWorkflow(input: unknown): unknown {
   };
 }
 
+function migrateMissingNodeInputSchemas(input: unknown): unknown {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) return input;
+  const nodes = Reflect.get(input, 'nodes');
+  if (!Array.isArray(nodes)) return input;
+  let changed = false;
+  const migratedNodes = nodes.map((node) => {
+    if (!node || typeof node !== 'object' || Array.isArray(node) || 'inputSchema' in node) {
+      return node;
+    }
+    changed = true;
+    return { ...node, inputSchema: emptyObjectValueSchema() };
+  });
+  return changed ? { ...input, nodes: migratedNodes } : input;
+}
+
+function migrateWorkflowDocument(input: unknown): unknown {
+  return migrateMissingNodeInputSchemas(migrateLegacyWorkflow(input));
+}
+
 export const workflowDocumentV1Schema: z.ZodType<WorkflowDocument> = z.preprocess(
-  migrateLegacyWorkflow,
+  migrateWorkflowDocument,
   z
     .object({
       schemaVersion: z.literal(CURRENT_WORKFLOW_SCHEMA_VERSION),

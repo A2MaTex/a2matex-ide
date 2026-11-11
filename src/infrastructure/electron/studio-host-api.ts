@@ -39,6 +39,7 @@ export interface StudioHostApi {
   system: {
     getInfo(): Promise<HostInfo>;
     openExternal(url: string): Promise<boolean>;
+    writeClipboardText(text: string): Promise<boolean>;
     quit(): Promise<void>;
   };
   onboarding: {

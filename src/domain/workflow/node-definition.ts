@@ -1,4 +1,5 @@
 import type { JsonValue } from '@shared/types/json-value';
+import type { ObjectValueSchema } from '@domain/schema/object-value-schema';
 
 export type ValueType =
   | 'flow'
@@ -49,6 +50,13 @@ export interface PropertySchema {
   properties: Record<string, PropertyDefinition>;
 }
 
+export interface RequiredCapability {
+  code: string;
+  name: string;
+  description: string;
+  isSensitive: boolean;
+}
+
 export interface NodeDefinition {
   type: string;
   version: number;
@@ -56,7 +64,6 @@ export interface NodeDefinition {
   description: string;
   category: string;
   icon: string;
-  /** Control-flow handles. These are not the node's input/output data variables. */
   connectionInputs?: PortDefinition[];
   connectionOutputs?: PortDefinition[];
   /** @deprecated Legacy aliases kept for older in-memory catalogs and tests. */
@@ -65,8 +72,14 @@ export interface NodeDefinition {
   outputs?: PortDefinition[];
   inputVariables?: PropertySchema;
   outputVariables?: PropertySchema;
+  instanceInputSchema?: ObjectValueSchema;
+  configSchema?: ObjectValueSchema;
+  targeting?: {
+    modes: Array<{ mode: string; bindingSchema: ObjectValueSchema }>;
+  };
+  outputPortKeys?: string[];
   properties: PropertySchema;
-  requiredCapabilities: string[];
+  requiredCapabilities: RequiredCapability[];
   requiredPermissions: string[];
   runtimeHandler: string;
   supportedErrorPolicies: Array<'ERROR_BRANCH' | 'STOP'>;
@@ -82,4 +95,13 @@ export function connectionInputsFor(definition: NodeDefinition): readonly PortDe
 
 export function connectionOutputsFor(definition: NodeDefinition): readonly PortDefinition[] {
   return definition.connectionOutputs ?? definition.outputs ?? [];
+}
+
+export function logicalOutputPortsFor(definition: NodeDefinition): readonly string[] {
+  return definition.outputPortKeys ?? connectionOutputsFor(definition).map(({ name }) => name);
+}
+
+export function defaultLogicalOutputPortFor(definition: NodeDefinition): string | undefined {
+  const ports = logicalOutputPortsFor(definition);
+  return ports.includes('success') ? 'success' : ports[0];
 }

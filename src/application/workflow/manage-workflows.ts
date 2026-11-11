@@ -3,6 +3,7 @@ import {
   type ProjectDocument,
   type WorkflowDocument,
 } from '@domain/project/project';
+import { emptyObjectValueSchema } from '@domain/schema/object-value-schema';
 
 export type WorkflowKind = 'flow' | 'subflow';
 
@@ -27,6 +28,7 @@ function emptyWorkflow(): WorkflowDocument {
         id: entryNodeId,
         type: 'flow.start',
         config: {},
+        inputSchema: emptyObjectValueSchema(),
         editor: { x: 100, y: 180 },
         bindings: {},
         errorPolicy: 'STOP',

@@ -7,6 +7,7 @@ const studioHost = {
   system: {
     getInfo: () => ipcRenderer.invoke('studio:system:get-info'),
     openExternal: (url) => ipcRenderer.invoke('studio:system:open-external', url),
+    writeClipboardText: (text) => ipcRenderer.invoke('studio:system:write-clipboard-text', text),
     quit: () => ipcRenderer.invoke('studio:system:quit'),
   },
   onboarding: {

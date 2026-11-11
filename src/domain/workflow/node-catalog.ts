@@ -1,4 +1,5 @@
 import type { NodeDefinition } from '@domain/workflow/node-definition';
+import { literalBinding } from '@domain/workflow/workflow-binding';
 import type { WorkflowBinding } from '@domain/project/project';
 import type { JsonValue } from '@shared/types/json-value';
 
@@ -19,7 +20,7 @@ export function defaultNodeValuesFor(definition: NodeDefinition): {
   for (const [name, property] of Object.entries(definition.properties.properties)) {
     if (property.default === undefined) continue;
     if (property.storage === 'config') config[name] = structuredClone(property.default);
-    else bindings[name] = { kind: 'constant', value: structuredClone(property.default) };
+    else bindings[name] = literalBinding(property.default);
   }
   return { bindings, config };
 }

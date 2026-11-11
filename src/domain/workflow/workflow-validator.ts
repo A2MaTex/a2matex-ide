@@ -1,15 +1,22 @@
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
 import {
+  fieldValueIsValid,
+  objectValueSchemasEqual,
+  validateObjectValue,
+} from '@domain/schema/object-value-schema';
+import {
   ANDROID_SELECTOR_V1_FORMAT,
   isAndroidSelectorV1,
 } from '@domain/android-inspector/android-selector';
 import {
   connectionInputsFor,
   connectionOutputsFor,
+  logicalOutputPortsFor,
   type NodeDefinition,
   type PropertyDefinition,
 } from '@domain/workflow/node-definition';
 import { canDisableNode } from '@domain/workflow/workflow-commands';
+import { isLiteralBinding } from '@domain/workflow/workflow-binding';
 
 export interface WorkflowIssue {
   id: string;
@@ -67,13 +74,71 @@ function validateNodeProperties(
   node: WorkflowNode,
   definition: NodeDefinition,
 ) {
+  if (definition.configSchema) {
+    const issues: WorkflowIssue[] = validateObjectValue(definition.configSchema, node.config).map(
+      (entry) =>
+        issue(
+          workflow,
+          entry.code === 'required' ? 'PROPERTY_REQUIRED' : 'PROPERTY_INVALID',
+          entry.message,
+          { nodeId: node.id, propertyPath: `config.${entry.field}` },
+        ),
+    );
+    for (const field of node.inputSchema.required) {
+      if (!node.bindings[field]) {
+        issues.push(
+          issue(workflow, 'PROPERTY_REQUIRED', `${field} is required`, {
+            nodeId: node.id,
+            propertyPath: `bindings.${field}`,
+          }),
+        );
+      }
+    }
+    for (const [field, binding] of Object.entries(node.bindings)) {
+      const property = node.inputSchema.properties[field];
+      if (!property) {
+        issues.push(
+          issue(workflow, 'PROPERTY_UNKNOWN', `${field} is not supported by the selected schema`, {
+            nodeId: node.id,
+            propertyPath: `bindings.${field}`,
+          }),
+        );
+      } else if (isLiteralBinding(binding) && !fieldValueIsValid(property, binding.value)) {
+        issues.push(
+          issue(workflow, 'PROPERTY_INVALID', `${field} has an invalid value`, {
+            nodeId: node.id,
+            propertyPath: `bindings.${field}`,
+          }),
+        );
+      }
+    }
+    if (definition.targeting) {
+      const targetMode = node.config.targetMode;
+      const selected =
+        typeof targetMode === 'string'
+          ? definition.targeting.modes.find(({ mode }) => mode === targetMode)
+          : undefined;
+      if (!selected || !objectValueSchemasEqual(selected.bindingSchema, node.inputSchema)) {
+        issues.push(
+          issue(
+            workflow,
+            'INPUT_SCHEMA_MODE_MISMATCH',
+            'The node input schema does not match its selected target mode',
+            { nodeId: node.id, propertyPath: 'inputSchema' },
+          ),
+        );
+      }
+    }
+    return issues;
+  }
+
   const issues: WorkflowIssue[] = [];
   for (const required of definition.properties.required ?? []) {
     const property = definition.properties.properties[required];
     const stored =
       property?.storage === 'config'
         ? node.config[required]
-        : node.bindings[required]?.kind === 'constant'
+        : isLiteralBinding(node.bindings[required])
           ? node.bindings[required].value
           : node.bindings[required];
     if (stored === undefined || stored === '') {
@@ -89,7 +154,7 @@ function validateNodeProperties(
     ...Object.entries(node.config).map(([name, value]) => [name, value, 'config'] as const),
     ...Object.entries(node.bindings).map(
       ([name, binding]) =>
-        [name, binding.kind === 'constant' ? binding.value : binding, 'binding'] as const,
+        [name, isLiteralBinding(binding) ? binding.value : binding, 'binding'] as const,
     ),
   ];
   for (const [name, value, storage] of values) {
@@ -136,14 +201,11 @@ function validateEdge(
   if (!sourceDefinition || !targetDefinition) return issues;
   const sourcePorts = connectionOutputsFor(sourceDefinition);
   const targetPorts = connectionInputsFor(targetDefinition);
-  // Older documents stored catalog branch names (for example success/error) as
-  // handle IDs. A single structural connector can safely adopt those edges.
   const output =
-    sourcePorts.find((port) => port.name === edge.sourcePort) ??
-    (sourcePorts.length === 1 ? sourcePorts[0] : undefined);
-  const input =
-    targetPorts.find((port) => port.name === (edge.targetPort ?? 'in')) ??
-    (targetPorts.length === 1 ? targetPorts[0] : undefined);
+    logicalOutputPortsFor(sourceDefinition).includes(edge.sourcePort) && sourcePorts[0]
+      ? { ...sourcePorts[0], name: edge.sourcePort }
+      : undefined;
+  const input = targetPorts.find((port) => port.name === (edge.targetPort ?? 'in'));
   if (!output || !input) {
     issues.push(
       issue(workflow, 'EDGE_PORT_MISSING', 'Connection references a missing port', {
@@ -282,6 +344,28 @@ export function validateWorkflow(
   for (const node of workflow.nodes) {
     const definition = definitions.get(node.id);
     if (!definition) continue;
+    const errorEdges = workflow.edges.filter(
+      (edge) => edge.sourceNodeId === node.id && edge.sourcePort === 'error',
+    );
+    if (!definition.supportedErrorPolicies.includes(node.errorPolicy)) {
+      issues.push(
+        issue(workflow, 'ERROR_POLICY_UNSUPPORTED', 'This node does not support its error policy', {
+          nodeId: node.id,
+        }),
+      );
+    } else if (node.errorPolicy === 'ERROR_BRANCH' && errorEdges.length === 0) {
+      issues.push(
+        issue(workflow, 'ERROR_ROUTE_REQUIRED', 'Error Branch requires an error connection', {
+          nodeId: node.id,
+        }),
+      );
+    } else if (node.errorPolicy === 'STOP' && errorEdges.length > 0) {
+      issues.push(
+        issue(workflow, 'ERROR_ROUTE_FORBIDDEN', 'STOP cannot have an outgoing error connection', {
+          nodeId: node.id,
+        }),
+      );
+    }
     for (const input of connectionInputsFor(definition).filter((port) => port.required)) {
       const incoming = workflow.edges.filter(
         (edge) => edge.targetNodeId === node.id && (edge.targetPort ?? 'in') === input.name,

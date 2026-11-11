@@ -93,6 +93,7 @@ export function MainWorkflowPage() {
   const redoStack = useProjectStore((state) => state.redoStack);
   const dirty = useProjectStore(projectStoreIsDirty);
   const localSaveStatus = useProjectStore((state) => state.localSaveStatus);
+  const pendingNodeConfigurationId = useProjectStore((state) => state.pendingNodeConfigurationId);
   const open = useProjectStore((state) => state.open);
   const flushLocalSave = useProjectStore((state) => state.flushLocalSave);
   const exportProject = useProjectStore((state) => state.exportProject);
@@ -104,6 +105,8 @@ export function MainWorkflowPage() {
   const close = useProjectStore((state) => state.close);
   const discard = useProjectStore((state) => state.discard);
   const executeWorkflowCommand = useProjectStore((state) => state.executeWorkflowCommand);
+  const migrateCatalogGraph = useProjectStore((state) => state.migrateCatalogGraph);
+  const setPendingNodeConfiguration = useProjectStore((state) => state.setPendingNodeConfiguration);
   const createWorkflow = useProjectStore((state) => state.createWorkflow);
   const undo = useProjectStore((state) => state.undo);
   const redo = useProjectStore((state) => state.redo);
@@ -139,7 +142,30 @@ export function MainWorkflowPage() {
   const nodePalettePanelRef = usePanelRef();
   const androidInspectorPanelRef = usePanelRef();
   const attemptedProjectId = useRef<string | null>(null);
-  useProjectCloseGuard(dirty, flushLocalSave);
+
+  const flushBeforeClose = useCallback(
+    () => (pendingNodeConfigurationId ? Promise.resolve(false) : flushLocalSave()),
+    [flushLocalSave, pendingNodeConfigurationId],
+  );
+  useProjectCloseGuard(dirty || Boolean(pendingNodeConfigurationId), flushBeforeClose);
+
+  const activateAndroidInspector = useCallback(() => {
+    if (!nodeConfigDrawerOpen) return true;
+    if (
+      pendingNodeConfigurationId &&
+      !window.confirm('Discard unsaved node configuration changes?')
+    ) {
+      return false;
+    }
+    setPendingNodeConfiguration(null);
+    closeNodeConfigDrawer();
+    return true;
+  }, [
+    closeNodeConfigDrawer,
+    nodeConfigDrawerOpen,
+    pendingNodeConfigurationId,
+    setPendingNodeConfiguration,
+  ]);
 
   useEffect(() => {
     if (!session && projectId && status === 'idle' && attemptedProjectId.current !== projectId) {
@@ -187,6 +213,13 @@ export function MainWorkflowPage() {
     const timer = window.setTimeout(() => void loadNodeCatalog(), 0);
     return () => window.clearTimeout(timer);
   }, [loadNodeCatalog]);
+
+  const activeProjectLocalId = session?.snapshot.localId;
+
+  useEffect(() => {
+    if (nodeCatalogStatus !== 'ready' || !activeProjectLocalId) return;
+    migrateCatalogGraph(nodeCatalog);
+  }, [activeProjectLocalId, migrateCatalogGraph, nodeCatalog, nodeCatalogStatus]);
 
   const document = session?.snapshot.document;
   const workflowPath =
@@ -813,8 +846,10 @@ export function MainWorkflowPage() {
                   open={nodeConfigDrawerOpen && Boolean(selectedNode)}
                   catalog={nodeCatalog}
                   node={selectedNode}
+                  revision={session.workingRevision}
                   issues={issues}
                   execute={execute}
+                  onPendingChange={setPendingNodeConfiguration}
                   onDuplicate={() => selectedNode && duplicateNode(selectedNode.id)}
                   onDelete={() => {
                     if (!selectedNode) return;
@@ -838,6 +873,7 @@ export function MainWorkflowPage() {
               <AndroidInspectorPanel
                 collapsed={androidInspectorCollapsed}
                 selectorTargets={androidSelectorTargets}
+                onActivate={activateAndroidInspector}
                 onCollapse={() => androidInspectorPanelRef.current?.collapse()}
                 onExpand={() => androidInspectorPanelRef.current?.expand()}
                 onUseSelector={(target, selector) =>

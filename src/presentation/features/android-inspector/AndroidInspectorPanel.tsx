@@ -9,7 +9,7 @@ import {
   ScanSearch,
   Smartphone,
 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 
 import type {
   AndroidDevice,
@@ -24,6 +24,7 @@ import {
 import { getInspectorCandidates } from '@domain/android-inspector/geometry';
 import { Button } from '@presentation/components/ui/button';
 import { ScreenshotViewport } from '@presentation/features/android-inspector/ScreenshotViewport';
+import { copyText } from '@infrastructure/clipboard/copy-text';
 
 type DeviceListState = 'idle' | 'loading' | 'ready' | 'error';
 type CaptureState = 'idle' | 'capturing' | 'ready' | 'stale' | 'error';
@@ -31,6 +32,7 @@ type CaptureState = 'idle' | 'capturing' | 'ready' | 'stale' | 'error';
 interface AndroidInspectorPanelProps {
   collapsed: boolean;
   selectorTargets?: readonly AndroidSelectorTarget[];
+  onActivate?(): boolean;
   onCollapse(): void;
   onExpand(): void;
   onUseSelector?(target: AndroidSelectorTarget, selector: AndroidSelectorV1): boolean;
@@ -51,11 +53,14 @@ function formatBounds(node: InspectorNode) {
   return `[${left},${top}][${right},${bottom}]`;
 }
 
-function DetailRow({ label, value }: { label: string; value: string }) {
+function DetailRow({ label, value, action }: { label: string; value: string; action?: ReactNode }) {
   return (
     <div className="grid grid-cols-[5.5rem_minmax(0,1fr)] gap-2 text-[10px] leading-4">
       <dt className="text-muted-foreground">{label}</dt>
-      <dd className="wrap-break-word font-mono text-foreground">{value || '—'}</dd>
+      <dd className="flex min-w-0 items-start gap-1 font-mono text-foreground">
+        <span className="wrap-break-word min-w-0">{value || '—'}</span>
+        {action}
+      </dd>
     </div>
   );
 }
@@ -63,6 +68,7 @@ function DetailRow({ label, value }: { label: string; value: string }) {
 export function AndroidInspectorPanel({
   collapsed,
   selectorTargets = [],
+  onActivate,
   onCollapse,
   onExpand,
   onUseSelector,
@@ -203,10 +209,10 @@ export function AndroidInspectorPanel({
 
   const copyResourceId = async () => {
     if (!selectedNode?.resourceId) return;
-    try {
-      await navigator.clipboard.writeText(selectedNode.resourceId);
+    if (await copyText(selectedNode.resourceId)) {
       setFeedback('resourceId');
-    } catch {
+      setError(null);
+    } else {
       setFeedback('none');
       setError('Unable to copy the resource ID to the clipboard.');
     }
@@ -214,10 +220,10 @@ export function AndroidInspectorPanel({
 
   const copySelector = async () => {
     if (!selector) return;
-    try {
-      await navigator.clipboard.writeText(JSON.stringify(selector, null, 2));
+    if (await copyText(JSON.stringify(selector, null, 2))) {
       setFeedback('selector');
-    } catch {
+      setError(null);
+    } else {
       setFeedback('none');
       setError('Unable to copy the Android selector to the clipboard.');
     }
@@ -238,7 +244,11 @@ export function AndroidInspectorPanel({
     return (
       <button
         type="button"
-        onClick={onExpand}
+        data-android-inspector-panel
+        onClick={() => {
+          if (onActivate?.() === false) return;
+          onExpand();
+        }}
         aria-label="Expand Android Inspector"
         title="Expand Android Inspector"
         className="flex h-full w-full flex-col items-center gap-2 bg-panel py-2 text-muted-foreground transition-colors hover:bg-accent/40 hover:text-foreground"
@@ -249,7 +259,16 @@ export function AndroidInspectorPanel({
   }
 
   return (
-    <section className="flex h-full min-h-0 flex-col bg-panel" aria-label="Android UI inspector">
+    <section
+      className="flex h-full min-h-0 flex-col bg-panel"
+      aria-label="Android UI inspector"
+      data-android-inspector-panel
+      onPointerDownCapture={(event) => {
+        if (onActivate?.() !== false) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+    >
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
         <ScanSearch className="size-3.5" />
         <span className="flex-1">Android Inspector</span>
@@ -327,7 +346,10 @@ export function AndroidInspectorPanel({
             onClick={() => void capture()}
             disabled={!selectedDevice?.usable || captureState === 'capturing'}
           >
-            <Camera /> <span className='text-sm'>{captureState === 'capturing' ? 'Inspecting…' : 'Inspect'}</span>
+            <Camera />{' '}
+            <span className="text-sm">
+              {captureState === 'capturing' ? 'Inspecting…' : 'Inspect'}
+            </span>
           </Button>
         </div>
 
@@ -426,7 +448,31 @@ export function AndroidInspectorPanel({
               <div className="space-y-2 border-t border-border pt-3 text-xs">
                 <dl className="space-y-1.5">
                   <DetailRow label="Package" value={selectedNode.packageName ?? ''} />
-                  <DetailRow label="Resource ID" value={selectedNode.resourceId ?? ''} />
+                  <DetailRow
+                    label="Resource ID"
+                    value={selectedNode.resourceId ?? ''}
+                    action={
+                      selectedNode.resourceId ? (
+                        <button
+                          type="button"
+                          onClick={() => void copyResourceId()}
+                          aria-label={
+                            feedback === 'resourceId' ? 'Copied resource ID' : 'Copy resource ID'
+                          }
+                          title={
+                            feedback === 'resourceId' ? 'Copied resource ID' : 'Copy resource ID'
+                          }
+                          className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+                        >
+                          {feedback === 'resourceId' ? (
+                            <Check className="size-3" />
+                          ) : (
+                            <Copy className="size-3" />
+                          )}
+                        </button>
+                      ) : null
+                    }
+                  />
                   <DetailRow label="Class" value={selectedNode.className} />
                   <DetailRow label="Text" value={selectedNode.text ?? ''} />
                   <DetailRow label="Content desc" value={selectedNode.contentDescription ?? ''} />
@@ -435,16 +481,6 @@ export function AndroidInspectorPanel({
                   <DetailRow label="Enabled" value={String(selectedNode.enabled)} />
                   <DetailRow label="Depth" value={String(selectedNode.depth)} />
                 </dl>
-                <Button
-                  className="w-full"
-                  size="sm"
-                  variant="secondary"
-                  onClick={() => void copyResourceId()}
-                  disabled={!selectedNode.resourceId}
-                >
-                  {feedback === 'resourceId' ? <Check /> : <Copy />}
-                  {feedback === 'resourceId' ? 'Copied resource ID' : 'Copy resource ID'}
-                </Button>
                 <Button
                   className="w-full"
                   size="sm"

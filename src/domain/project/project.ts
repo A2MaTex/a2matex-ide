@@ -1,4 +1,5 @@
 import type { JsonValue } from '@shared/types/json-value';
+import type { ObjectValueSchema } from '@domain/schema/object-value-schema';
 
 export const CURRENT_PROJECT_SCHEMA_VERSION = 1;
 export const CURRENT_WORKFLOW_SCHEMA_VERSION = 1;
@@ -47,6 +48,7 @@ export interface WorkflowNode {
   description?: string;
   disabled?: boolean;
   config: Record<string, JsonValue>;
+  inputSchema: ObjectValueSchema;
   editor: { x: number; y: number };
   bindings: Record<string, WorkflowBinding>;
   errorPolicy: 'ERROR_BRANCH' | 'STOP';

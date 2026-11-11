@@ -64,7 +64,7 @@ export function NodeHelpDialog({ target, definition, onClose }: NodeHelpDialogPr
               {definition?.displayName ?? target.type}
             </h2>
             <p className="font-mono text-[10px] text-muted-foreground">
-              {target.type}@{target.version}
+              {target.type}
               {definition ? ' · ' + definition.category : ''}
             </p>
           </div>
@@ -81,9 +81,7 @@ export function NodeHelpDialog({ target, definition, onClose }: NodeHelpDialogPr
 
         {definition ? (
           <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5 text-xs">
-            <p className="leading-5 text-muted-foreground">
-              {definition.description || ''}
-            </p>
+            <p className="leading-5 text-muted-foreground">{definition.description || ''}</p>
 
             <section>
               <h3 className="mb-2 font-semibold">Connection handles</h3>
@@ -152,11 +150,34 @@ export function NodeHelpDialog({ target, definition, onClose }: NodeHelpDialogPr
             definition.requiredPermissions.length > 0 ? (
               <section>
                 <h3 className="mb-2 font-semibold">Capabilities and permissions</h3>
-                <p className="text-muted-foreground">
-                  {[...definition.requiredCapabilities, ...definition.requiredPermissions].join(
-                    ', ',
-                  )}
-                </p>
+                <div className="space-y-2">
+                  {definition.requiredCapabilities.map((capability) => (
+                    <div key={capability.code} className="rounded-md bg-background p-3">
+                      <div className="flex justify-between items-center gap-2 font-medium">
+                        <span>{capability.name}</span>
+                        {capability.isSensitive ? (
+                          <span className="rounded bg-warning/15 px-1.5 py-0.5 text-[9px] uppercase text-warning">
+                            Sensitive
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="mt-2 font-mono text-[10px] text-muted-foreground">
+                        Code: {capability.code}
+                      </div>
+                      <p className="mt-1 text-xs leading-4 text-muted-foreground">
+                        {capability.description}
+                      </p>
+                    </div>
+                  ))}
+                  {definition.requiredPermissions.map((permission) => (
+                    <div key={permission} className="rounded-md bg-background p-3">
+                      <div className="font-medium">Permission</div>
+                      <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+                        {permission}
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </section>
             ) : null}
 

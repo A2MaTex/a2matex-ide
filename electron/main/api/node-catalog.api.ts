@@ -7,22 +7,15 @@ import {
   type RemoteCatalogResult,
 } from '@application/node-catalog/node-catalog';
 import {
+  catalogObjectSchema,
   catalogNodeDefinitionSchema,
+  catalogTargetingSchema,
   DEFAULT_NODE_CATALOG_RUNTIME_VERSION,
   type CatalogNodeDefinition,
 } from '@domain/node-catalog/node-catalog';
 import request from '@electron/main/api/request';
 
 const MAX_CATALOG_BYTES = 2 * 1024 * 1024;
-
-const objectSchema = z
-  .object({
-    type: z.literal('object'),
-    properties: z.record(z.string(), z.record(z.string(), z.json())),
-    required: z.array(z.string()),
-    additionalProperties: z.literal(false),
-  })
-  .strict();
 
 const remoteNodeSchema = z
   .object({
@@ -33,30 +26,18 @@ const remoteNodeSchema = z
     runtimeHandler: z.string(),
     minimumRuntimeVersion: z.string(),
     defaultTimeoutMs: z.number(),
-    configSchema: objectSchema,
-    inputSchema: objectSchema,
-    outputSchema: objectSchema,
+    configSchema: catalogObjectSchema,
+    inputSchema: catalogObjectSchema,
+    outputSchema: catalogObjectSchema,
     outputPorts: z
       .object({
-        ports: z.array(
-          z
-            .object({
-              key: z.enum(['success', 'error', 'true', 'false', 'body', 'completed']),
-              kind: z.enum(['CONTROL', 'ERROR']),
-              label: z.string(),
-            })
-            .strict(),
-        ),
+        ports: z.array(z.string().min(1).max(64)).max(100),
       })
       .strict(),
     editorHints: z
       .object({
-        icon: z.string(),
-        fieldOrder: z.array(z.string()),
+        targeting: catalogTargetingSchema.optional(),
       })
-      .strict(),
-    supportedErrorPolicies: z
-      .object({ supported: z.array(z.enum(['STOP', 'ERROR_BRANCH'])) })
       .strict(),
     capabilities: z.array(
       z
@@ -72,26 +53,17 @@ const remoteNodeSchema = z
   .strict();
 
 const responseSchema = z
-  .union([
-    z
+  .object({
+    data: z
       .object({
         catalogHash: z.string().regex(/^[0-9a-f]{64}$/),
         nodes: z.array(remoteNodeSchema).max(500),
       })
       .strict(),
-    z
-      .object({
-        data: z
-          .object({
-            catalogHash: z.string().regex(/^[0-9a-f]{64}$/),
-            nodes: z.array(remoteNodeSchema).max(500),
-          })
-          .strict(),
-        statusCode: z.number().int(),
-      })
-      .strict(),
-  ])
-  .transform((response) => ('data' in response ? response.data : response));
+    statusCode: z.literal(200),
+  })
+  .strict()
+  .transform((response) => response.data);
 
 function normalizeNode(node: z.infer<typeof remoteNodeSchema>): CatalogNodeDefinition {
   return {
@@ -106,9 +78,19 @@ function normalizeNode(node: z.infer<typeof remoteNodeSchema>): CatalogNodeDefin
     inputSchema: node.inputSchema,
     outputSchema: node.outputSchema,
     outputPorts: node.outputPorts.ports,
-    editorHints: node.editorHints,
-    supportedErrorPolicies: node.supportedErrorPolicies.supported,
+    ...(node.editorHints.targeting ? { targeting: node.editorHints.targeting } : {}),
     capabilities: node.capabilities,
+  };
+}
+
+export function parseNodeCatalogResponse(input: unknown): {
+  catalogHash: string;
+  nodes: CatalogNodeDefinition[];
+} {
+  const response = responseSchema.parse(input);
+  return {
+    catalogHash: response.catalogHash,
+    nodes: z.array(catalogNodeDefinitionSchema).max(500).parse(response.nodes.map(normalizeNode)),
   };
 }
 
@@ -141,14 +123,13 @@ export async function getNodeCatalog(input: GetNodeCatalogInput): Promise<Remote
       );
     }
 
-    const parsed = responseSchema.safeParse(response.data);
-    const nodes = parsed.success
-      ? z
-          .array(catalogNodeDefinitionSchema)
-          .max(500)
-          .safeParse(parsed.data.nodes.map(normalizeNode))
-      : null;
-    if (!parsed.success || !nodes?.success) {
+    let parsed: ReturnType<typeof parseNodeCatalogResponse> | null = null;
+    try {
+      parsed = parseNodeCatalogResponse(response.data);
+    } catch {
+      // Convert parser details into the stable, payload-safe application error below.
+    }
+    if (!parsed) {
       throw new NodeCatalogError(
         'CATALOG_INVALID_RESPONSE',
         'The node catalog response is invalid.',
@@ -156,7 +137,7 @@ export async function getNodeCatalog(input: GetNodeCatalogInput): Promise<Remote
       );
     }
 
-    return { status: 'modified', catalogHash: parsed.data.catalogHash, nodes: nodes.data };
+    return { status: 'modified', catalogHash: parsed.catalogHash, nodes: parsed.nodes };
   } catch (error) {
     if (error instanceof NodeCatalogError) throw error;
 

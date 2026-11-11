@@ -6,18 +6,20 @@ import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import { cn } from '@shared/utils/cn';
 
-import { NodeInspector } from '@presentation/features/workflow-editor/NodeInspector';
+import { NodeConfigurationInspector } from '@presentation/features/workflow-editor/NodeConfigurationInspector';
 import { useEditorStore } from '@presentation/stores/editor-store';
 
 interface NodeConfigDrawerProps {
   open: boolean;
   catalog: readonly NodeDefinition[];
   node: WorkflowNode | null;
+  revision: number;
   issues: WorkflowIssue[];
   execute(command: WorkflowCommand): boolean;
   onDuplicate(): void;
   onDelete(): void;
   onClose(): void;
+  onPendingChange(nodeId: string | null): void;
 }
 
 function returnFocusToNode(nodeId: string | undefined) {
@@ -39,27 +41,49 @@ export function NodeConfigDrawer({
   open,
   catalog,
   node,
+  revision,
   issues,
   execute,
   onDuplicate,
   onDelete,
   onClose,
+  onPendingChange,
 }: NodeConfigDrawerProps) {
   const helpTarget = useEditorStore((state) => state.helpTarget);
   const drawerRef = useRef<HTMLElement>(null);
+  const dirtyNodeIdRef = useRef<string | null>(null);
   const nodeId = node?.id;
   const close = useCallback(() => {
+    if (dirtyNodeIdRef.current && !window.confirm('Discard unsaved node configuration changes?')) {
+      return false;
+    }
+    dirtyNodeIdRef.current = null;
+    onPendingChange(null);
     onClose();
     scheduleFocusReturn(nodeId);
-  }, [nodeId, onClose]);
+    return true;
+  }, [nodeId, onClose, onPendingChange]);
+
+  const setPending = useCallback(
+    (pendingNodeId: string | null) => {
+      dirtyNodeIdRef.current = pendingNodeId;
+      onPendingChange(pendingNodeId);
+    },
+    [onPendingChange],
+  );
 
   useEffect(() => {
     if (!open) return;
 
     const handlePointerDown = (event: PointerEvent) => {
       if (helpTarget) return;
-      if (drawerRef.current?.contains(event.target as globalThis.Node)) return;
-      close();
+      const target = event.target;
+      if (drawerRef.current?.contains(target as globalThis.Node)) return;
+      if (target instanceof Element && target.closest('[data-android-inspector-panel]')) return;
+      if (!close()) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+      }
     };
     const handleKeyDown = (event: KeyboardEvent) => {
       if (helpTarget) return;
@@ -77,6 +101,8 @@ export function NodeConfigDrawer({
     };
   }, [close, helpTarget, open]);
 
+  useEffect(() => () => onPendingChange(null), [onPendingChange]);
+
   return (
     <aside
       ref={drawerRef}
@@ -88,15 +114,19 @@ export function NodeConfigDrawer({
         open ? 'translate-x-0' : 'pointer-events-none translate-x-full',
       )}
     >
-      <NodeInspector
-        catalog={catalog}
-        node={node}
-        issues={issues}
-        execute={execute}
-        onDuplicate={onDuplicate}
-        onDelete={onDelete}
-        onClose={close}
-      />
+      {open ? (
+        <NodeConfigurationInspector
+          catalog={catalog}
+          node={node}
+          revision={revision}
+          issues={issues}
+          execute={execute}
+          onDirtyChange={setPending}
+          onDuplicate={onDuplicate}
+          onDelete={onDelete}
+          onClose={close}
+        />
+      ) : null}
     </aside>
   );
 }
