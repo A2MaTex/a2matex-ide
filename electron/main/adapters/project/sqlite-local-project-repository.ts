@@ -15,7 +15,7 @@ import {
   type SaveLocalProjectInput,
 } from '@application/project/local-project-repository';
 import type { ProjectDocument } from '@domain/project/project';
-import { projectDocumentSchema } from '@domain/project/project-schema';
+import { encodeWorkflowDocument, projectDocumentSchema } from '@domain/project/project-schema';
 import {
   LOCAL_PROJECT_NAME_NORMALIZATION_VERSION,
   normalizeProjectName,
@@ -222,7 +222,7 @@ function writeWorkflows(
       localId,
       workflowPath,
       workflow.schemaVersion,
-      serializeJson(workflow),
+      serializeJson(encodeWorkflowDocument(workflow)),
       timestamp,
       timestamp,
     );

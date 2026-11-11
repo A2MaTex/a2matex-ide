@@ -9,7 +9,7 @@ import type {
   JsonObject,
 } from '@application/project/project-cloud';
 import { createEmptyProjectDocument } from '@domain/project/project-factory';
-import { projectDocumentSchema } from '@domain/project/project-schema';
+import { encodeWorkflowDocument, projectDocumentSchema } from '@domain/project/project-schema';
 import type { ProjectDocument } from '@domain/project/project';
 import type { JsonValue } from '@shared/types/json-value';
 
@@ -61,7 +61,7 @@ export function createCloudDraftPayload(
   }
   return {
     expectedVersion,
-    editorGraph: copyAsJsonObject(workflow, 'editorGraph'),
+    editorGraph: copyAsJsonObject(encodeWorkflowDocument(workflow), 'editorGraph'),
     inputSchema: jsonObject(draftState.inputSchema, 'inputSchema'),
     runtimeIr: draftState.runtimeIr === null ? null : jsonObject(draftState.runtimeIr, 'runtimeIr'),
     validationSummary: jsonObject(draftState.validationSummary, 'validationSummary'),

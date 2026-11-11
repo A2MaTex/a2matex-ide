@@ -108,7 +108,7 @@ export const nodeCatalogScopeSchema = z
 
 export const nodeCatalogSnapshotSchema = z
   .object({
-    schemaVersion: z.literal(2),
+    schemaVersion: z.literal(1),
     scope: nodeCatalogScopeSchema,
     catalogHash: z.string().regex(/^[0-9a-f]{64}$/),
     fetchedAt: z.string().min(1),
