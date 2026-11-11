@@ -6,6 +6,7 @@ import {
   CloudUpload,
   Copy,
   Folder,
+  ListChecks,
   Network,
   Plus,
   Redo2,
@@ -45,6 +46,7 @@ import {
   type WorkflowAction,
 } from '@presentation/features/workflow-editor/WorkflowActionList';
 import { WorkflowExplorer } from '@presentation/features/workflow-editor/WorkflowExplorer';
+import { useWorkflowValidation } from '@presentation/features/workflow-editor/useWorkflowValidation';
 import { useEditorStore } from '@presentation/stores/editor-store';
 import { projectStoreIsDirty } from '@presentation/stores/project-store';
 
@@ -239,6 +241,11 @@ export function MainWorkflowPage() {
         : [],
     [nodeCatalog, nodeCatalogStatus, permissionIds, workflow],
   );
+  const {
+    state: workflowValidation,
+    validate: validateActiveWorkflow,
+    busy: workflowValidationBusy,
+  } = useWorkflowValidation(workflowPath);
   const execute = useCallback(
     (command: WorkflowCommand) =>
       workflowPath ? executeWorkflowCommand(workflowPath, command, nodeCatalog) : false,
@@ -584,6 +591,13 @@ export function MainWorkflowPage() {
       icon: SaveAll,
       run: () => void exportProject(),
     },
+    {
+      id: 'validate-workflow',
+      label: 'Validate saved workflow',
+      icon: ListChecks,
+      disabled: workflowValidationBusy,
+      run: () => void validateActiveWorkflow(),
+    },
   ];
 
   return (
@@ -660,6 +674,20 @@ export function MainWorkflowPage() {
             disabled={saving || !dirty}
           >
             <Save /> {saving ? 'Saving…' : 'Save'}
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={() => void validateActiveWorkflow()}
+            disabled={workflowValidationBusy}
+            title="Save locally, then validate this workflow on the server"
+          >
+            <ListChecks />
+            {workflowValidation.phase === 'saving'
+              ? 'Saving…'
+              : workflowValidation.phase === 'validating'
+                ? 'Validating…'
+                : 'Validate'}
           </Button>
           <Button size="sm" variant="ghost" disabled title="Runtime integration begins in Phase 4">
             <CirclePlay /> Run
@@ -902,6 +930,8 @@ export function MainWorkflowPage() {
             issues={issues}
             revision={session.workingRevision}
             savedRevision={session.savedRevision}
+            validation={workflowValidation}
+            onValidate={() => void validateActiveWorkflow()}
           />
         </Panel>
       </Group>

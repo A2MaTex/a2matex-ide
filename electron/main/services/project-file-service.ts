@@ -12,7 +12,7 @@ import {
   parseWorkflowDocument,
   ProjectFormatError,
 } from '@domain/project/project-migration';
-import { projectDocumentSchema } from '@domain/project/project-schema';
+import { encodeWorkflowDocument, projectDocumentSchema } from '@domain/project/project-schema';
 import {
   type ArchiveLocation,
   LocationGrantError,
@@ -97,7 +97,10 @@ async function writeDocument(root: string, document: ProjectDocument) {
   }
 
   for (const workflowPath of parsed.manifest.workflows) {
-    await atomicWriteJson(resolveInside(root, workflowPath), parsed.workflows[workflowPath]);
+    await atomicWriteJson(
+      resolveInside(root, workflowPath),
+      encodeWorkflowDocument(parsed.workflows[workflowPath]),
+    );
   }
   await atomicWriteJson(resolveInside(root, PROJECT_MANIFEST_FILE), parsed.manifest);
 }

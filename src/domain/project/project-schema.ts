@@ -8,6 +8,8 @@ import {
   type ProjectDocument,
   type ProjectManifest,
   type WorkflowDocument,
+  type WorkflowEdge,
+  type WorkflowNode,
 } from '@domain/project/project';
 import { emptyObjectValueSchema, objectValueSchema } from '@domain/schema/object-value-schema';
 
@@ -212,6 +214,41 @@ export const workflowDocumentV1Schema: z.ZodType<WorkflowDocument> = z.preproces
     })
     .strict(),
 ) as z.ZodType<WorkflowDocument>;
+
+export interface PersistedWorkflowDocument {
+  schemaVersion: WorkflowDocument['schemaVersion'];
+  entryNodeId: string;
+  nodes: Array<Omit<WorkflowNode, 'inputSchema'>>;
+  edges: Array<Omit<WorkflowEdge, 'targetPort'>>;
+}
+
+export function encodeWorkflowDocument(workflow: WorkflowDocument): PersistedWorkflowDocument {
+  return {
+    schemaVersion: workflow.schemaVersion,
+    entryNodeId: workflow.entryNodeId,
+    nodes: workflow.nodes.map((node) => ({
+      id: node.id,
+      type: node.type,
+      config: node.config,
+      editor: node.editor,
+      bindings: node.bindings,
+      errorPolicy: node.errorPolicy,
+    })),
+    edges: workflow.edges.map((edge) => {
+      if (edge.targetPort !== undefined && edge.targetPort !== 'in') {
+        throw new TypeError(
+          `Workflow edge ${edge.id} uses non-default target port '${edge.targetPort}'`,
+        );
+      }
+      return {
+        id: edge.id,
+        sourcePort: edge.sourcePort,
+        sourceNodeId: edge.sourceNodeId,
+        targetNodeId: edge.targetNodeId,
+      };
+    }),
+  };
+}
 
 export const projectDocumentSchema: z.ZodType<ProjectDocument> = z
   .object({

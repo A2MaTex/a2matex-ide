@@ -15,6 +15,7 @@ export const IPC_CHANNELS = {
   authSessionChanged: 'studio:auth:session-changed',
   catalogLoad: 'studio:catalog:load',
   catalogRefresh: 'studio:catalog:refresh',
+  workflowValidationValidate: 'studio:workflow-validation:validate',
   cloudProjectLoad: 'studio:cloud-project:load',
   cloudProjectOpen: 'studio:cloud-project:open',
   cloudProjectRefresh: 'studio:cloud-project:refresh',
