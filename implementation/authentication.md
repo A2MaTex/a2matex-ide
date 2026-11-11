@@ -107,13 +107,13 @@ Logout requires a valid access token and revokes only the account's current sess
 
 ## 3. Token Storage
 
-| Data | Location | Lifetime |
-| --- | --- | --- |
-| Password | Temporary login form state | Cleared immediately after submission |
-| Access token | Electron main process RAM | Until logout/application shutdown |
-| Refresh token | File encrypted using Electron `safeStorage` | Across application restarts |
-| UI session | React `AuthProvider`, without tokens | Renderer lifecycle |
-| Credential | `<userData>/credentials/auth-session.json` | Until logout/token invalidation |
+| Data          | Location                                    | Lifetime                             |
+| ------------- | ------------------------------------------- | ------------------------------------ |
+| Password      | Temporary login form state                  | Cleared immediately after submission |
+| Access token  | Electron main process RAM                   | Until logout/application shutdown    |
+| Refresh token | File encrypted using Electron `safeStorage` | Across application restarts          |
+| UI session    | React `AuthProvider`, without tokens        | Renderer lifecycle                   |
+| Credential    | `<userData>/credentials/auth-session.json`  | Until logout/token invalidation      |
 
 Do not store tokens in `localStorage`, `sessionStorage`, Zustand, project files, catalog caches, logs, or diagnostics.
 
@@ -240,17 +240,17 @@ Local cleanup must run in a `finally` block so that an API logout failure cannot
 
 ## 8. Error Handling
 
-| Scenario | Client Behavior |
-| --- | --- |
-| Incorrect account/password | Display an error; do not store credentials |
-| Login response missing tokens | Report an invalid response; do not create a session |
-| Access token reaches `exp` | Silently refresh; do not display an error or redirect to login |
-| Refresh token invalid/expired/revoked | Clear credentials and transition to `signed-out` |
-| Refresh timeout or network failure | Preserve credentials and wait for retry/offline recovery |
-| Refresh API returns 5xx | Preserve credentials; do not force login |
-| Writing the new refresh token fails | Do not confirm a persistent session |
-| Logout API fails | Still clear local tokens and session |
-| Business API returns 401 | Silently refresh and retry at most once |
+| Scenario                              | Client Behavior                                                |
+| ------------------------------------- | -------------------------------------------------------------- |
+| Incorrect account/password            | Display an error; do not store credentials                     |
+| Login response missing tokens         | Report an invalid response; do not create a session            |
+| Access token reaches `exp`            | Silently refresh; do not display an error or redirect to login |
+| Refresh token invalid/expired/revoked | Clear credentials and transition to `signed-out`               |
+| Refresh timeout or network failure    | Preserve credentials and wait for retry/offline recovery       |
+| Refresh API returns 5xx               | Preserve credentials; do not force login                       |
+| Writing the new refresh token fails   | Do not confirm a persistent session                            |
+| Logout API fails                      | Still clear local tokens and session                           |
+| Business API returns 401              | Silently refresh and retry at most once                        |
 
 ## 9. Security Boundaries
 
@@ -265,17 +265,17 @@ Local cleanup must run in a `finally` block so that an API logout failure cannot
 
 ## 10. Codebase Mapping
 
-| Responsibility | File/Module |
-| --- | --- |
-| Login form and navigation | `src/presentation/pages/LoginPage.tsx` |
-| React session state | `src/presentation/features/auth/AuthProvider.tsx` |
-| Renderer auth client | `src/infrastructure/electron/host-auth-client.ts` |
-| Preload IPC bridge | `electron/preload/index.cts` |
-| Main IPC handlers | `electron/main/ipc/register-auth-handlers.ts` |
-| Login/restore/logout use case | `src/application/auth/auth-session.ts` |
-| HTTP auth adapter | `electron/main/api/auth.api.ts` |
-| Secure refresh-token storage | `electron/main/adapters/auth/secure-refresh-token-vault.ts` |
-| Auth composition | `electron/main/auth/create-auth-session-service.ts` |
+| Responsibility                | File/Module                                                 |
+| ----------------------------- | ----------------------------------------------------------- |
+| Login form and navigation     | `src/presentation/pages/LoginPage.tsx`                      |
+| React session state           | `src/presentation/features/auth/AuthProvider.tsx`           |
+| Renderer auth client          | `src/infrastructure/electron/host-auth-client.ts`           |
+| Preload IPC bridge            | `electron/preload/index.cts`                                |
+| Main IPC handlers             | `electron/main/ipc/register-auth-handlers.ts`               |
+| Login/restore/logout use case | `src/application/auth/auth-session.ts`                      |
+| HTTP auth adapter             | `electron/main/api/auth.api.ts`                             |
+| Secure refresh-token storage  | `electron/main/adapters/auth/secure-refresh-token-vault.ts` |
+| Auth composition              | `electron/main/auth/create-auth-session-service.ts`         |
 
 ## 11. Acceptance Scenarios
 

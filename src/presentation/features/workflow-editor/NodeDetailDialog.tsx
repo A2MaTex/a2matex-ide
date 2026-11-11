@@ -76,9 +76,7 @@ export function NodeDetailDialog({
             <h2 id="node-detail-title" className="truncate text-base font-semibold">
               {name.trim() || definition.displayName}
             </h2>
-            <p className="font-mono text-[10px] text-muted-foreground">
-              {definition.type}
-            </p>
+            <p className="font-mono text-[10px] text-muted-foreground">{definition.type}</p>
           </div>
           <Button size="sm" variant="ghost" onClick={onHelp}>
             <HelpCircle /> Help
@@ -114,7 +112,7 @@ export function NodeDetailDialog({
         <div className="min-h-0 flex-1 overflow-y-auto p-5">
           {tab === 'config' ? (
             <div className="space-y-5">
-              <div className='text-sm'>
+              <div className="text-sm">
                 <label htmlFor="node-detail-name" className="text-xs font-medium">
                   Name
                 </label>
@@ -157,7 +155,7 @@ export function NodeDetailDialog({
               </div>
             </div>
           ) : (
-            <div className='text-sm'>
+            <div className="text-sm">
               <label htmlFor="node-detail-description" className="text-xs font-medium">
                 Markdown description
               </label>

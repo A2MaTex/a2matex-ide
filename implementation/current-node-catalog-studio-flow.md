@@ -245,12 +245,12 @@ interface CatalogNodeDefinition {
 
 Mapping:
 
-| Remote response | Studio domain |
-|---|---|
-| `name` | `displayName` |
-| `outputPorts.ports` | `outputPorts` |
-| `editorHints.targeting` | `targeting` |
-| `capabilities` | giữ metadata trong catalog snapshot |
+| Remote response         | Studio domain                       |
+| ----------------------- | ----------------------------------- |
+| `name`                  | `displayName`                       |
+| `outputPorts.ports`     | `outputPorts`                       |
+| `editorHints.targeting` | `targeting`                         |
+| `capabilities`          | giữ metadata trong catalog snapshot |
 
 Studio-owned presentation metadata:
 
@@ -720,9 +720,9 @@ thành:
 
 Other executable mappings:
 
-| Editor Graph binding | Runtime IR input |
-|---|---|
-| `{ "kind": "WORKFLOW_INPUT", "inputName": "name" }` | `{ "source": "WORKFLOW_INPUT", "inputName": "name" }` |
+| Editor Graph binding                                                    | Runtime IR input                                                          |
+| ----------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `{ "kind": "WORKFLOW_INPUT", "inputName": "name" }`                     | `{ "source": "WORKFLOW_INPUT", "inputName": "name" }`                     |
 | `{ "kind": "NODE_OUTPUT", "nodeId": "capture", "field": "artifactId" }` | `{ "source": "NODE_OUTPUT", "nodeId": "capture", "field": "artifactId" }` |
 
 Không invent Runtime IR mapping cho `FLOW_VARIABLE` hoặc `GLOBAL_VARIABLE` đến
@@ -917,17 +917,17 @@ Node Catalog response trong task này:
 
 ### Tổng quan dependency
 
-| Phase | Kết quả chính | Phụ thuộc |
-|---|---|---|
-| 0 | Contract và fixtures được khóa | Không |
-| 1 | Studio đọc được Catalog response mới | Phase 0 |
-| 2 | Editor Graph persist được `node.inputSchema` | Phase 0–1 |
-| 3 | Output handles và branch edges dùng đúng port keys | Phase 1–2 |
-| 4 | Pending form, mode switching và atomic Save | Phase 1–2 |
-| 5 | Autosave SQLite chỉ persist committed graph | Phase 4 |
-| 6 | Sync gửi đúng committed SQLite snapshot | Phase 2, 3, 5 |
-| 7 | Validation và Runtime IR dùng contract mới | Phase 2–6 |
-| 8 | E2E, migration rollout và dọn legacy | Phase 1–7 |
+| Phase | Kết quả chính                                      | Phụ thuộc     |
+| ----- | -------------------------------------------------- | ------------- |
+| 0     | Contract và fixtures được khóa                     | Không         |
+| 1     | Studio đọc được Catalog response mới               | Phase 0       |
+| 2     | Editor Graph persist được `node.inputSchema`       | Phase 0–1     |
+| 3     | Output handles và branch edges dùng đúng port keys | Phase 1–2     |
+| 4     | Pending form, mode switching và atomic Save        | Phase 1–2     |
+| 5     | Autosave SQLite chỉ persist committed graph        | Phase 4       |
+| 6     | Sync gửi đúng committed SQLite snapshot            | Phase 2, 3, 5 |
+| 7     | Validation và Runtime IR dùng contract mới         | Phase 2–6     |
+| 8     | E2E, migration rollout và dọn legacy               | Phase 1–7     |
 
 ### Phase 0 — Contract lock và fixture chuẩn
 
@@ -1206,14 +1206,14 @@ Run chỉ vì Phase 4 UI đã hoạt động.
 
 ## 24. Trạng thái triển khai hiện tại
 
-| Phase | Trạng thái | Ghi chú |
-|---|---|---|
-| 0 | Studio-side complete, external gate pending | Đã lưu exact attached response fixture và khóa parser invariants. Binding discriminator casing cùng Backend/Runtime strict-decoder support vẫn cần contract owner xác nhận. |
-| 1 | Complete trong Studio | Remote parser/domain normalization đã theo response hiện tại; cache snapshot là schema v2 trong directory v4. |
-| 2 | Complete trong Studio, external gate pending | `WorkflowNode.inputSchema`, strict local decode, node factories, atomic command, Catalog-aware legacy migration, undo/autosave, SQLite và Cloud graph round-trip đã được cập nhật. Backend/Runtime acceptance vẫn là rollout gate. |
-| 3 | Complete cho static Catalog ports | Canvas dùng một structural `in`/`out` handle với fan-in/fan-out không giới hạn; edge commands, validation và migration vẫn giữ exact logical port keys. Switch dynamic rule/default ports cần specialized persisted-rule contract. |
-| 4 | Complete cho generic Catalog editor | Pending form local, target-mode schema replacement, constraint validation, stale revision guard, Cancel và atomic Save đã được triển khai. Specialized Set Variable/Switch editors vẫn là execution gate riêng. |
-| 5 | Complete | Pending form không schedule autosave; successful atomic Save dùng coordinator 3 giây, revision-safe write, retry và flush flow hiện tại. |
-| 6 | Complete trong Studio, external gate pending | Dirty pending form block Sync; Sync flush local rồi Cloud service đọc SQLite snapshot. Per-node schema và exact branch ports được giữ trong payload. Backend decoder acceptance vẫn là rollout gate. |
+| Phase | Trạng thái                                   | Ghi chú                                                                                                                                                                                                                            |
+| ----- | -------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0     | Studio-side complete, external gate pending  | Đã lưu exact attached response fixture và khóa parser invariants. Binding discriminator casing cùng Backend/Runtime strict-decoder support vẫn cần contract owner xác nhận.                                                        |
+| 1     | Complete trong Studio                        | Remote parser/domain normalization đã theo response hiện tại; cache snapshot là schema v2 trong directory v4.                                                                                                                      |
+| 2     | Complete trong Studio, external gate pending | `WorkflowNode.inputSchema`, strict local decode, node factories, atomic command, Catalog-aware legacy migration, undo/autosave, SQLite và Cloud graph round-trip đã được cập nhật. Backend/Runtime acceptance vẫn là rollout gate. |
+| 3     | Complete cho static Catalog ports            | Canvas dùng một structural `in`/`out` handle với fan-in/fan-out không giới hạn; edge commands, validation và migration vẫn giữ exact logical port keys. Switch dynamic rule/default ports cần specialized persisted-rule contract. |
+| 4     | Complete cho generic Catalog editor          | Pending form local, target-mode schema replacement, constraint validation, stale revision guard, Cancel và atomic Save đã được triển khai. Specialized Set Variable/Switch editors vẫn là execution gate riêng.                    |
+| 5     | Complete                                     | Pending form không schedule autosave; successful atomic Save dùng coordinator 3 giây, revision-safe write, retry và flush flow hiện tại.                                                                                           |
+| 6     | Complete trong Studio, external gate pending | Dirty pending form block Sync; Sync flush local rồi Cloud service đọc SQLite snapshot. Per-node schema và exact branch ports được giữ trong payload. Backend decoder acceptance vẫn là rollout gate.                               |
 
 Phase 7–8 chưa được bật bởi thay đổi này.

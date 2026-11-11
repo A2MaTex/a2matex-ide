@@ -1,10 +1,4 @@
-import {
-  AlertCircle,
-  AlertTriangle,
-  LoaderCircle,
-  RotateCw,
-  XCircle,
-} from 'lucide-react';
+import { AlertCircle, AlertTriangle, LoaderCircle, RotateCw, XCircle } from 'lucide-react';
 
 import type { WorkflowValidationDiagnostic } from '@application/workflow-validation/workflow-validation';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';

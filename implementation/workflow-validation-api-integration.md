@@ -203,18 +203,18 @@ không silently bỏ diagnostic chưa biết.
 Error response backend có dạng `{ statusCode, message, details? }`; `message` có thể là string hoặc
 array issue của Zod. Chuẩn hóa thành error model của Studio, không render raw Axios error/stack/token.
 
-| HTTP/tình huống | Studio error code | Hành vi UI |
-| --- | --- | --- |
-| Không có session/token | `WORKFLOW_VALIDATION_SESSION_REQUIRED` | Báo cần đăng nhập lại, không gửi request |
-| `401` sau một lần refresh/retry | `WORKFLOW_VALIDATION_SESSION_EXPIRED` | Báo session hết hạn |
-| `403` | `WORKFLOW_VALIDATION_FORBIDDEN` | Báo authentication/account policy từ chối; không gọi đây là RBAC route permission |
-| `413` | `WORKFLOW_VALIDATION_PAYLOAD_TOO_LARGE` | Nêu rõ graph vượt 1 MiB hoặc toàn request vượt 2 MB |
-| `422` | `WORKFLOW_VALIDATION_INVALID_REQUEST` | Hiển thị lỗi integration/envelope; không gắn nhãn workflow invalid |
-| timeout | `WORKFLOW_VALIDATION_TIMEOUT` | Cho phép Retry; không xoá kết quả thành công trước đó |
-| offline/network | `WORKFLOW_VALIDATION_NETWORK_UNAVAILABLE` | Cho phép Retry |
-| `5xx` | `WORKFLOW_VALIDATION_SERVER_ERROR` | Cho phép Retry, không leak response nội bộ |
-| `200` nhưng response parse fail | `WORKFLOW_VALIDATION_INVALID_RESPONSE` | Báo contract mismatch |
-| encode/preflight fail | `WORKFLOW_VALIDATION_PREPARATION_FAILED` | Không gọi API; chỉ rõ graph/path liên quan |
+| HTTP/tình huống                 | Studio error code                         | Hành vi UI                                                                        |
+| ------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------- |
+| Không có session/token          | `WORKFLOW_VALIDATION_SESSION_REQUIRED`    | Báo cần đăng nhập lại, không gửi request                                          |
+| `401` sau một lần refresh/retry | `WORKFLOW_VALIDATION_SESSION_EXPIRED`     | Báo session hết hạn                                                               |
+| `403`                           | `WORKFLOW_VALIDATION_FORBIDDEN`           | Báo authentication/account policy từ chối; không gọi đây là RBAC route permission |
+| `413`                           | `WORKFLOW_VALIDATION_PAYLOAD_TOO_LARGE`   | Nêu rõ graph vượt 1 MiB hoặc toàn request vượt 2 MB                               |
+| `422`                           | `WORKFLOW_VALIDATION_INVALID_REQUEST`     | Hiển thị lỗi integration/envelope; không gắn nhãn workflow invalid                |
+| timeout                         | `WORKFLOW_VALIDATION_TIMEOUT`             | Cho phép Retry; không xoá kết quả thành công trước đó                             |
+| offline/network                 | `WORKFLOW_VALIDATION_NETWORK_UNAVAILABLE` | Cho phép Retry                                                                    |
+| `5xx`                           | `WORKFLOW_VALIDATION_SERVER_ERROR`        | Cho phép Retry, không leak response nội bộ                                        |
+| `200` nhưng response parse fail | `WORKFLOW_VALIDATION_INVALID_RESPONSE`    | Báo contract mismatch                                                             |
+| encode/preflight fail           | `WORKFLOW_VALIDATION_PREPARATION_FAILED`  | Không gọi API; chỉ rõ graph/path liên quan                                        |
 
 API client nên preflight `Buffer.byteLength(JSON.stringify(editorGraph), 'utf8')` với giới hạn 1 MiB
 để trả lỗi nhanh, nhưng backend vẫn là nguồn quyết định cuối cùng.
@@ -413,24 +413,24 @@ diagnostics. Không đưa `422`, timeout hoặc save failure vào mảng `data.e
 
 ## 9. Test matrix bắt buộc
 
-| Case | Kỳ vọng |
-| --- | --- |
-| Graph hợp lệ | Save local trước; API trả `200/VALID`; Diagnostics success |
-| Backend trả `200/INVALID` | Không coi request failed; render toàn bộ `errors` |
-| Backend trả `200/VALID_WITH_WARNINGS` | Render warnings và warning status |
-| Outer envelope sai | `422` hiển thị integration error, không phải graph diagnostic |
-| Graph > 1 MiB | Preflight hoặc `413`; không crash/treo UI |
-| >500 nodes hoặc >1.000 edges | `200/INVALID` với limit diagnostic, không map thành network error |
-| Save local thất bại | Không gọi endpoint; Diagnostics có save error |
-| Node Config còn draft | Chặn Validate và yêu cầu Save/Discard draft |
-| Token sắp hết hạn | `getValidAccessToken()` refresh trước request |
-| Request đầu `401` | Refresh và retry đúng một lần |
-| Request thứ hai vẫn `401` | Session-expired; không retry loop |
-| User edit trong lúc chờ | Response được đánh dấu stale theo revision |
-| User đổi workflow/project | Response cũ không ghi đè Diagnostics của context mới |
-| `truncated: true` | Hiển thị banner giới hạn 100 diagnostic |
-| Diagnostic có node/edge ID | Click điều hướng đúng canvas entity |
-| `200` body sai schema | `WORKFLOW_VALIDATION_INVALID_RESPONSE` |
+| Case                                  | Kỳ vọng                                                           |
+| ------------------------------------- | ----------------------------------------------------------------- |
+| Graph hợp lệ                          | Save local trước; API trả `200/VALID`; Diagnostics success        |
+| Backend trả `200/INVALID`             | Không coi request failed; render toàn bộ `errors`                 |
+| Backend trả `200/VALID_WITH_WARNINGS` | Render warnings và warning status                                 |
+| Outer envelope sai                    | `422` hiển thị integration error, không phải graph diagnostic     |
+| Graph > 1 MiB                         | Preflight hoặc `413`; không crash/treo UI                         |
+| >500 nodes hoặc >1.000 edges          | `200/INVALID` với limit diagnostic, không map thành network error |
+| Save local thất bại                   | Không gọi endpoint; Diagnostics có save error                     |
+| Node Config còn draft                 | Chặn Validate và yêu cầu Save/Discard draft                       |
+| Token sắp hết hạn                     | `getValidAccessToken()` refresh trước request                     |
+| Request đầu `401`                     | Refresh và retry đúng một lần                                     |
+| Request thứ hai vẫn `401`             | Session-expired; không retry loop                                 |
+| User edit trong lúc chờ               | Response được đánh dấu stale theo revision                        |
+| User đổi workflow/project             | Response cũ không ghi đè Diagnostics của context mới              |
+| `truncated: true`                     | Hiển thị banner giới hạn 100 diagnostic                           |
+| Diagnostic có node/edge ID            | Click điều hướng đúng canvas entity                               |
+| `200` body sai schema                 | `WORKFLOW_VALIDATION_INVALID_RESPONSE`                            |
 
 ## 10. Acceptance criteria
 
@@ -455,4 +455,3 @@ diagnostics. Không đưa `422`, timeout hoặc save failure vào mảng `data.e
 - `/home/mavis/FPTU/a2matex/a2matex-be/src/routes/workflow-validation/workflow-validation.repo.ts`
 - `/home/mavis/FPTU/a2matex/a2matex-be/src/shared/constants/workflow-validation.constant.ts`
 - `/home/mavis/FPTU/a2matex/a2matex-be/src/shared/pipes/custom-zod-validation.pipe.ts`
-

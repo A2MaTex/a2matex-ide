@@ -113,12 +113,12 @@ chấp nhận policy, license runtime hoặc quyền sử dụng tài khoản.
 
 ### 4.2. Trạng thái download
 
-| Trạng thái | Hành vi |
-| --- | --- |
-| Chuẩn bị tải | Hiển thị version, platform và checksum trước khi tạo request |
-| Đang tải | Browser quản lý tiến trình; website không tuyên bố app đã được cài |
-| Thành công | Hiển thị hướng dẫn mở installer và cách xử lý SmartScreen hợp lệ |
-| Link hết hạn | Tạo link mới; không yêu cầu người dùng tải lại website bundle |
+| Trạng thái        | Hành vi                                                            |
+| ----------------- | ------------------------------------------------------------------ |
+| Chuẩn bị tải      | Hiển thị version, platform và checksum trước khi tạo request       |
+| Đang tải          | Browser quản lý tiến trình; website không tuyên bố app đã được cài |
+| Thành công        | Hiển thị hướng dẫn mở installer và cách xử lý SmartScreen hợp lệ   |
+| Link hết hạn      | Tạo link mới; không yêu cầu người dùng tải lại website bundle      |
 | Không tương thích | Không đưa bản Windows x64 cho máy ARM nếu chưa có artifact phù hợp |
 
 ### 4.3. Ranh giới an toàn
@@ -188,13 +188,13 @@ Main cấp quyền filesystem an toàn.
 
 ### 5.6. Installer failure
 
-| Lỗi | Hành vi |
-| --- | --- |
-| Chữ ký không hợp lệ | Dừng cài, hướng dẫn tải lại từ kênh chính thức |
-| Không đủ quyền | Cho retry/elevation theo NSIS; không chạy app ở trạng thái cài dở |
-| Thiếu dung lượng | Hiển thị dung lượng cần thêm |
-| File đang được dùng | Yêu cầu đóng Studio hoặc retry |
-| Upgrade thất bại | Giữ bản cũ chạy được nếu installer hỗ trợ rollback |
+| Lỗi                 | Hành vi                                                           |
+| ------------------- | ----------------------------------------------------------------- |
+| Chữ ký không hợp lệ | Dừng cài, hướng dẫn tải lại từ kênh chính thức                    |
+| Không đủ quyền      | Cho retry/elevation theo NSIS; không chạy app ở trạng thái cài dở |
+| Thiếu dung lượng    | Hiển thị dung lượng cần thêm                                      |
+| File đang được dùng | Yêu cầu đóng Studio hoặc retry                                    |
+| Upgrade thất bại    | Giữ bản cũ chạy được nếu installer hỗ trợ rollback                |
 
 ## 6. Bootstrap sau khi cài đặt
 
@@ -499,17 +499,17 @@ Không gửi account, raw workspace path, project name, policy text hoặc crede
 
 ## 15. Current implementation status
 
-| Khu vực | Hiện tại | Cần triển khai |
-| --- | --- | --- |
-| Router | `/onboarding` và `RequireOnboarding` đã có | Tách auth provider hydration để bảo đảm auth không restore song song |
-| State | Main-owned schema v1 và atomic write đã có | Recovery/reset cho state hỏng |
-| IPC | get state/policies, folder picker và complete đã có | Subscribe/reset nếu Product cần |
-| UI | Welcome, Policies, Workspace, Optional Setup và Finish đã có | Recovery và policy-update review mode |
-| Policy | Main tải/validate Customer Terms + Privacy từ API | Cache last-known-good cho first-run offline; Legal sửa placeholder trong Privacy |
-| Installer | Có thể tạo unsigned NSIS artifact | Tách build/release output, approved EULA, signing, checksum, installer tests |
-| Policy | Chưa có trusted manifest | Version source, offline fixture và re-consent rules |
-| Analytics | Chưa có consent-controlled integration | Default disabled và Settings control |
-| Tests | Auth/project tests có sẵn | Fresh install, restart, corruption, policy update, offline và real installer |
+| Khu vực   | Hiện tại                                                     | Cần triển khai                                                                   |
+| --------- | ------------------------------------------------------------ | -------------------------------------------------------------------------------- |
+| Router    | `/onboarding` và `RequireOnboarding` đã có                   | Tách auth provider hydration để bảo đảm auth không restore song song             |
+| State     | Main-owned schema v1 và atomic write đã có                   | Recovery/reset cho state hỏng                                                    |
+| IPC       | get state/policies, folder picker và complete đã có          | Subscribe/reset nếu Product cần                                                  |
+| UI        | Welcome, Policies, Workspace, Optional Setup và Finish đã có | Recovery và policy-update review mode                                            |
+| Policy    | Main tải/validate Customer Terms + Privacy từ API            | Cache last-known-good cho first-run offline; Legal sửa placeholder trong Privacy |
+| Installer | Có thể tạo unsigned NSIS artifact                            | Tách build/release output, approved EULA, signing, checksum, installer tests     |
+| Policy    | Chưa có trusted manifest                                     | Version source, offline fixture và re-consent rules                              |
+| Analytics | Chưa có consent-controlled integration                       | Default disabled và Settings control                                             |
+| Tests     | Auth/project tests có sẵn                                    | Fresh install, restart, corruption, policy update, offline và real installer     |
 
 ## 16. Kế hoạch triển khai
 
@@ -586,19 +586,19 @@ Không gửi account, raw workspace path, project name, policy text hoặc crede
 
 ## 18. Test matrix tối thiểu
 
-| Scenario | Kỳ vọng |
-| --- | --- |
-| Fresh install, signed out | Welcome → wizard → Login → Projects |
-| Fresh install, offline | Hoàn thành local setup; consent sync pending nếu cần |
-| Restart sau Finish | Bỏ qua wizard; restore auth |
-| Terms version thay đổi | Mở Policies review; giữ project/session data |
-| Analytics từ `null` sang `false` | Không khởi tạo analytics SDK |
-| Workspace bị xóa | Recovery picker; không chạy lại Policies |
-| State JSON bị truncate | Safe recovery; không tự đánh dấu completed |
-| Main write thất bại | Finish hiển thị retry; không redirect |
-| Deep link khi chưa onboarding | Hoàn tất onboarding → auth → return URL hợp lệ |
-| Installer upgrade | Giữ userData và onboarding state tương thích |
-| Installer uninstall | Hành vi dữ liệu đúng với quyết định Product/Privacy |
+| Scenario                         | Kỳ vọng                                              |
+| -------------------------------- | ---------------------------------------------------- |
+| Fresh install, signed out        | Welcome → wizard → Login → Projects                  |
+| Fresh install, offline           | Hoàn thành local setup; consent sync pending nếu cần |
+| Restart sau Finish               | Bỏ qua wizard; restore auth                          |
+| Terms version thay đổi           | Mở Policies review; giữ project/session data         |
+| Analytics từ `null` sang `false` | Không khởi tạo analytics SDK                         |
+| Workspace bị xóa                 | Recovery picker; không chạy lại Policies             |
+| State JSON bị truncate           | Safe recovery; không tự đánh dấu completed           |
+| Main write thất bại              | Finish hiển thị retry; không redirect                |
+| Deep link khi chưa onboarding    | Hoàn tất onboarding → auth → return URL hợp lệ       |
+| Installer upgrade                | Giữ userData và onboarding state tương thích         |
+| Installer uninstall              | Hành vi dữ liệu đúng với quyết định Product/Privacy  |
 
 ## 19. Open decisions
 

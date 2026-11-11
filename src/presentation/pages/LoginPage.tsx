@@ -60,13 +60,18 @@ export function LoginPage() {
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgb(24_216_248/0.13),transparent_36rem)]" />
       <section className="relative mx-auto w-full max-w-md rounded-2xl border border-border/80 bg-panel/95 p-6 shadow-[0_28px_100px_rgb(0_0_0/0.55),0_0_60px_rgb(16_136_248/0.08)] sm:p-8">
         <div className="mb-8 text-center">
-        <div className="flex items-center justify-center">
-            <img src="/src/assets/full-logo.webp" alt="" aria-hidden="true" className="object-contain w-36" />
+          <div className="flex items-center justify-center">
+            <img
+              src="/src/assets/full-logo.webp"
+              alt=""
+              aria-hidden="true"
+              className="object-contain w-36"
+            />
             <div className="truncate text-2xl mt-1.5 font-medium tracking-tight text-white/60">
               Studio
             </div>
           </div>
-            
+
           <p className="mt-2 text-sm leading-6 text-muted-foreground">
             Please sign in to access your workspace
           </p>
@@ -146,10 +151,10 @@ export function LoginPage() {
             {submitting ? (
               <>
                 <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-                <span className='font-medium'>Signing in...</span>
+                <span className="font-medium">Signing in...</span>
               </>
             ) : (
-              <span className='font-medium'>Sign in</span>
+              <span className="font-medium">Sign in</span>
             )}
           </Button>
         </form>

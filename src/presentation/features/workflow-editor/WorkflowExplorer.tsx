@@ -1,11 +1,4 @@
-import {
-  ChevronDown,
-  ChevronRight,
-  Circle,
-  FolderTree,
-  Plus,
-  Search,
-} from 'lucide-react';
+import { ChevronDown, ChevronRight, Circle, FolderTree, Plus, Search } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
 import type { ProjectDocument } from '@domain/project/project';

@@ -286,9 +286,7 @@ export function NodePalette({
               style={{ left: tooltip.left, top: tooltip.top, maxWidth: tooltip.maxWidth }}
             >
               <strong className="block text-foreground">{tooltip.node.displayName}</strong>
-              <span className="text-muted-foreground">
-                {tooltip.node.description || ''}
-              </span>
+              <span className="text-muted-foreground">{tooltip.node.description || ''}</span>
             </div>,
             document.body,
           )

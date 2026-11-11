@@ -83,17 +83,17 @@ Ngoài phạm vi MVP:
 
 ## 5. Hiện trạng codebase sau Phase 1
 
-| Năng lực | Đã triển khai | Còn lại sau Phase 1 |
-| --- | --- | --- |
-| Workflow workspace | Right dock hiển thị `AndroidInspectorPanel`; có Copy Selector và Use in Node qua một `node.updateParams` command | Action chỉ bật khi selected node có property được Catalog đánh dấu tương thích |
-| Node editing | `NodeConfigDrawer` có custom `AndroidSelectorControl`, không stringify object thành `[object Object]` | Catalog hiện tại chưa cung cấp selector property để control xuất hiện trong workflow thực tế |
-| Inspector state | Device, capture, snapshot, hit point và candidate state nằm cục bộ trong panel; không làm project dirty | Nếu cần chia sẻ state ngoài panel ở Phase 2, tách store riêng thay vì đưa hết vào editor store |
-| Workflow persistence | `AndroidSelectorV1` được deep-validate, update qua command, tăng một revision và local round-trip dưới dạng JSON | Cloud/Runtime contract test với backend thật vẫn cần thực hiện |
-| Node Catalog | Mapper giữ `format` và raw nested schema; marker chuẩn là `android-selector-v1` | Catalog backend/cache hiện tại chưa phát marker; không suy luận từ category/tên field |
-| IPC/preload | `window.studioHost.androidInspector.listDevices/capture` dùng typed `HostResult` và hai channel hẹp | Phase 2 có thể dùng lại snapshot contract; không cần raw ADB API ở renderer |
-| Electron Main | Có process runner, ADB adapter, capture service, safe XML parser, limits, cleanup và typed error mapping | Chính sách bundle ADB và smoke test đa nền tảng chưa có |
-| Runtime | Nút Run trong workspace đang bị disable và ghi rõ runtime integration thuộc phase sau | Repo này chưa có selector resolver/executor để xác nhận behavior lúc chạy |
-| Tests | Có test geometry, ADB/parser/service/IPC, CSP Blob image, selector contract/mapper/validation, panel, drawer, revision và local round-trip | Chưa có E2E Catalog + Runtime thật hoặc packaging smoke test theo OS |
+| Năng lực             | Đã triển khai                                                                                                                              | Còn lại sau Phase 1                                                                            |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| Workflow workspace   | Right dock hiển thị `AndroidInspectorPanel`; có Copy Selector và Use in Node qua một `node.updateParams` command                           | Action chỉ bật khi selected node có property được Catalog đánh dấu tương thích                 |
+| Node editing         | `NodeConfigDrawer` có custom `AndroidSelectorControl`, không stringify object thành `[object Object]`                                      | Catalog hiện tại chưa cung cấp selector property để control xuất hiện trong workflow thực tế   |
+| Inspector state      | Device, capture, snapshot, hit point và candidate state nằm cục bộ trong panel; không làm project dirty                                    | Nếu cần chia sẻ state ngoài panel ở Phase 2, tách store riêng thay vì đưa hết vào editor store |
+| Workflow persistence | `AndroidSelectorV1` được deep-validate, update qua command, tăng một revision và local round-trip dưới dạng JSON                           | Cloud/Runtime contract test với backend thật vẫn cần thực hiện                                 |
+| Node Catalog         | Mapper giữ `format` và raw nested schema; marker chuẩn là `android-selector-v1`                                                            | Catalog backend/cache hiện tại chưa phát marker; không suy luận từ category/tên field          |
+| IPC/preload          | `window.studioHost.androidInspector.listDevices/capture` dùng typed `HostResult` và hai channel hẹp                                        | Phase 2 có thể dùng lại snapshot contract; không cần raw ADB API ở renderer                    |
+| Electron Main        | Có process runner, ADB adapter, capture service, safe XML parser, limits, cleanup và typed error mapping                                   | Chính sách bundle ADB và smoke test đa nền tảng chưa có                                        |
+| Runtime              | Nút Run trong workspace đang bị disable và ghi rõ runtime integration thuộc phase sau                                                      | Repo này chưa có selector resolver/executor để xác nhận behavior lúc chạy                      |
+| Tests                | Có test geometry, ADB/parser/service/IPC, CSP Blob image, selector contract/mapper/validation, panel, drawer, revision và local round-trip | Chưa có E2E Catalog + Runtime thật hoặc packaging smoke test theo OS                           |
 
 Kết luận: Inspector và selector authoring phía Studio đã tồn tại. Tuy nhiên, Use in Node sẽ chủ động bị
 disable với catalog hiện tại; việc Copy Selector hoạt động không phải bằng chứng rằng Runtime đã có thể
@@ -310,21 +310,21 @@ flowchart LR
 
 ### 9.1. Module ownership
 
-| Trách nhiệm | Vị trí hiện tại |
-| --- | --- |
-| Pure contracts, bounds parsing, hit-test và deterministic sort | `src/domain/android-inspector/` |
-| Application port, error codes và capture orchestration contract | `src/application/android-inspector/` |
-| Renderer host interface | `src/infrastructure/electron/studio-host-api.ts` |
-| Preload methods | `electron/preload/index.cts` |
-| IPC channel constants | `electron/shared/channels.ts` |
-| Trusted sender/input validation handlers | `electron/main/ipc/register-android-inspector-handlers.ts` |
-| ADB process adapter và executable resolution | `electron/main/adapters/android/` |
-| Capture orchestration/XML parsing | `electron/main/services/android-inspector/` |
-| Composition | `electron/main/bootstrap.ts` |
-| UI, viewport, candidates và details trong right dock | `src/presentation/features/android-inspector/` |
-| Quick node parameter drawer | `src/presentation/features/workflow-editor/NodeConfigDrawer.tsx` bọc form `NodeInspector.tsx` |
-| Panel replacement, drawer overlay và click-away | `src/presentation/pages/MainWorkflowPage.tsx` |
-| Unit/component tests | `tests/unit/domain/`, `tests/unit/electron/`, `tests/component/` |
+| Trách nhiệm                                                     | Vị trí hiện tại                                                                               |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Pure contracts, bounds parsing, hit-test và deterministic sort  | `src/domain/android-inspector/`                                                               |
+| Application port, error codes và capture orchestration contract | `src/application/android-inspector/`                                                          |
+| Renderer host interface                                         | `src/infrastructure/electron/studio-host-api.ts`                                              |
+| Preload methods                                                 | `electron/preload/index.cts`                                                                  |
+| IPC channel constants                                           | `electron/shared/channels.ts`                                                                 |
+| Trusted sender/input validation handlers                        | `electron/main/ipc/register-android-inspector-handlers.ts`                                    |
+| ADB process adapter và executable resolution                    | `electron/main/adapters/android/`                                                             |
+| Capture orchestration/XML parsing                               | `electron/main/services/android-inspector/`                                                   |
+| Composition                                                     | `electron/main/bootstrap.ts`                                                                  |
+| UI, viewport, candidates và details trong right dock            | `src/presentation/features/android-inspector/`                                                |
+| Quick node parameter drawer                                     | `src/presentation/features/workflow-editor/NodeConfigDrawer.tsx` bọc form `NodeInspector.tsx` |
+| Panel replacement, drawer overlay và click-away                 | `src/presentation/pages/MainWorkflowPage.tsx`                                                 |
+| Unit/component tests                                            | `tests/unit/domain/`, `tests/unit/electron/`, `tests/component/`                              |
 
 Không tạo thêm global `window.a2matexInspector` như ví dụ trong spec gốc. Project hiện có một preload
 surface là `window.studioHost`; mở rộng nó bằng namespace hẹp sẽ nhất quán và dễ audit hơn.
@@ -334,9 +334,9 @@ surface là `window.studioHost`; mở rộng nó bằng namespace hẹp sẽ nh�
 ```ts
 interface AndroidInspectorHostApi {
   listDevices(): Promise<HostResult<AndroidDevice[], AndroidInspectorErrorCode>>;
-  capture(
-    input: { deviceId: string },
-  ): Promise<HostResult<InspectorSnapshot, AndroidInspectorErrorCode>>;
+  capture(input: {
+    deviceId: string;
+  }): Promise<HostResult<InspectorSnapshot, AndroidInspectorErrorCode>>;
 }
 ```
 
@@ -442,13 +442,13 @@ const imageY = (pointerY - offsetY) / scale;
 Hit-test dùng half-open rectangle:
 
 ```ts
-left <= x && x < right && top <= y && y < bottom
+left <= x && x < right && top <= y && y < bottom;
 ```
 
 Sort candidate:
 
 ```ts
-b.depth - a.depth || area(a.bounds) - area(b.bounds) || a.traversalIndex - b.traversalIndex
+b.depth - a.depth || area(a.bounds) - area(b.bounds) || a.traversalIndex - b.traversalIndex;
 ```
 
 Chỉ render overlay của candidate đang chọn. Không cần tạo một interactive DOM element cho mọi node
@@ -583,10 +583,10 @@ Phase 0 sẽ chặn một Inspector độc lập dù Phase 1 không ghi selector
 - [x] Screenshot viewport, coordinate mapping, deterministic hit-test và selected-node highlight.
 - [x] Candidate list/detail và Copy Resource ID.
 - [x] Timeout, per-device request deduplication, stale snapshot, partial hierarchy, remote cleanup và
-  Blob URL cleanup.
+      Blob URL cleanup.
 - [x] Unit/component tests, lint, typecheck và desktop build.
 - [x] Smoke test PNG thật trên `emulator-5554`: payload qua context bridge và `<img src="blob:">` load
-  đúng 1080×2424.
+      đúng 1080×2424.
 - [ ] Packaging smoke test theo từng OS/architecture được hỗ trợ.
 
 Phase này không sửa workflow data. Snapshot, point và inspected element đều là transient UI state.
@@ -616,18 +616,18 @@ Tách Phase 1 khỏi Phase 2/3 đã giúp implementation không phụ thuộc Ca
 
 ### 16.1. Bằng chứng xác minh hiện tại
 
-| Nhóm | Trạng thái | Bằng chứng |
-| --- | --- | --- |
-| Parser, bounds, coordinate mapping, hit-test/sort | Đạt bằng automated test | `tests/unit/domain/android-inspector-geometry.test.ts`, `tests/unit/electron/ui-hierarchy-parser.test.ts` |
-| ADB parsing/process, capture limits/errors/partial state | Đạt bằng automated test | `tests/unit/electron/adb-client.test.ts`, `tests/unit/electron/android-inspector-service.test.ts` |
-| IPC sender/input/error mapping | Đạt bằng automated test | `tests/unit/electron/android-inspector-ipc.test.ts` |
-| CSP/Blob snapshot image | Đạt bằng automated + emulator smoke test | CSP chỉ mở `blob:` cho `img-src`; PNG 1080×2424 load thành công trong Electron |
-| Selector contract, Catalog mapper và deep validation | Đạt bằng automated test | `tests/unit/domain/android-selector.test.ts`, `tests/unit/application/node-catalog-mapper.test.ts` |
-| Panel, Copy/Use Selector, stale response và Blob cleanup | Đạt bằng component test | `tests/component/android-inspector-panel.test.tsx` |
-| Drawer/custom selector/click-away/Escape/blur commit | Đạt bằng unit/component test | `tests/unit/presentation/editor-store.test.ts`, `tests/component/node-config-drawer.test.tsx` |
-| Revision và local persistence | Đạt bằng automated test | `tests/unit/presentation/project-store.test.ts` |
-| Repo regression | Đạt | ESLint, TypeScript typecheck, 95/95 tests và desktop build |
-| Catalog/Cloud/Runtime backend thật, packaging theo OS | Chưa xác minh | Catalog hiện tại không có selector marker; Runtime resolver ngoài repo |
+| Nhóm                                                     | Trạng thái                               | Bằng chứng                                                                                                |
+| -------------------------------------------------------- | ---------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| Parser, bounds, coordinate mapping, hit-test/sort        | Đạt bằng automated test                  | `tests/unit/domain/android-inspector-geometry.test.ts`, `tests/unit/electron/ui-hierarchy-parser.test.ts` |
+| ADB parsing/process, capture limits/errors/partial state | Đạt bằng automated test                  | `tests/unit/electron/adb-client.test.ts`, `tests/unit/electron/android-inspector-service.test.ts`         |
+| IPC sender/input/error mapping                           | Đạt bằng automated test                  | `tests/unit/electron/android-inspector-ipc.test.ts`                                                       |
+| CSP/Blob snapshot image                                  | Đạt bằng automated + emulator smoke test | CSP chỉ mở `blob:` cho `img-src`; PNG 1080×2424 load thành công trong Electron                            |
+| Selector contract, Catalog mapper và deep validation     | Đạt bằng automated test                  | `tests/unit/domain/android-selector.test.ts`, `tests/unit/application/node-catalog-mapper.test.ts`        |
+| Panel, Copy/Use Selector, stale response và Blob cleanup | Đạt bằng component test                  | `tests/component/android-inspector-panel.test.tsx`                                                        |
+| Drawer/custom selector/click-away/Escape/blur commit     | Đạt bằng unit/component test             | `tests/unit/presentation/editor-store.test.ts`, `tests/component/node-config-drawer.test.tsx`             |
+| Revision và local persistence                            | Đạt bằng automated test                  | `tests/unit/presentation/project-store.test.ts`                                                           |
+| Repo regression                                          | Đạt                                      | ESLint, TypeScript typecheck, 95/95 tests và desktop build                                                |
+| Catalog/Cloud/Runtime backend thật, packaging theo OS    | Chưa xác minh                            | Catalog hiện tại không có selector marker; Runtime resolver ngoài repo                                    |
 
 Các tiêu chí dưới đây là release acceptance. Phần Studio đã được test độc lập; integration với
 Catalog/Cloud/Runtime thật chưa được đánh dấu hoàn thành chỉ vì local build/test thành công.
