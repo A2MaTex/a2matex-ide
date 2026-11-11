@@ -35,6 +35,9 @@ const studioHost = {
     load: (runtimeVersion) => ipcRenderer.invoke('studio:catalog:load', runtimeVersion),
     refresh: (runtimeVersion) => ipcRenderer.invoke('studio:catalog:refresh', runtimeVersion),
   },
+  workflowValidation: {
+    validate: (input) => ipcRenderer.invoke('studio:workflow-validation:validate', input),
+  },
   cloudProject: {
     load: () => ipcRenderer.invoke('studio:cloud-project:load'),
     open: (projectId) => ipcRenderer.invoke('studio:cloud-project:open', projectId),

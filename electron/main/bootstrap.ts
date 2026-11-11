@@ -15,6 +15,7 @@ import { registerNodeCatalogHandlers } from '@electron/main/ipc/register-node-ca
 import { registerOnboardingHandlers } from '@electron/main/ipc/register-onboarding-handlers';
 import { registerProjectHandlers } from '@electron/main/ipc/register-project-handlers';
 import { registerSystemHandlers } from '@electron/main/ipc/register-system-handlers';
+import { registerWorkflowValidationHandlers } from '@electron/main/ipc/register-workflow-validation-handlers';
 import { loadApiConfig } from '@electron/main/config/api-config';
 import { logMain } from '@electron/main/logger';
 import { createProjectCloudService } from '@electron/main/project/create-project-cloud-service';
@@ -27,6 +28,7 @@ import {
   openStudioDatabase,
   type StudioDatabase,
 } from '@electron/main/persistence/studio-database';
+import { createWorkflowValidationService } from '@electron/main/workflow-validation/create-workflow-validation-service';
 
 const developmentUrl = process.env.A2MATEX_DEV_SERVER_URL;
 let studioDatabase: StudioDatabase | null = null;
@@ -93,6 +95,7 @@ app.whenReady().then(() => {
     isPackaged: app.isPackaged,
   });
   registerAuthHandlers(auth);
+  registerWorkflowValidationHandlers(createWorkflowValidationService({ auth }));
   try {
     studioDatabase = openStudioDatabase({
       migrationsPath: path.join(appPath, 'prisma', 'migration'),

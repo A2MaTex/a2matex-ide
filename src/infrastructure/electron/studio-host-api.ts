@@ -25,6 +25,11 @@ import type {
   WorkspaceChoice,
 } from '@application/onboarding/onboarding';
 import type { PolicyManifest } from '@application/onboarding/policy-manifest';
+import type {
+  WorkflowValidationErrorCode,
+  WorkflowValidationInput,
+  WorkflowValidationOutput,
+} from '@application/workflow-validation/workflow-validation';
 
 export interface HostError<TCode extends string = string> {
   code: TCode;
@@ -65,6 +70,11 @@ export interface StudioHostApi {
   catalog: {
     load(runtimeVersion: string): Promise<HostResult<NodeCatalogSnapshot, NodeCatalogErrorCode>>;
     refresh(runtimeVersion: string): Promise<HostResult<NodeCatalogSnapshot, NodeCatalogErrorCode>>;
+  };
+  workflowValidation: {
+    validate(
+      input: WorkflowValidationInput,
+    ): Promise<HostResult<WorkflowValidationOutput, WorkflowValidationErrorCode>>;
   };
   cloudProject: {
     archive(projectId: string): Promise<HostResult<CloudProject, CloudProjectErrorCode>>;

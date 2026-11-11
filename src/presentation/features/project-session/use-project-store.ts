@@ -10,3 +10,9 @@ export function useProjectStore<T>(selector: (state: ProjectStoreState) => T): T
   if (!store) throw new Error('ProjectSessionProvider is missing');
   return useStore(store, selector);
 }
+
+export function useProjectStoreApi() {
+  const store = useContext(ProjectStoreContext);
+  if (!store) throw new Error('ProjectSessionProvider is missing');
+  return store;
+}
