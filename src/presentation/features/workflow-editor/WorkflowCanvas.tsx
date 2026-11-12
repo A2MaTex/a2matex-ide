@@ -99,8 +99,8 @@ export function WorkflowCanvas({
     [catalog, issues, selectedNodeId, workflow],
   );
   const edges = useMemo(
-    () => toReactFlowEdges(workflow, selectedEdgeId),
-    [selectedEdgeId, workflow],
+    () => toReactFlowEdges(workflow, catalog, selectedEdgeId),
+    [catalog, selectedEdgeId, workflow],
   );
 
   const logicalSourcePort = (sourceNodeId: string, sourceHandle: string) => {

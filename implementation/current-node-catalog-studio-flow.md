@@ -597,13 +597,13 @@ Sync không thay thế Save và không đọc pending form state.
 Tóm lại: Save commit node vào graph, autosave ghi graph xuống SQLite, còn Sync
 mới gửi persisted workflow lên Cloud.
 
-## 14. Output ports và error policy
+## 14. Output ports và error routing
 
 ### 14.1. Static output connectors
 
-Canvas render tối đa một input handle `in` và một output handle `out` cho mỗi
-node. Cả hai handle cho phép fan-in/fan-out không giới hạn; `outputPorts.ports`
-là logical branch keys, không phải số lượng chấm kết nối vật lý.
+Canvas render tối đa một input handle `in`. Với node thông thường, mỗi key trong
+`outputPorts.ports` được render thành một output handle riêng và cho phép fan-out
+không giới hạn.
 
 ```json
 {
@@ -613,14 +613,13 @@ là logical branch keys, không phải số lượng chấm kết nối vật l�
 }
 ```
 
-Ví dụ trên vẫn chỉ tạo một output handle vật lý `out`. Edge lưu logical branch
-`success` hoặc `error` riêng trong `sourcePort`.
+Ví dụ trên tạo hai output handle vật lý: `success` màu xanh và `error` màu đỏ.
+Edge lưu đúng handle key trong `sourcePort`.
 
 `flow.start` chỉ có output handle, `flow.end` chỉ có input handle, các node thông
 thường có cả hai. `flow.end` có array rỗng nên không có output handle.
 
-React Flow source handle dùng structural ID `out`; persisted edge vẫn dùng exact
-logical key trong `sourcePort`:
+React Flow source handle của node thông thường dùng exact logical key:
 
 ```json
 {
@@ -631,23 +630,23 @@ logical key trong `sourcePort`:
 }
 ```
 
-Kết nối mới mặc định dùng `success` nếu key này tồn tại, nếu không dùng logical
-key đầu tiên. Reconnect cùng source phải giữ nguyên logical key. Không dùng array
-index làm persisted port identity. Thay đổi node config hoặc
+`flow.start` tiếp tục dùng structural handle `out`; khi persist, handle này được
+map sang logical key mặc định (`success` nếu có). Reconnect cùng source phải giữ
+nguyên logical key. Không dùng array index làm persisted port identity. Thay đổi node config hoặc
 target mode không được làm mất các edges nếu output port key vẫn tồn tại. Nếu
 port bị loại khỏi effective port set, Save phải báo orphaned edge và yêu cầu
 user xử lý hoặc thực hiện một atomic node-plus-edge command theo UX đã chốt.
 
-### 14.2. Error policy derivation
+### 14.2. Error routing derivation
 
-Khả năng rẽ nhánh lỗi được suy ra từ output ports. Theo guide contract:
+Khả năng rẽ nhánh lỗi được suy ra từ output ports và graph:
 
-- `STOP` luôn khả dụng;
-- chỉ expose `ERROR_BRANCH` khi `outputPorts.ports` chứa `error`.
+- chỉ render error handle khi `outputPorts.ports` chứa `error`;
+- có ít nhất một outgoing error edge thì persist `ERROR_BRANCH`;
+- không còn outgoing error edge thì persist `STOP`.
 
-Khi node dùng `STOP`, executable graph không được có outgoing error edge. Khi
-node dùng `ERROR_BRANCH`, Studio yêu cầu valid error route trước Test Run hoặc
-submission.
+Studio không expose error-policy selector thủ công. Mỗi thao tác connect,
+reconnect hoặc remove edge phải cập nhật policy và graph trong cùng một command.
 
 ### 14.3. Dynamic ports
 
@@ -853,7 +852,7 @@ Node Catalog response trong task này:
 ### Mapper tests
 
 - `name` maps sang `displayName`;
-- `ports: ["success", "error"]` tạo một output handle và giữ hai logical keys;
+- `ports: ["success", "error"]` tạo hai output handles và giữ hai logical keys;
 - `flow.end` không có output connector;
 - icon/color/labels dùng Studio fallback;
 - targeting metadata được giữ sau normalization;
@@ -1019,15 +1018,17 @@ editor mới; graph cũ migrate deterministic hoặc báo review rõ ràng.
 
 ### Phase 3 — Output ports, handles và branch edges
 
-**Mục tiêu:** canvas tách structural handles khỏi logical branch ports.
+**Mục tiêu:** canvas render logical branch ports thành các output handles độc lập.
 
 Implementation:
 
-- render tối đa một structural source handle `out` với fan-out không giới hạn;
+- render mỗi logical output port thành một source handle với fan-out không giới hạn;
 - render tối đa một target handle `in` với fan-in không giới hạn;
 - persist exact logical Catalog key vào edge `sourcePort`;
+- render `success` màu xanh và `error` màu đỏ;
+- tự động derive `STOP`/`ERROR_BRANCH` từ outgoing error edges;
 - `flow.end` không tạo output handle;
-- derive `STOP`/`ERROR_BRANCH` UI theo current guide;
+- giữ structural output handle hiện tại cho `flow.start`;
 - preserve edge khi config/mode đổi mà port key vẫn tồn tại;
 - detect orphaned edges khi effective port bị mất;
 - giữ specialized Switch rule/default dynamic handles;
@@ -1036,7 +1037,7 @@ Implementation:
 
 Tests:
 
-- node có success/error vẫn chỉ render một output handle;
+- node có success/error render hai output handles riêng;
 - fan-in/fan-out không giới hạn và exact duplicate vẫn bị reject;
 - create/reconnect/serialize branch edge;
 - no output on End;

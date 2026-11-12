@@ -46,7 +46,6 @@ const draftSchema = z
     inputSchema: jsonObjectSchema,
     runtimeIr: jsonObjectSchema.nullable(),
     validationSummary: jsonObjectSchema,
-    testSummary: jsonObjectSchema,
     contentHash: z.string().regex(/^[0-9a-f]{64}$/),
     savedAt: timestampSchema,
   })

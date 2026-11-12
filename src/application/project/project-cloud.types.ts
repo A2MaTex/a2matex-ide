@@ -34,17 +34,15 @@ export interface CloudProjectDraft {
   projectId: string;
   runtimeIr: JsonObject | null;
   savedAt: string;
-  testSummary: JsonObject;
   validationSummary: JsonObject;
   version: number;
 }
 
 export interface CloudProjectDraftPayload {
-  editorGraph: JsonObject;
   expectedVersion: number;
+  editorGraph: JsonObject;
   inputSchema: JsonObject;
   runtimeIr: JsonObject | null;
-  testSummary: JsonObject;
   validationSummary: JsonObject;
 }
 

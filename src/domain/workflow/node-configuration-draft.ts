@@ -16,7 +16,6 @@ export interface NodeConfigurationDraft {
   config: Record<string, JsonValue>;
   inputSchema: ObjectValueSchema;
   bindings: Record<string, WorkflowBinding>;
-  errorPolicy: WorkflowNode['errorPolicy'];
   modeBindings: Record<string, Record<string, WorkflowBinding>>;
 }
 
@@ -68,7 +67,6 @@ export function createNodeConfigurationDraft(
     config,
     inputSchema: structuredClone(node.inputSchema ?? emptyObjectValueSchema()),
     bindings: structuredClone(node.bindings),
-    errorPolicy: node.errorPolicy,
     modeBindings:
       typeof config.targetMode === 'string'
         ? { [config.targetMode]: structuredClone(node.bindings) }
@@ -100,13 +98,6 @@ export function setDraftBindingValue(
     return { ...draft, bindings };
   }
   return { ...draft, bindings: { ...draft.bindings, [field]: literalBinding(value) } };
-}
-
-export function setDraftErrorPolicy(
-  draft: NodeConfigurationDraft,
-  errorPolicy: WorkflowNode['errorPolicy'],
-): NodeConfigurationDraft {
-  return { ...draft, errorPolicy };
 }
 
 export function selectDraftTargetMode(
@@ -204,6 +195,5 @@ export function configurationCommitPayload(
       : structuredClone(draft.config),
     inputSchema: structuredClone(draft.inputSchema),
     bindings: withBindingDefaults(draft.inputSchema, draft.bindings),
-    errorPolicy: draft.errorPolicy,
   };
 }

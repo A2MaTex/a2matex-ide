@@ -4,6 +4,7 @@ import type { WorkflowDocument } from '@domain/project/project';
 import {
   connectionInputsFor,
   connectionOutputsFor,
+  logicalOutputPortsFor,
   type NodeDefinition,
   type PortDefinition,
 } from '@domain/workflow/node-definition';
@@ -22,6 +23,20 @@ export interface AutomationNodeData extends Record<string, unknown> {
 }
 
 export type AutomationFlowNode = Node<AutomationNodeData, 'automation'>;
+
+export function connectionOutputHandlesFor(definition: NodeDefinition): readonly PortDefinition[] {
+  const structuralOutputs = connectionOutputsFor(definition);
+  if (definition.type === 'flow.start' || definition.type === 'trigger.start') {
+    return structuralOutputs;
+  }
+  const template = structuralOutputs[0];
+  if (!template) return [];
+  return logicalOutputPortsFor(definition).map((name) => ({
+    ...template,
+    name,
+    label: name === 'success' ? 'Success' : name === 'error' ? 'Error' : name,
+  }));
+}
 
 export function toReactFlowNodes(
   workflow: WorkflowDocument,
@@ -43,7 +58,7 @@ export function toReactFlowNodes(
         nodeType: node.type,
         nodeVersion: definition?.version ?? 1,
         connectionInputs: definition ? connectionInputsFor(definition) : [],
-        connectionOutputs: definition ? connectionOutputsFor(definition) : [],
+        connectionOutputs: definition ? connectionOutputHandlesFor(definition) : [],
         issueCount: issues.filter((entry) => entry.nodeId === node.id).length,
         disabled: node.disabled ?? false,
       },
@@ -53,20 +68,36 @@ export function toReactFlowNodes(
 
 export function toReactFlowEdges(
   workflow: WorkflowDocument,
+  catalog: readonly NodeDefinition[],
   selectedEdgeId?: string | null,
 ): Edge[] {
-  return workflow.edges.map((edge) => ({
-    id: edge.id,
-    source: edge.sourceNodeId,
-    sourceHandle: 'out',
-    target: edge.targetNodeId,
-    targetHandle: 'in',
-    selected: edge.id === selectedEdgeId,
-    reconnectable: true,
-    type: 'smoothstep',
-    animated: false,
-    style: { stroke: 'var(--primary)', strokeWidth: 1.5 },
-  }));
+  const nodes = new Map(workflow.nodes.map((node) => [node.id, node]));
+  return workflow.edges.map((edge) => {
+    const source = nodes.get(edge.sourceNodeId);
+    const definition = source
+      ? catalog.find((candidate) => candidate.type === source.type)
+      : undefined;
+    const usesStructuralOutput =
+      definition?.type === 'flow.start' || definition?.type === 'trigger.start';
+    const stroke =
+      edge.sourcePort === 'error'
+        ? '#ef4444'
+        : edge.sourcePort === 'success'
+          ? '#22c55e'
+          : 'var(--primary)';
+    return {
+      id: edge.id,
+      source: edge.sourceNodeId,
+      sourceHandle: usesStructuralOutput ? 'out' : edge.sourcePort,
+      target: edge.targetNodeId,
+      targetHandle: edge.targetPort ?? 'in',
+      selected: edge.id === selectedEdgeId,
+      reconnectable: true,
+      type: 'smoothstep',
+      animated: false,
+      style: { stroke, strokeWidth: 1.5 },
+    };
+  });
 }
 
 export function applyReactFlowPositions(

@@ -108,7 +108,7 @@ export function ProjectHomePage() {
         ) : null}
         {cloudError ? (
           <div className="rounded-lg border border-warning/35 bg-warning/10 px-4 py-3 text-xs text-warning">
-            Cloud refresh: {cloudError}. Showing the last cached index when available.
+            Cloud operation: {cloudError}. Cached projects remain available when present.
           </div>
         ) : null}
 

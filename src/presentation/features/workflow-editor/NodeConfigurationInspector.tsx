@@ -8,11 +8,10 @@ import {
   selectDraftTargetMode,
   setDraftBindingValue,
   setDraftConfigValue,
-  setDraftErrorPolicy,
   validateNodeConfigurationDraft,
   type NodeConfigurationDraft,
 } from '@domain/workflow/node-configuration-draft';
-import { logicalOutputPortsFor, type NodeDefinition } from '@domain/workflow/node-definition';
+import type { NodeDefinition } from '@domain/workflow/node-definition';
 import { isLiteralBinding } from '@domain/workflow/workflow-binding';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
@@ -200,26 +199,6 @@ function ConfiguredInspector(props: {
                 );
               })
             : null}
-          {logicalOutputPortsFor(definition).includes('error') ? (
-            <div className="text-sm">
-              <label htmlFor="node-error-policy" className="text-xs font-medium">
-                Error handling
-              </label>
-              <select
-                id="node-error-policy"
-                value={draft.errorPolicy}
-                onChange={(event) =>
-                  update(
-                    setDraftErrorPolicy(draft, event.target.value as WorkflowNode['errorPolicy']),
-                  )
-                }
-                className="mt-2 h-9 w-full rounded-md border border-border bg-background px-2.5 text-xs"
-              >
-                <option value="STOP">Stop</option>
-                <option value="ERROR_BRANCH">Error Branch</option>
-              </select>
-            </div>
-          ) : null}
           {stale ? (
             <p className="text-[10px] text-destructive">
               This node changed while the form was open. Cancel and reopen it before saving.

@@ -58,8 +58,17 @@ export function AutomationNode({ data, selected }: NodeProps<AutomationFlowNode>
           id={port.name}
           type="source"
           position={Position.Right}
-          style={{ top: 24 + index * 18 }}
-          className="size-2.5! border-2! border-card! bg-primary!"
+          style={{
+            top: `calc(50% + ${(index - (data.connectionOutputs.length - 1) / 2) * 18}px)`,
+          }}
+          className={
+            'size-2.5! border-2! border-card! ' +
+            (port.name === 'success'
+              ? 'bg-emerald-500!'
+              : port.name === 'error'
+                ? 'bg-red-500!'
+                : 'bg-primary!')
+          }
           title={port.label}
         />
       ))}

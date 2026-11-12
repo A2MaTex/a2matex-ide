@@ -157,6 +157,22 @@ function createNode(
   };
 }
 
+function withDerivedErrorPolicies(workflow: WorkflowDocument): WorkflowDocument {
+  const errorBranchNodeIds = new Set(
+    workflow.edges.filter((edge) => edge.sourcePort === 'error').map((edge) => edge.sourceNodeId),
+  );
+  let changed = false;
+  const nodes = workflow.nodes.map((node) => {
+    const errorPolicy: WorkflowNode['errorPolicy'] = errorBranchNodeIds.has(node.id)
+      ? 'ERROR_BRANCH'
+      : 'STOP';
+    if (node.errorPolicy === errorPolicy) return node;
+    changed = true;
+    return { ...node, errorPolicy };
+  });
+  return changed ? { ...workflow, nodes } : workflow;
+}
+
 export function applyWorkflowCommand(
   workflow: WorkflowDocument,
   command: WorkflowCommand,
@@ -223,15 +239,6 @@ export function applyWorkflowCommand(
         );
       }
       if (
-        command.payload.errorPolicy === 'ERROR_BRANCH' &&
-        !logicalOutputPortsFor(definition).includes('error')
-      ) {
-        throw new WorkflowCommandError(
-          'INVALID_NODE_CONFIGURATION',
-          'The selected error policy is not supported',
-        );
-      }
-      if (
         definition.configSchema &&
         validateObjectValue(definition.configSchema, command.payload.config).length > 0
       ) {
@@ -276,7 +283,6 @@ export function applyWorkflowCommand(
                 config: structuredClone(command.payload.config),
                 inputSchema: structuredClone(parsedSchema.data),
                 bindings: structuredClone(command.payload.bindings),
-                errorPolicy: command.payload.errorPolicy,
               }
             : node,
         ),
@@ -322,7 +328,7 @@ export function applyWorkflowCommand(
     }
     case 'node.remove': {
       findNode(workflow, command.payload.nodeId);
-      return {
+      return withDerivedErrorPolicies({
         ...workflow,
         entryNodeId: workflow.entryNodeId === command.payload.nodeId ? '' : workflow.entryNodeId,
         nodes: workflow.nodes.filter((node) => node.id !== command.payload.nodeId),
@@ -331,7 +337,7 @@ export function applyWorkflowCommand(
             edge.sourceNodeId !== command.payload.nodeId &&
             edge.targetNodeId !== command.payload.nodeId,
         ),
-      };
+      });
     }
     case 'node.duplicate': {
       const source = findNode(workflow, command.payload.sourceNodeId);
@@ -339,7 +345,7 @@ export function applyWorkflowCommand(
         throw new WorkflowCommandError('DUPLICATE_NODE', 'Node ID already exists');
       }
       const sourcePosition = source.editor;
-      return {
+      return withDerivedErrorPolicies({
         ...workflow,
         nodes: [
           ...workflow.nodes,
@@ -355,7 +361,7 @@ export function applyWorkflowCommand(
             },
           },
         ],
-      };
+      });
     }
     case 'edge.connect': {
       const edge = {
@@ -366,7 +372,7 @@ export function applyWorkflowCommand(
         targetNodeId: command.payload.target.nodeId,
       };
       assertValidConnection(workflow, edge, catalog, command.payload.target.port);
-      return { ...workflow, edges: [...workflow.edges, edge] };
+      return withDerivedErrorPolicies({ ...workflow, edges: [...workflow.edges, edge] });
     }
     case 'node.addConnected': {
       if (workflow.nodes.some((node) => node.id === command.payload.nodeId)) {
@@ -390,7 +396,7 @@ export function applyWorkflowCommand(
         targetNodeId: command.payload.nodeId,
       };
       assertValidConnection(candidate, edge, catalog, command.payload.targetPort);
-      return { ...candidate, edges: [...candidate.edges, edge] };
+      return withDerivedErrorPolicies({ ...candidate, edges: [...candidate.edges, edge] });
     }
     case 'edge.reconnect': {
       const edgeIndex = workflow.edges.findIndex((edge) => edge.id === command.payload.edgeId);
@@ -411,12 +417,12 @@ export function applyWorkflowCommand(
       assertValidConnection(withoutOriginal, edge, catalog, command.payload.target.port);
       const edges = [...workflow.edges];
       edges[edgeIndex] = edge;
-      return { ...workflow, edges };
+      return withDerivedErrorPolicies({ ...workflow, edges });
     }
     case 'edge.remove':
-      return {
+      return withDerivedErrorPolicies({
         ...workflow,
         edges: workflow.edges.filter((edge) => edge.id !== command.payload.edgeId),
-      };
+      });
   }
 }

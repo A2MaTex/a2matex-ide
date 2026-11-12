@@ -33,7 +33,6 @@ function initialDraftState(): LocalProjectDraftState {
     remoteCreatePending: false,
     runtimeIr: null,
     syncStatus: 'local-only',
-    testSummary: {},
     validationSummary: {},
   };
 }
@@ -103,7 +102,7 @@ export class InMemoryProjectRepository implements ProjectRepository {
         ...current.draftState,
         localRevision: current.draftState.localRevision + 1,
         metadataRevision: current.draftState.metadataRevision + (metadataChanged ? 1 : 0),
-        ...(workflowsChanged ? { runtimeIr: null, testSummary: {}, validationSummary: {} } : {}),
+        ...(workflowsChanged ? { runtimeIr: null, validationSummary: {} } : {}),
       },
       updatedAt: new Date().toISOString(),
     };

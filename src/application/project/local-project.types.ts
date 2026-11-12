@@ -15,7 +15,6 @@ export type LocalProjectSyncStatus =
 export interface LocalDraftArtifacts {
   inputSchema: JsonValue;
   runtimeIr: JsonValue | null;
-  testSummary: JsonValue;
   validationSummary: JsonValue;
 }
 

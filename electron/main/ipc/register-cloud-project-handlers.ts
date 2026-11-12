@@ -6,6 +6,7 @@ import {
   type ProjectCloudClient,
   type UpdateCloudProjectInput,
 } from '@application/project/project-cloud';
+import { LocalProjectPersistenceError } from '@application/project/local-project-repository';
 import { IPC_CHANNELS } from '@electron/shared/channels';
 import type { HostResult } from '@infrastructure/electron/studio-host-api';
 
@@ -21,13 +22,21 @@ function failure(error: unknown): HostResult<never, CloudProjectErrorCode> {
   const mapped =
     error instanceof CloudProjectError
       ? error
-      : new CloudProjectError(
-          'CLOUD_SERVER_ERROR',
-          'The cloud project operation failed.',
-          true,
-          undefined,
-          { cause: error },
-        );
+      : error instanceof LocalProjectPersistenceError
+        ? new CloudProjectError(
+            'CLOUD_LOCAL_STORAGE_ERROR',
+            'Cloud data could not be saved locally.',
+            error.retryable,
+            undefined,
+            { cause: error },
+          )
+        : new CloudProjectError(
+            'CLOUD_SERVER_ERROR',
+            'The cloud project operation failed.',
+            true,
+            undefined,
+            { cause: error },
+          );
   return {
     ok: false,
     error: { code: mapped.code, message: mapped.message, retryable: mapped.retryable },

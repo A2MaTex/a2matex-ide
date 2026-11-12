@@ -1,4 +1,4 @@
-import type { WorkflowBinding, WorkflowNode } from '@domain/project/project';
+import type { WorkflowBinding } from '@domain/project/project';
 import type { ObjectValueSchema } from '@domain/schema/object-value-schema';
 import type { JsonValue } from '@shared/types/json-value';
 
@@ -28,7 +28,6 @@ export type WorkflowCommand =
         config: Record<string, JsonValue>;
         inputSchema: ObjectValueSchema;
         bindings: Record<string, WorkflowBinding>;
-        errorPolicy: WorkflowNode['errorPolicy'];
       };
     }
   | {

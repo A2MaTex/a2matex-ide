@@ -3,11 +3,11 @@ import { useEffect, useRef } from 'react';
 
 import {
   connectionInputsFor,
-  connectionOutputsFor,
   type NodeDefinition,
   type PropertyDefinition,
 } from '@domain/workflow/node-definition';
 import { Button } from '@presentation/components/ui/button';
+import { connectionOutputHandlesFor } from '@presentation/features/workflow-editor/react-flow-adapter';
 
 interface NodeHelpDialogProps {
   target: { type: string; version: number } | null;
@@ -44,7 +44,7 @@ export function NodeHelpDialog({ target, definition, onClose }: NodeHelpDialogPr
   const required = new Set(definition?.properties.required ?? []);
   const properties = Object.entries(definition?.properties.properties ?? {});
   const connectionPorts = definition
-    ? [...connectionInputsFor(definition), ...connectionOutputsFor(definition)]
+    ? [...connectionInputsFor(definition), ...connectionOutputHandlesFor(definition)]
     : [];
   const inputVariables = Object.entries(definition?.inputVariables?.properties ?? {});
   const outputVariables = Object.entries(definition?.outputVariables?.properties ?? {});

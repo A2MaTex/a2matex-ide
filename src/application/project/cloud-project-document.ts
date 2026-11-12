@@ -65,7 +65,6 @@ export function createCloudDraftPayload(
     inputSchema: jsonObject(draftState.inputSchema, 'inputSchema'),
     runtimeIr: draftState.runtimeIr === null ? null : jsonObject(draftState.runtimeIr, 'runtimeIr'),
     validationSummary: jsonObject(draftState.validationSummary, 'validationSummary'),
-    testSummary: jsonObject(draftState.testSummary, 'testSummary'),
   };
 }
 
@@ -131,7 +130,6 @@ export function decodeCloudProject(
         inputSchema: draft.inputSchema,
         runtimeIr: draft.runtimeIr,
         validationSummary: draft.validationSummary,
-        testSummary: draft.testSummary,
       },
     };
   } catch (error) {
@@ -164,7 +162,7 @@ function decodeManifestExtension(value: JsonValue | undefined, workflowPaths: st
 }
 
 function emptyArtifacts(): LocalDraftArtifacts {
-  return { inputSchema: {}, runtimeIr: null, testSummary: {}, validationSummary: {} };
+  return { inputSchema: {}, runtimeIr: null, validationSummary: {} };
 }
 
 function canonicalJson(value: JsonValue): string {
@@ -181,7 +179,6 @@ export function draftMatchesPayload(draft: CloudProjectDraft, payload: CloudProj
     canonicalJson(draft.editorGraph) === canonicalJson(payload.editorGraph) &&
     canonicalJson(draft.inputSchema) === canonicalJson(payload.inputSchema) &&
     canonicalJson(draft.runtimeIr) === canonicalJson(payload.runtimeIr) &&
-    canonicalJson(draft.validationSummary) === canonicalJson(payload.validationSummary) &&
-    canonicalJson(draft.testSummary) === canonicalJson(payload.testSummary)
+    canonicalJson(draft.validationSummary) === canonicalJson(payload.validationSummary)
   );
 }

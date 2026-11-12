@@ -44,7 +44,6 @@ interface ProjectRow {
   remote_saved_at: string | null;
   runtime_ir_json: string | null;
   sync_status: LocalProjectSyncStatus;
-  test_summary_json: string;
   updated_at: string;
   validation_summary_json: string;
 }
@@ -76,8 +75,7 @@ const SELECT_PROJECT = `
     d.remote_create_pending,
     d.input_schema_json,
     d.runtime_ir_json,
-    d.validation_summary_json,
-    d.test_summary_json
+    d.validation_summary_json
   FROM projects p
   INNER JOIN project_draft_state d ON d.local_id = p.local_id
 `;
@@ -157,7 +155,6 @@ function parseProjectSnapshot(database: DatabaseSync, row: ProjectRow): LocalPro
           ? null
           : (parseStoredJson(row.runtime_ir_json) as LocalDraftArtifacts['runtimeIr']),
       syncStatus: row.sync_status,
-      testSummary: parseStoredJson(row.test_summary_json) as LocalDraftArtifacts['testSummary'],
       validationSummary: parseStoredJson(
         row.validation_summary_json,
       ) as LocalDraftArtifacts['validationSummary'],
@@ -197,7 +194,6 @@ function artifactsOf(snapshot: LocalProjectSnapshot): LocalDraftArtifacts {
   return {
     inputSchema: snapshot.draftState.inputSchema,
     runtimeIr: snapshot.draftState.runtimeIr,
-    testSummary: snapshot.draftState.testSummary,
     validationSummary: snapshot.draftState.validationSummary,
   };
 }
@@ -489,8 +485,8 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
                 local_id, metadata_synced_revision, base_remote_name,
                 base_remote_description, base_remote_version, observed_remote_version,
                 last_synced_local_revision, sync_status, content_hash, remote_saved_at,
-                input_schema_json, runtime_ir_json, validation_summary_json, test_summary_json
-              ) VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+                input_schema_json, runtime_ir_json, validation_summary_json
+              ) VALUES (?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             )
             .run(
               localId,
@@ -505,7 +501,6 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
               serializeJson(input.artifacts.inputSchema),
               input.artifacts.runtimeIr === null ? null : serializeJson(input.artifacts.runtimeIr),
               serializeJson(input.artifacts.validationSummary),
-              serializeJson(input.artifacts.testSummary),
             );
           return readProject(this.database, accountScope, localId)!;
         });
@@ -583,7 +578,7 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
                    base_remote_name = ?, base_remote_description = ?,
                    base_remote_version = ?, observed_remote_version = ?, sync_status = 'synced',
                    content_hash = ?, remote_saved_at = ?, input_schema_json = ?,
-                   runtime_ir_json = ?, validation_summary_json = ?, test_summary_json = ?
+                   runtime_ir_json = ?, validation_summary_json = ?
                WHERE local_id = ?`,
             )
             .run(
@@ -600,7 +595,6 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
               serializeJson(input.artifacts.inputSchema),
               input.artifacts.runtimeIr === null ? null : serializeJson(input.artifacts.runtimeIr),
               serializeJson(input.artifacts.validationSummary),
-              serializeJson(input.artifacts.testSummary),
               localId,
             );
           return readProject(this.database, accountScope, localId)!;
@@ -645,7 +639,6 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
               ? {
                   ...persistedArtifacts,
                   runtimeIr: null,
-                  testSummary: {},
                   validationSummary: {},
                 }
               : persistedArtifacts);
@@ -684,8 +677,7 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
             .prepare(
               `UPDATE project_draft_state
                SET local_revision = ?, metadata_revision = ?, sync_status = ?,
-                   input_schema_json = ?, runtime_ir_json = ?, validation_summary_json = ?,
-                   test_summary_json = ?
+                   input_schema_json = ?, runtime_ir_json = ?, validation_summary_json = ?
                WHERE local_id = ?`,
             )
             .run(
@@ -695,7 +687,6 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
               serializeJson(artifacts.inputSchema),
               artifacts.runtimeIr === null ? null : serializeJson(artifacts.runtimeIr),
               serializeJson(artifacts.validationSummary),
-              serializeJson(artifacts.testSummary),
               localId,
             );
 
