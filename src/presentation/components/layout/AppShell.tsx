@@ -82,12 +82,7 @@ export function AppShell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-panel/90 px-4 backdrop-blur">
           <div className="flex items-center">
-            <img
-              src={fullLogoUrl}
-              alt=""
-              aria-hidden="true"
-              className="object-contain w-32"
-            />
+            <img src={fullLogoUrl} alt="" aria-hidden="true" className="object-contain w-32" />
             <div className="truncate text-xl mt-1.5 font-medium tracking-tight text-white/60">
               Studio
             </div>

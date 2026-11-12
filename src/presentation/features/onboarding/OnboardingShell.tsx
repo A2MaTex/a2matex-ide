@@ -14,12 +14,7 @@ export function OnboardingShell({ children, step }: OnboardingShellProps) {
       <section className="relative w-full max-w-3xl overflow-hidden rounded-2xl border border-border/80 bg-panel/95 shadow-[0_30px_120px_rgb(0_0_0/0.58)]">
         <header className="flex items-center justify-between border-b border-border px-6 py-2">
           <div className="flex items-center">
-            <img
-              src={fullLogoUrl}
-              alt=""
-              className="w-36 rounded-md"
-              aria-hidden="true"
-            />
+            <img src={fullLogoUrl} alt="" className="w-36 rounded-md" aria-hidden="true" />
             <div className="truncate text-2xl mt-1.5 font-medium tracking-tight text-white/60">
               Studio
             </div>
