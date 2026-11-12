@@ -8,6 +8,7 @@ import { CreateProjectDialog } from '@presentation/features/project-session/Crea
 import { ProjectDetailsDialog } from '@presentation/features/project-session/ProjectDetailsDialog';
 import type { RecentProjectItem } from '@application/project/recent-projects';
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
+import URL from '@/app/constants/url';
 
 const capabilityItems = [
   'Versioned project manifest',
@@ -40,7 +41,8 @@ export function ProjectHomePage() {
     void loadRecent();
   }, [loadRecent]);
 
-  const enterWorkspace = (projectId: string) => navigate(`/workspace/${projectId}`);
+  const enterWorkspace = (projectId: string) =>
+    navigate(URL.MainWorkflowHome.replace(':projectId', projectId));
   const handleCreate = async (input: { description?: string; name: string }) => {
     const snapshot = await create(input);
     if (!snapshot) return false;
@@ -162,7 +164,7 @@ export function ProjectHomePage() {
                       <div className="min-w-0 flex-1">
                         <div className="truncate text-sm font-medium">{project.name}</div>
                         <div className="truncate text-[11px] text-muted-foreground">
-                          Updated {new Date(project.effectiveUpdatedAt).toLocaleString()}
+                          Updated {new Date(project.effectiveUpdatedAt).toLocaleString('en-GB')}
                         </div>
                       </div>
                       <ArrowRight className="size-4 text-muted-foreground" />

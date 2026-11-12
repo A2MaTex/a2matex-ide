@@ -1,83 +1,30 @@
-export interface LoginInput {
-  account: string;
-  password: string;
-}
+import { AuthError, toAuthError } from '@application/auth/auth.error';
+import type {
+  AuthRemoteGateway,
+  AuthScope,
+  AuthTokenPair,
+  LoginInput,
+  MainAuthSession,
+  RefreshTokenVault,
+  SessionPersistence,
+  SessionState,
+  StoredRefreshCredential,
+} from '@application/auth/auth.types';
 
-export interface AuthTokenPair {
-  accessToken: string;
-  refreshToken: string;
-}
-
-export interface AuthScope {
-  server: string;
-  account: string;
-}
-
-export interface StoredRefreshCredential {
-  scope: AuthScope;
-  refreshToken: string;
-}
-
-export type SessionPersistence = 'secure' | 'session-only';
-
-export type SessionState =
-  | { status: 'signed-out' }
-  | {
-      status: 'authenticated';
-      account: string;
-      persistence: SessionPersistence;
-    };
-
-export type AuthErrorCode =
-  | 'AUTH_INVALID_INPUT'
-  | 'AUTH_INVALID_CREDENTIALS'
-  | 'AUTH_SESSION_EXPIRED'
-  | 'AUTH_ACCOUNT_BLOCKED'
-  | 'AUTH_ACCESS_DENIED'
-  | 'AUTH_NETWORK_UNAVAILABLE'
-  | 'AUTH_TIMEOUT'
-  | 'AUTH_SERVER_ERROR'
-  | 'AUTH_INVALID_RESPONSE'
-  | 'AUTH_CONFIGURATION_ERROR'
-  | 'AUTH_CREDENTIAL_STORAGE_ERROR'
-  | 'AUTH_UNKNOWN_ERROR';
-
-export class AuthError extends Error {
-  readonly code: AuthErrorCode;
-  readonly retryable: boolean;
-
-  constructor(code: AuthErrorCode, message: string, retryable: boolean) {
-    super(message);
-    this.name = 'AuthError';
-    this.code = code;
-    this.retryable = retryable;
-  }
-}
-
-export interface AuthRemoteGateway {
-  login(input: LoginInput): Promise<AuthTokenPair>;
-  refresh(refreshToken: string): Promise<AuthTokenPair>;
-  logout(accessToken: string): Promise<void>;
-}
-
-export interface RefreshTokenVault {
-  read(): Promise<StoredRefreshCredential | null>;
-  replace(scope: AuthScope, refreshToken: string): Promise<SessionPersistence>;
-  clear(): Promise<void>;
-}
-
-export interface AuthClient {
-  restore(): Promise<SessionState>;
-  login(input: LoginInput): Promise<SessionState>;
-  logout(): Promise<SessionState>;
-  subscribe?(listener: (session: SessionState) => void): () => void;
-}
-
-export interface MainAuthSession extends AuthClient {
-  getValidAccessToken(): Promise<string | null>;
-  refreshAccessToken(): Promise<string | null>;
-  subscribe(listener: (session: SessionState) => void): () => void;
-}
+export { AuthError, toAuthError } from '@application/auth/auth.error';
+export type { AuthErrorCode } from '@application/auth/auth.error';
+export type {
+  AuthClient,
+  AuthRemoteGateway,
+  AuthScope,
+  AuthTokenPair,
+  LoginInput,
+  MainAuthSession,
+  RefreshTokenVault,
+  SessionPersistence,
+  SessionState,
+  StoredRefreshCredential,
+} from '@application/auth/auth.types';
 
 interface AuthSessionServiceOptions {
   now?: () => number;
@@ -391,9 +338,4 @@ export class AuthSessionService implements MainAuthSession {
   private notifySessionChanged() {
     for (const listener of this.sessionListeners) listener(this.session);
   }
-}
-
-export function toAuthError(error: unknown): AuthError {
-  if (error instanceof AuthError) return error;
-  return new AuthError('AUTH_UNKNOWN_ERROR', 'Authentication failed unexpectedly.', true);
 }

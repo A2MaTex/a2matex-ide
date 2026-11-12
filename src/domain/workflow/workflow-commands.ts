@@ -1,15 +1,11 @@
-import type {
-  WorkflowBinding,
-  WorkflowDocument,
-  WorkflowEdge,
-  WorkflowNode,
-} from '@domain/project/project';
+import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
+import { WorkflowCommandError } from '@domain/workflow/workflow-command.error';
+import type { WorkflowCommand } from '@domain/workflow/workflow-command.types';
 import {
   fieldValueIsValid,
   objectValueSchemasEqual,
   objectValueSchema,
   validateObjectValue,
-  type ObjectValueSchema,
 } from '@domain/schema/object-value-schema';
 import { defaultNodeValuesFor, findNodeDefinition } from '@domain/workflow/node-catalog';
 import {
@@ -20,103 +16,10 @@ import {
   type PortDefinition,
 } from '@domain/workflow/node-definition';
 import { isLiteralBinding, literalBinding } from '@domain/workflow/workflow-binding';
-import type { JsonValue } from '@shared/types/json-value';
 
-export type WorkflowCommand =
-  | {
-      type: 'node.add';
-      payload: {
-        nodeId: string;
-        nodeType: string;
-        nodeVersion: number;
-        position: { x: number; y: number };
-      };
-    }
-  | {
-      type: 'node.move';
-      payload: { nodeId: string; position: { x: number; y: number } };
-    }
-  | {
-      type: 'node.updateParams';
-      payload: { nodeId: string; changes: Record<string, JsonValue> };
-    }
-  | {
-      type: 'node.commitConfiguration';
-      payload: {
-        nodeId: string;
-        baseRevision: number;
-        config: Record<string, JsonValue>;
-        inputSchema: ObjectValueSchema;
-        bindings: Record<string, WorkflowBinding>;
-        errorPolicy: WorkflowNode['errorPolicy'];
-      };
-    }
-  | {
-      type: 'node.updateMetadata';
-      payload: {
-        nodeId: string;
-        name?: string;
-        labelMode: 'icon' | 'icon-and-name';
-        description?: string;
-        disabled: boolean;
-      };
-    }
-  | { type: 'node.remove'; payload: { nodeId: string } }
-  | {
-      type: 'node.duplicate';
-      payload: { sourceNodeId: string; nodeId: string; position?: { x: number; y: number } };
-    }
-  | {
-      type: 'edge.connect';
-      payload: {
-        edgeId: string;
-        source: { nodeId: string; port: string };
-        target: { nodeId: string; port: string };
-      };
-    }
-  | {
-      type: 'node.addConnected';
-      payload: {
-        nodeId: string;
-        nodeType: string;
-        nodeVersion: number;
-        position: { x: number; y: number };
-        edgeId: string;
-        source: { nodeId: string; port: string };
-        targetPort: string;
-      };
-    }
-  | {
-      type: 'edge.reconnect';
-      payload: {
-        edgeId: string;
-        source: { nodeId: string; port: string };
-        target: { nodeId: string; port: string };
-      };
-    }
-  | { type: 'edge.remove'; payload: { edgeId: string } };
-
-export type WorkflowCommandErrorCode =
-  | 'DUPLICATE_EDGE'
-  | 'DUPLICATE_NODE'
-  | 'EDGE_NOT_FOUND'
-  | 'GRAPH_CYCLE'
-  | 'INVALID_NODE_CONFIGURATION'
-  | 'INVALID_NODE_METADATA'
-  | 'NODE_DEFINITION_MISSING'
-  | 'NODE_NOT_FOUND'
-  | 'PORT_INCOMPATIBLE'
-  | 'PORT_NOT_FOUND';
-
-export class WorkflowCommandError extends Error {
-  readonly code: WorkflowCommandErrorCode;
-
-  constructor(code: WorkflowCommandErrorCode, message: string) {
-    super(message);
-    this.code = code;
-    this.name = 'WorkflowCommandError';
-  }
-}
+export { WorkflowCommandError } from '@domain/workflow/workflow-command.error';
+export type { WorkflowCommandErrorCode } from '@domain/workflow/workflow-command.error';
+export type { WorkflowCommand } from '@domain/workflow/workflow-command.types';
 
 function findNode(workflow: WorkflowDocument, nodeId: string) {
   const node = workflow.nodes.find((candidate) => candidate.id === nodeId);

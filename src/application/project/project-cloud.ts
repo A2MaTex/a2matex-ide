@@ -6,6 +6,16 @@ import type {
   LocalProjectSyncStatus,
 } from '@application/project/local-project-repository';
 import { LocalProjectPersistenceError } from '@application/project/local-project-repository';
+import { CloudProjectError } from '@application/project/project-cloud.error';
+import type {
+  CloudProject,
+  CloudProjectDraft,
+  CloudProjectGateway,
+  CloudProjectIndex,
+  ProjectCloudClient,
+  ProjectCloudEvent,
+  UpdateCloudProjectInput,
+} from '@application/project/project-cloud.types';
 import {
   CloudProjectDocumentError,
   createCloudDraftPayload,
@@ -15,143 +25,22 @@ import {
 import { normalizeCloudProjectName } from '@domain/project/project-name';
 import type { JsonValue } from '@shared/types/json-value';
 
-export type JsonObject = { [key: string]: JsonValue };
-export type CloudProjectStatus = 'ACTIVE' | 'ARCHIVED';
-
-export interface CloudProject {
-  createdAt: string;
-  description: string | null;
-  id: string;
-  name: string;
-  publisherAccountId: string;
-  status: CloudProjectStatus;
-  updatedAt: string | null;
-}
-
-export interface CloudProjectPage {
-  items: CloudProject[];
-  limit: number;
-  page: number;
-  totalItems: number;
-  totalPages: number;
-}
-
-export interface CloudProjectDraft {
-  contentHash: string;
-  editorGraph: JsonObject;
-  id: string;
-  inputSchema: JsonObject;
-  projectId: string;
-  runtimeIr: JsonObject | null;
-  savedAt: string;
-  testSummary: JsonObject;
-  validationSummary: JsonObject;
-  version: number;
-}
-
-export interface CloudProjectDraftPayload {
-  editorGraph: JsonObject;
-  expectedVersion: number;
-  inputSchema: JsonObject;
-  runtimeIr: JsonObject | null;
-  testSummary: JsonObject;
-  validationSummary: JsonObject;
-}
-
-export interface CloudDraftAcknowledgement {
-  contentHash: string;
-  id: string;
-  savedAt: string;
-  version: number;
-}
-
-export interface UpdateCloudProjectInput {
-  description?: string | null;
-  name?: string;
-}
-
-export interface CloudProjectGateway {
-  archive(accessToken: string, projectId: string): Promise<void>;
-  create(
-    accessToken: string,
-    input: { description: string | null; name: string },
-  ): Promise<{ id: string }>;
-  get(accessToken: string, projectId: string): Promise<CloudProject>;
-  getDraft(
-    accessToken: string,
-    projectId: string,
-  ): Promise<{ draft: CloudProjectDraft | null; projectStatus: CloudProjectStatus }>;
-  list(
-    accessToken: string,
-    input: { limit: number; page: number; status?: CloudProjectStatus },
-  ): Promise<CloudProjectPage>;
-  putDraft(
-    accessToken: string,
-    projectId: string,
-    input: CloudProjectDraftPayload,
-  ): Promise<CloudDraftAcknowledgement>;
-  update(accessToken: string, projectId: string, input: UpdateCloudProjectInput): Promise<void>;
-}
-
-export type CloudProjectErrorCode =
-  | 'CLOUD_CONFIGURATION_ERROR'
-  | 'CLOUD_DRAFT_UNSUPPORTED'
-  | 'CLOUD_DRAFT_VERSION_CONFLICT'
-  | 'CLOUD_FORBIDDEN'
-  | 'CLOUD_INVALID_INPUT'
-  | 'CLOUD_INVALID_RESPONSE'
-  | 'CLOUD_LOCAL_CHANGES'
-  | 'CLOUD_NAME_CONFLICT'
-  | 'CLOUD_NETWORK_UNAVAILABLE'
-  | 'CLOUD_PROJECT_ARCHIVED'
-  | 'CLOUD_PROJECT_NOT_FOUND'
-  | 'CLOUD_PUBLISHER_BLOCKED'
-  | 'CLOUD_PUBLISHER_UNAVAILABLE'
-  | 'CLOUD_SERVER_ERROR'
-  | 'CLOUD_SESSION_EXPIRED'
-  | 'CLOUD_TIMEOUT';
-
-export class CloudProjectError extends Error {
-  readonly code: CloudProjectErrorCode;
-  readonly retryable: boolean;
-  readonly details?: { currentVersion?: number };
-
-  constructor(
-    code: CloudProjectErrorCode,
-    message: string,
-    retryable: boolean,
-    details?: { currentVersion?: number },
-    options?: ErrorOptions,
-  ) {
-    super(message, options);
-    this.code = code;
-    this.retryable = retryable;
-    this.details = details;
-    this.name = 'CloudProjectError';
-  }
-}
-
-export interface CloudProjectIndex {
-  projects: CloudProject[];
-  refreshedAt: string | null;
-  source: 'cache' | 'network';
-  warning: string | null;
-}
-
-export interface ProjectCloudClient {
-  archive(projectId: string): Promise<CloudProject>;
-  getDetail(projectId: string): Promise<CloudProject>;
-  load(): Promise<CloudProjectIndex>;
-  open(projectId: string): Promise<LocalProjectSnapshot>;
-  refresh(): Promise<CloudProjectIndex>;
-  sync(localId: string): Promise<LocalProjectSnapshot>;
-  updateFromCloud(localId: string): Promise<LocalProjectSnapshot>;
-  update(
-    projectId: string,
-    input: UpdateCloudProjectInput,
-    localId?: string,
-  ): Promise<CloudProject>;
-}
+export { CloudProjectError } from '@application/project/project-cloud.error';
+export type { CloudProjectErrorCode } from '@application/project/project-cloud.error';
+export type {
+  CloudDraftAcknowledgement,
+  CloudProject,
+  CloudProjectDraft,
+  CloudProjectDraftPayload,
+  CloudProjectGateway,
+  CloudProjectIndex,
+  CloudProjectPage,
+  CloudProjectStatus,
+  JsonObject,
+  ProjectCloudClient,
+  ProjectCloudEvent,
+  UpdateCloudProjectInput,
+} from '@application/project/project-cloud.types';
 
 interface ProjectCloudServiceOptions {
   createId?: () => string;
@@ -161,17 +50,6 @@ interface ProjectCloudServiceOptions {
 }
 
 export { createCloudDraftPayload } from '@application/project/cloud-project-document';
-
-export interface ProjectCloudEvent {
-  attemptId?: string;
-  errorCode?: CloudProjectErrorCode;
-  event: 'cloud_open' | 'cloud_update' | 'sync_completed' | 'sync_failed' | 'sync_started';
-  localId?: string;
-  localRevision?: number;
-  remoteProjectId?: string;
-  remoteVersion?: number;
-  status?: LocalProjectSyncStatus;
-}
 
 function cloudProjectFromCache(payload: JsonValue): CloudProject | null {
   if (!payload || Array.isArray(payload) || typeof payload !== 'object') return null;

@@ -6,6 +6,7 @@ import {
   CloudUpload,
   Copy,
   Folder,
+  List,
   ListChecks,
   Network,
   Plus,
@@ -49,6 +50,7 @@ import { WorkflowExplorer } from '@presentation/features/workflow-editor/Workflo
 import { useWorkflowValidation } from '@presentation/features/workflow-editor/useWorkflowValidation';
 import { useEditorStore } from '@presentation/stores/editor-store';
 import { projectStoreIsDirty } from '@presentation/stores/project-store';
+import URL from '@/app/constants/url';
 
 function ResizeHandle({ orientation }: { orientation: 'horizontal' | 'vertical' }) {
   return (
@@ -387,7 +389,7 @@ export function MainWorkflowPage() {
           <p className="mt-2 text-xs leading-5 text-muted-foreground">
             Open or create a project before entering its workspace.
           </p>
-          <Button className="mt-5" onClick={() => navigate('/projects')}>
+          <Button className="mt-5" onClick={() => navigate(URL.ProjectHome)}>
             <span className="text-sm font-medium">Go to projects</span>
           </Button>
         </div>
@@ -441,7 +443,7 @@ export function MainWorkflowPage() {
 
   const returnToProjects = async () => {
     if (!(await flushLocalSave())) return;
-    navigate('/projects');
+    navigate(URL.ProjectHome);
   };
   const closeProject = async () => {
     if (!(await close())) {
@@ -449,7 +451,7 @@ export function MainWorkflowPage() {
       discard();
     }
     resetWorkflowSession();
-    navigate('/projects');
+    navigate(URL.ProjectHome);
   };
   const addFromPalette = (definition: NodeDefinition) => {
     const nodeId = newNodeId(definition.type);
@@ -503,6 +505,7 @@ export function MainWorkflowPage() {
       id: 'show-actions',
       label: 'Show action list',
       shortcut: 'Ctrl+P',
+      icon: List,
       run: () => window.setTimeout(() => setActionList({ mode: 'command' }), 0),
     },
     {

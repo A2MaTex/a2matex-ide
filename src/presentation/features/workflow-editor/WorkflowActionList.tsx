@@ -1,4 +1,4 @@
-import { Command, Search, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 
 export interface WorkflowAction {
@@ -75,28 +75,26 @@ export function WorkflowActionList({
         aria-label={mode === 'command' ? 'Workflow action list' : 'Workflow context menu'}
         style={contextStyle}
         className={
-          'overflow-hidden rounded-lg border border-border bg-panel shadow-2xl ' +
+          'overflow-hidden rounded-lg border border-border bg-panel shadow-2xl text-sm ' +
           (mode === 'command' ? 'h-fit w-full max-w-lg' : 'pointer-events-auto absolute w-72')
         }
       >
-        <label className="flex items-center gap-2 border-b border-border px-3 py-2.5">
-          {mode === 'command' ? (
-            <Command className="size-4 text-primary" />
-          ) : (
+        {mode === 'command' && (
+          <label className="flex items-center gap-2 border-b border-border px-3 py-2.5">
             <Search className="size-4 text-muted-foreground" />
-          )}
-          <span className="sr-only">Search actions</span>
-          <input
-            autoFocus
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search actions…"
-            className="min-w-0 flex-1 bg-transparent text-xs outline-none"
-          />
-          <button type="button" onClick={onClose} aria-label="Close action list">
-            <X className="size-3.5 text-muted-foreground" />
-          </button>
-        </label>
+            <span className="sr-only">Search actions</span>
+            <input
+              autoFocus
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search actions…"
+              className="min-w-0 flex-1 bg-transparent text-xs outline-none"
+            />
+            <button type="button" onClick={onClose} aria-label="Close action list">
+              <X className="size-3.5 text-muted-foreground" />
+            </button>
+          </label>
+        )}
         <div className="max-h-96 overflow-y-auto p-1.5">
           {filtered.map((action) => {
             const Icon = action.icon;

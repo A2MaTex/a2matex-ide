@@ -1,135 +1,38 @@
-import { z } from 'zod';
-
 import { AuthError, type MainAuthSession } from '@application/auth/auth-session';
+import {
+  toWorkflowValidationError,
+  WorkflowValidationError,
+} from '@application/workflow-validation/workflow-validation.error';
+import { workflowValidationInputSchema } from '@application/workflow-validation/workflow-validation.schema';
+import type {
+  WorkflowValidationClient,
+  WorkflowValidationInput,
+  WorkflowValidationOutput,
+  WorkflowValidationRemoteGateway,
+} from '@application/workflow-validation/workflow-validation.types';
 
-export const EDITOR_GRAPH_MAX_CONTENT_BYTES = 1_048_576;
-
-export const workflowValidationDiagnosticCodes = [
-  'EDITOR_GRAPH_CONTRACT_INVALID',
-  'GRAPH_SCHEMA_VERSION_UNSUPPORTED',
-  'NODE_ID_DUPLICATED',
-  'EDGE_ID_DUPLICATED',
-  'START_NODE_COUNT_INVALID',
-  'ENTRY_NODE_INVALID',
-  'END_NODE_UNREACHABLE',
-  'EDGE_SOURCE_NODE_NOT_FOUND',
-  'EDGE_TARGET_NODE_NOT_FOUND',
-  'EDGE_SOURCE_PORT_NOT_FOUND',
-  'END_NODE_HAS_OUTGOING_EDGE',
-  'NODE_UNREACHABLE',
-  'GRAPH_CYCLE_DETECTED',
-  'NODE_TYPE_NOT_ACTIVE',
-  'NODE_CONFIG_INVALID',
-  'NODE_ERROR_POLICY_INVALID',
-  'NODE_BINDINGS_INVALID',
-  'NODE_VALUE_BINDING_INVALID',
-  'SWITCH_PORT_EDGE_COUNT_INVALID',
-  'GRAPH_NODE_LIMIT_EXCEEDED',
-  'GRAPH_EDGE_LIMIT_EXCEEDED',
-] as const;
-
-const jsonObjectSchema = z.record(z.string(), z.json());
-
-export const workflowValidationInputSchema = z
-  .object({
-    editorGraph: jsonObjectSchema,
-  })
-  .strict();
-
-export const workflowValidationDiagnosticSchema = z
-  .object({
-    code: z.enum(workflowValidationDiagnosticCodes),
-    message: z.string().min(1),
-    nodeId: z.string().trim().min(1).max(100).optional(),
-    edgeId: z.string().trim().min(1).max(100).optional(),
-    path: z.array(z.union([z.string(), z.number().int().nonnegative()])),
-  })
-  .strict();
-
-export const workflowValidationOutputSchema = z
-  .object({
-    status: z.enum(['INVALID', 'VALID_WITH_WARNINGS', 'VALID']),
-    errors: z.array(workflowValidationDiagnosticSchema).max(100),
-    warnings: z.array(workflowValidationDiagnosticSchema).max(100),
-    truncated: z.boolean(),
-  })
-  .strict()
-  .superRefine((output, context) => {
-    if (output.errors.length + output.warnings.length > 100) {
-      context.addIssue({
-        code: 'custom',
-        message: 'Validation output cannot contain more than 100 diagnostics.',
-      });
-    }
-    if (output.status === 'VALID' && (output.errors.length > 0 || output.warnings.length > 0)) {
-      context.addIssue({
-        code: 'custom',
-        message: 'VALID output cannot contain diagnostics.',
-      });
-    }
-    if (
-      output.status === 'VALID_WITH_WARNINGS' &&
-      (output.errors.length > 0 || output.warnings.length === 0)
-    ) {
-      context.addIssue({
-        code: 'custom',
-        message: 'VALID_WITH_WARNINGS output must contain warnings and no errors.',
-      });
-    }
-    if (output.status === 'INVALID' && output.errors.length === 0) {
-      context.addIssue({
-        code: 'custom',
-        message: 'INVALID output must contain at least one error.',
-      });
-    }
-  });
-
-export const workflowValidationResponseSchema = z
-  .object({
-    data: workflowValidationOutputSchema,
-    statusCode: z.literal(200),
-  })
-  .strict();
-
-export type WorkflowValidationInput = z.infer<typeof workflowValidationInputSchema>;
-export type WorkflowValidationDiagnostic = z.infer<typeof workflowValidationDiagnosticSchema>;
-export type WorkflowValidationOutput = z.infer<typeof workflowValidationOutputSchema>;
-
-export type WorkflowValidationErrorCode =
-  | 'WORKFLOW_VALIDATION_INVALID_REQUEST'
-  | 'WORKFLOW_VALIDATION_SESSION_REQUIRED'
-  | 'WORKFLOW_VALIDATION_SESSION_EXPIRED'
-  | 'WORKFLOW_VALIDATION_FORBIDDEN'
-  | 'WORKFLOW_VALIDATION_PAYLOAD_TOO_LARGE'
-  | 'WORKFLOW_VALIDATION_TIMEOUT'
-  | 'WORKFLOW_VALIDATION_NETWORK_UNAVAILABLE'
-  | 'WORKFLOW_VALIDATION_SERVER_ERROR'
-  | 'WORKFLOW_VALIDATION_INVALID_RESPONSE'
-  | 'WORKFLOW_VALIDATION_CONFIGURATION_ERROR'
-  | 'WORKFLOW_VALIDATION_UNKNOWN_ERROR';
-
-export class WorkflowValidationError extends Error {
-  readonly code: WorkflowValidationErrorCode;
-  readonly retryable: boolean;
-
-  constructor(code: WorkflowValidationErrorCode, message: string, retryable: boolean) {
-    super(message);
-    this.name = 'WorkflowValidationError';
-    this.code = code;
-    this.retryable = retryable;
-  }
-}
-
-export interface WorkflowValidationRemoteGateway {
-  validate(input: {
-    accessToken: string;
-    editorGraph: WorkflowValidationInput['editorGraph'];
-  }): Promise<WorkflowValidationOutput>;
-}
-
-export interface WorkflowValidationClient {
-  validate(input: WorkflowValidationInput): Promise<WorkflowValidationOutput>;
-}
+export {
+  EDITOR_GRAPH_MAX_CONTENT_BYTES,
+  workflowValidationDiagnosticCodes,
+} from '@application/workflow-validation/workflow-validation.constants';
+export {
+  toWorkflowValidationError,
+  WorkflowValidationError,
+} from '@application/workflow-validation/workflow-validation.error';
+export type { WorkflowValidationErrorCode } from '@application/workflow-validation/workflow-validation.error';
+export {
+  workflowValidationDiagnosticSchema,
+  workflowValidationInputSchema,
+  workflowValidationOutputSchema,
+  workflowValidationResponseSchema,
+} from '@application/workflow-validation/workflow-validation.schema';
+export type {
+  WorkflowValidationClient,
+  WorkflowValidationDiagnostic,
+  WorkflowValidationInput,
+  WorkflowValidationOutput,
+  WorkflowValidationRemoteGateway,
+} from '@application/workflow-validation/workflow-validation.types';
 
 function mapAuthError(error: unknown): WorkflowValidationError {
   if (error instanceof WorkflowValidationError) return error;
@@ -160,15 +63,6 @@ function mapAuthError(error: unknown): WorkflowValidationError {
     'WORKFLOW_VALIDATION_SESSION_REQUIRED',
     'Sign in before validating a workflow.',
     false,
-  );
-}
-
-export function toWorkflowValidationError(error: unknown): WorkflowValidationError {
-  if (error instanceof WorkflowValidationError) return error;
-  return new WorkflowValidationError(
-    'WORKFLOW_VALIDATION_UNKNOWN_ERROR',
-    'The workflow could not be validated.',
-    true,
   );
 }
 

@@ -1,4 +1,11 @@
-import { AlertCircle, AlertTriangle, LoaderCircle, RotateCw, XCircle } from 'lucide-react';
+import {
+  AlertCircle,
+  AlertTriangle,
+  ListCheck,
+  LoaderCircle,
+  RotateCw,
+  XCircle,
+} from 'lucide-react';
 
 import type { WorkflowValidationDiagnostic } from '@application/workflow-validation/workflow-validation';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
@@ -180,9 +187,9 @@ function DiagnosticsContent({
           ))}
         </div>
       ) : (
-        <div className="flex items-center gap-2 px-4 pb-4 text-xs text-muted-foreground font-mono">
-          No server diagnostics.
-        </div>
+        <pre className="flex items-center p-4 font-mono text-xs leading-5 text-muted-foreground">
+          <ListCheck size={14} /> No server diagnostics.
+        </pre>
       )}
     </div>
   );
@@ -227,8 +234,8 @@ export function ProblemsPanel({
       <div className="min-h-0 flex-1 overflow-y-auto">
         {activeTab === 'problems' ? (
           issues.length === 0 ? (
-            <pre className="p-4 font-mono text-xs leading-5 text-muted-foreground">
-              No workflow problems detected.
+            <pre className="flex items-center p-4 font-mono text-xs leading-5 text-muted-foreground">
+              <ListCheck size={14} /> No workflow problems detected.
             </pre>
           ) : (
             <div className="divide-y divide-border">

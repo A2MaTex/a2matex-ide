@@ -1,65 +1,28 @@
 import { AuthError, type MainAuthSession } from '@application/auth/auth-session';
+import { NodeCatalogError, toNodeCatalogError } from '@application/node-catalog/node-catalog.error';
+import type {
+  NodeCatalogCache,
+  NodeCatalogClient,
+  NodeCatalogRemoteGateway,
+  RemoteCatalogResult,
+} from '@application/node-catalog/node-catalog.types';
 import {
   nodeCatalogScopeSchema,
-  type CatalogNodeDefinition,
   type NodeCatalogScope,
   type NodeCatalogSnapshot,
 } from '@domain/node-catalog/node-catalog';
 
-export type NodeCatalogErrorCode =
-  | 'CATALOG_INVALID_INPUT'
-  | 'CATALOG_UNAUTHENTICATED'
-  | 'CATALOG_SESSION_EXPIRED'
-  | 'CATALOG_NETWORK_UNAVAILABLE'
-  | 'CATALOG_TIMEOUT'
-  | 'CATALOG_SERVER_ERROR'
-  | 'CATALOG_INVALID_RESPONSE'
-  | 'CATALOG_CACHE_MISS'
-  | 'CATALOG_CACHE_WRITE_FAILED'
-  | 'CATALOG_CONFIGURATION_ERROR'
-  | 'CATALOG_UNKNOWN_ERROR';
-
-export class NodeCatalogError extends Error {
-  readonly code: NodeCatalogErrorCode;
-  readonly retryable: boolean;
-
-  constructor(code: NodeCatalogErrorCode, message: string, retryable: boolean) {
-    super(message);
-    this.name = 'NodeCatalogError';
-    this.code = code;
-    this.retryable = retryable;
-  }
-}
-
-export type RemoteCatalogResult =
-  | { status: 'modified'; catalogHash: string; nodes: CatalogNodeDefinition[] }
-  | { status: 'not-modified' };
-
-export interface NodeCatalogRemoteGateway {
-  fetch(input: {
-    accessToken: string;
-    runtimeVersion: string;
-    catalogHash?: string;
-  }): Promise<RemoteCatalogResult>;
-}
-
-export interface NodeCatalogCache {
-  read(scope: NodeCatalogScope): Promise<NodeCatalogSnapshot | null>;
-  write(snapshot: NodeCatalogSnapshot): Promise<void>;
-}
-
-export interface NodeCatalogClient {
-  load(runtimeVersion: string): Promise<NodeCatalogSnapshot>;
-  refresh(runtimeVersion: string): Promise<NodeCatalogSnapshot>;
-}
+export { NodeCatalogError, toNodeCatalogError } from '@application/node-catalog/node-catalog.error';
+export type { NodeCatalogErrorCode } from '@application/node-catalog/node-catalog.error';
+export type {
+  NodeCatalogCache,
+  NodeCatalogClient,
+  NodeCatalogRemoteGateway,
+  RemoteCatalogResult,
+} from '@application/node-catalog/node-catalog.types';
 
 function asCatalogError(error: unknown): NodeCatalogError {
-  if (error instanceof NodeCatalogError) return error;
-  return new NodeCatalogError(
-    'CATALOG_UNKNOWN_ERROR',
-    'The node catalog could not be loaded.',
-    true,
-  );
+  return toNodeCatalogError(error);
 }
 
 function cacheStatus(error: NodeCatalogError): NodeCatalogSnapshot['status'] {
@@ -253,8 +216,4 @@ export class NodeCatalogService implements NodeCatalogClient {
       return this.remote.fetch({ ...input, accessToken: refreshedToken });
     }
   }
-}
-
-export function toNodeCatalogError(error: unknown): NodeCatalogError {
-  return asCatalogError(error);
 }
