@@ -6,6 +6,7 @@ import { useAuth } from '@presentation/features/auth/use-auth';
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
 import { cn } from '@shared/utils/cn';
 import URL from '@/app/constants/url';
+import fullLogoUrl from '@/assets/full-logo.webp';
 
 export function AppShell() {
   const { logout, session, status } = useAuth();
@@ -82,7 +83,7 @@ export function AppShell() {
         <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-panel/90 px-4 backdrop-blur">
           <div className="flex items-center">
             <img
-              src="/src/assets/full-logo.webp"
+              src={fullLogoUrl}
               alt=""
               aria-hidden="true"
               className="object-contain w-32"

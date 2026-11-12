@@ -4,6 +4,7 @@ import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '@presentation/components/ui/button';
 import { useAuth } from '@presentation/features/auth/use-auth';
+import fullLogoUrl from '@/assets/full-logo.webp';
 
 interface LoginLocationState {
   from?: string;
@@ -62,7 +63,7 @@ export function LoginPage() {
         <div className="mb-8 text-center">
           <div className="flex items-center justify-center">
             <img
-              src="/src/assets/full-logo.webp"
+              src={fullLogoUrl}
               alt=""
               aria-hidden="true"
               className="object-contain w-36"

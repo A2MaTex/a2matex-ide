@@ -1,5 +1,7 @@
 import type { ReactNode } from 'react';
 
+import fullLogoUrl from '@/assets/full-logo.webp';
+
 interface OnboardingShellProps {
   children: ReactNode;
   step: 1 | 2 | 3 | 4 | 5;
@@ -13,7 +15,7 @@ export function OnboardingShell({ children, step }: OnboardingShellProps) {
         <header className="flex items-center justify-between border-b border-border px-6 py-2">
           <div className="flex items-center">
             <img
-              src="/src/assets/full-logo.webp"
+              src={fullLogoUrl}
               alt=""
               className="w-36 rounded-md"
               aria-hidden="true"
