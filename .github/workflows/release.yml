@@ -1,0 +1,157 @@
+name: Release desktop
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: release-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  prepare:
+    name: Validate and prepare release
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.version.outputs.tag }}
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run format:check
+      - run: npm run lint
+      - run: npm run typecheck
+      - id: version
+        name: Calculate release version
+        shell: bash
+        run: |
+          package_version="$(node -p "JSON.parse(require('fs').readFileSync('package.json', 'utf8')).version")"
+          if [[ ! "$package_version" =~ ^([0-9]+)\.([0-9]+)\.[0-9]+ ]]; then
+            echo "package.json version must use semantic versioning" >&2
+            exit 1
+          fi
+
+          release_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${GITHUB_RUN_NUMBER}"
+          echo "version=$release_version" >> "$GITHUB_OUTPUT"
+          echo "tag=main-v$release_version" >> "$GITHUB_OUTPUT"
+
+  build:
+    name: Build ${{ matrix.name }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: macOS universal
+            os: macos-latest
+            args: --mac dmg --universal
+            artifact: macos
+            files: release/*.dmg
+          - name: Windows x64
+            os: windows-latest
+            args: --win nsis --x64
+            artifact: windows
+            files: release/*.exe
+          - name: Linux x64
+            os: ubuntu-latest
+            args: --linux AppImage deb --x64
+            artifact: linux
+            files: |
+              release/*.AppImage
+              release/*.deb
+    runs-on: ${{ matrix.os }}
+    env:
+      APP_VERSION: ${{ needs.prepare.outputs.version }}
+      APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.artifact == 'macos' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+      APPLE_ID: ${{ matrix.artifact == 'macos' && secrets.APPLE_ID || '' }}
+      APPLE_TEAM_ID: ${{ matrix.artifact == 'macos' && secrets.APPLE_TEAM_ID || '' }}
+      BUILD_NUMBER: ${{ github.run_number }}
+      CSC_KEY_PASSWORD: ${{ matrix.artifact == 'macos' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
+      CSC_LINK: ${{ matrix.artifact == 'macos' && secrets.MAC_CSC_LINK || '' }}
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+      VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
+      VITE_PRIVACY_URL: ${{ vars.VITE_PRIVACY_URL }}
+      VITE_PRIVACY_VERSION: ${{ vars.VITE_PRIVACY_VERSION }}
+      VITE_TERMS_URL: ${{ vars.VITE_TERMS_URL }}
+      VITE_TERMS_VERSION: ${{ vars.VITE_TERMS_VERSION }}
+      WIN_CSC_KEY_PASSWORD: ${{ matrix.artifact == 'windows' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+      WIN_CSC_LINK: ${{ matrix.artifact == 'windows' && secrets.WIN_CSC_LINK || '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Create production environment
+        shell: bash
+        run: |
+          if [[ ! "$VITE_API_BASE_URL" =~ ^https:// ]]; then
+            echo "Repository variable VITE_API_BASE_URL must be a production HTTPS URL" >&2
+            exit 1
+          fi
+
+          {
+            printf 'VITE_API_BASE_URL=%s\n' "$VITE_API_BASE_URL"
+            printf 'VITE_TERMS_VERSION=%s\n' "$VITE_TERMS_VERSION"
+            printf 'VITE_TERMS_URL=%s\n' "$VITE_TERMS_URL"
+            printf 'VITE_PRIVACY_VERSION=%s\n' "$VITE_PRIVACY_VERSION"
+            printf 'VITE_PRIVACY_URL=%s\n' "$VITE_PRIVACY_URL"
+          } > .env
+      - run: npm run build:desktop
+      - name: Package ${{ matrix.name }}
+        shell: bash
+        run: >-
+          npx electron-builder ${{ matrix.args }} --publish never
+          -c.extraMetadata.version="$APP_VERSION"
+      - name: Upload ${{ matrix.name }} artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.files }}
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish GitHub release
+    needs: [prepare, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download packaged applications
+        uses: actions/download-artifact@v5
+        with:
+          path: release-assets
+          merge-multiple: true
+      - name: Generate SHA-256 checksums
+        shell: bash
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt
+      - name: Create or update pre-release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.prepare.outputs.tag }}
+          RELEASE_VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release upload "$RELEASE_TAG" release-assets/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --clobber
+          else
+            gh release create "$RELEASE_TAG" release-assets/* \
+              --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" \
+              --title "A2MaTeX_Studio_$RELEASE_VERSION" \
+              --generate-notes \
+              --prerelease
+          fi

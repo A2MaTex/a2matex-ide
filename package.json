@@ -83,7 +83,7 @@
   },
   "build": {
     "appId": "com.a2matex.studio",
-    "productName": "A2MaTeX Studio",
+    "productName": "A2MaTeX_Studio",
     "asar": true,
     "directories": {
       "output": "release"
