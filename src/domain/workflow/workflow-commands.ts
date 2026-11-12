@@ -222,7 +222,10 @@ export function applyWorkflowCommand(
           'The node input schema is invalid',
         );
       }
-      if (!definition.supportedErrorPolicies.includes(command.payload.errorPolicy)) {
+      if (
+        command.payload.errorPolicy === 'ERROR_BRANCH' &&
+        !logicalOutputPortsFor(definition).includes('error')
+      ) {
         throw new WorkflowCommandError(
           'INVALID_NODE_CONFIGURATION',
           'The selected error policy is not supported',

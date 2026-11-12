@@ -162,8 +162,5 @@ export function toWorkflowNodeCatalog(nodes: readonly CatalogNodeDefinition[]): 
     requiredCapabilities: node.capabilities.map((capability) => ({ ...capability })),
     requiredPermissions: [],
     runtimeHandler: node.runtimeHandler,
-    supportedErrorPolicies: node.outputPorts.includes('error')
-      ? ['STOP', 'ERROR_BRANCH']
-      : ['STOP'],
   }));
 }

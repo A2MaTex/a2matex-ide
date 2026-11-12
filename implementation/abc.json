@@ -1,0 +1,922 @@
+{
+    "data": {
+      "catalogHash": "3d092787a6b24941914e4c08528d18b4b5ff7522b6e4cd968b8de7ec5dbd1a61",
+      "nodes": [
+        {
+          "type": "android.input_text",
+          "name": "Input Text",
+          "description": "Enter text into the currently focused Android field.",
+          "category": "ANDROID",
+          "runtimeHandler": "android.input_text",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 30000,
+          "configSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "text": {
+                "type": "string",
+                "maxLength": 10000
+              }
+            },
+            "required": [
+              "text"
+            ],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {},
+          "capabilities": [
+            {
+              "code": "android.device.control",
+              "name": "Android Device Control",
+              "description": "Allows a workflow to send interaction commands to an Android device.",
+              "isSensitive": true
+            }
+          ]
+        },
+        {
+          "type": "android.launch_app",
+          "name": "Launch App",
+          "description": "Launch an installed Android application by package name.",
+          "category": "ANDROID",
+          "runtimeHandler": "android.launch_app",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 30000,
+          "configSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "packageName": {
+                "type": "string",
+                "pattern": "^[A-Za-z][A-Za-z0-9_]*(?:\\.[A-Za-z][A-Za-z0-9_]*)+$",
+                "maxLength": 255,
+                "minLength": 3
+              }
+            },
+            "required": [
+              "packageName"
+            ],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {},
+          "capabilities": [
+            {
+              "code": "android.device.control",
+              "name": "Android Device Control",
+              "description": "Allows a workflow to send interaction commands to an Android device.",
+              "isSensitive": true
+            }
+          ]
+        },
+        {
+          "type": "android.long_press",
+          "name": "Long Press",
+          "description": "Press and hold a point on the selected Android device.",
+          "category": "ANDROID",
+          "runtimeHandler": "android.long_press",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 30000,
+          "configSchema": {
+            "type": "object",
+            "properties": {
+              "targetMode": {
+                "enum": [
+                  "ABSOLUTE_PIXELS",
+                  "SCREEN_PERCENT",
+                  "SELECTOR_ID"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "targetMode"
+            ],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {
+            "targeting": {
+              "modes": [
+                {
+                  "mode": "ABSOLUTE_PIXELS",
+                  "bindingSchema": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "integer",
+                        "maximum": 100000,
+                        "minimum": 0
+                      },
+                      "y": {
+                        "type": "integer",
+                        "maximum": 100000,
+                        "minimum": 0
+                      },
+                      "durationMs": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y",
+                      "durationMs"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                {
+                  "mode": "SCREEN_PERCENT",
+                  "bindingSchema": {
+                    "type": "object",
+                    "properties": {
+                      "xPercent": {
+                        "type": "integer",
+                        "maximum": 100,
+                        "minimum": 0
+                      },
+                      "yPercent": {
+                        "type": "integer",
+                        "maximum": 100,
+                        "minimum": 0
+                      },
+                      "durationMs": {
+                        "type": "integer",
+                        "minimum": 1
+                      }
+                    },
+                    "required": [
+                      "xPercent",
+                      "yPercent",
+                      "durationMs"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                {
+                  "mode": "SELECTOR_ID",
+                  "bindingSchema": {
+                    "type": "object",
+                    "properties": {
+                      "durationMs": {
+                        "type": "integer",
+                        "minimum": 1
+                      },
+                      "selector_id": {
+                        "type": "string",
+                        "pattern": "^[^\\s:]+:id/[^\\s/]+$"
+                      }
+                    },
+                    "required": [
+                      "selector_id",
+                      "durationMs"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              ]
+            }
+          },
+          "capabilities": [
+            {
+              "code": "android.device.control",
+              "name": "Android Device Control",
+              "description": "Allows a workflow to send interaction commands to an Android device.",
+              "isSensitive": true
+            }
+          ]
+        },
+        {
+          "type": "android.press_back",
+          "name": "Press Back",
+          "description": "Press the Android back button.",
+          "category": "ANDROID",
+          "runtimeHandler": "android.press_back",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 30000,
+          "configSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {},
+          "capabilities": [
+            {
+              "code": "android.device.control",
+              "name": "Android Device Control",
+              "description": "Allows a workflow to send interaction commands to an Android device.",
+              "isSensitive": true
+            }
+          ]
+        },
+        {
+          "type": "android.press_home",
+          "name": "Press Home",
+          "description": "Press the Android home button.",
+          "category": "ANDROID",
+          "runtimeHandler": "android.press_home",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 30000,
+          "configSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {},
+          "capabilities": [
+            {
+              "code": "android.device.control",
+              "name": "Android Device Control",
+              "description": "Allows a workflow to send interaction commands to an Android device.",
+              "isSensitive": true
+            }
+          ]
+        },
+        {
+          "type": "android.screenshot",
+          "name": "Screenshot",
+          "description": "Capture the selected Android device screen as a local execution artifact.",
+          "category": "ANDROID",
+          "runtimeHandler": "android.screenshot",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 30000,
+          "configSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "artifactId": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "required": [
+              "artifactId"
+            ],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {},
+          "capabilities": [
+            {
+              "code": "android.screen.capture",
+              "name": "Android Screen Capture",
+              "description": "Allows a workflow to capture the visible Android device screen.",
+              "isSensitive": true
+            }
+          ]
+        },
+        {
+          "type": "android.swipe",
+          "name": "Swipe",
+          "description": "Swipe between two selected points on the Android device.",
+          "category": "ANDROID",
+          "runtimeHandler": "android.swipe",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 30000,
+          "configSchema": {
+            "type": "object",
+            "properties": {
+              "targetMode": {
+                "enum": [
+                  "ABSOLUTE_PIXELS",
+                  "SCREEN_PERCENT"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "targetMode"
+            ],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {
+            "targeting": {
+              "modes": [
+                {
+                  "mode": "ABSOLUTE_PIXELS",
+                  "bindingSchema": {
+                    "type": "object",
+                    "properties": {
+                      "endX": {
+                        "type": "integer",
+                        "maximum": 100000,
+                        "minimum": 0
+                      },
+                      "endY": {
+                        "type": "integer",
+                        "maximum": 100000,
+                        "minimum": 0
+                      },
+                      "startX": {
+                        "type": "integer",
+                        "maximum": 100000,
+                        "minimum": 0
+                      },
+                      "startY": {
+                        "type": "integer",
+                        "maximum": 100000,
+                        "minimum": 0
+                      },
+                      "durationMs": {
+                        "type": "integer",
+                        "maximum": 60000,
+                        "minimum": 1
+                      }
+                    },
+                    "required": [
+                      "startX",
+                      "startY",
+                      "endX",
+                      "endY",
+                      "durationMs"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                {
+                  "mode": "SCREEN_PERCENT",
+                  "bindingSchema": {
+                    "type": "object",
+                    "properties": {
+                      "durationMs": {
+                        "type": "integer",
+                        "maximum": 60000,
+                        "minimum": 1
+                      },
+                      "endXPercent": {
+                        "type": "integer",
+                        "maximum": 100,
+                        "minimum": 0
+                      },
+                      "endYPercent": {
+                        "type": "integer",
+                        "maximum": 100,
+                        "minimum": 0
+                      },
+                      "startXPercent": {
+                        "type": "integer",
+                        "maximum": 100,
+                        "minimum": 0
+                      },
+                      "startYPercent": {
+                        "type": "integer",
+                        "maximum": 100,
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "startXPercent",
+                      "startYPercent",
+                      "endXPercent",
+                      "endYPercent",
+                      "durationMs"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              ]
+            }
+          },
+          "capabilities": [
+            {
+              "code": "android.device.control",
+              "name": "Android Device Control",
+              "description": "Allows a workflow to send interaction commands to an Android device.",
+              "isSensitive": true
+            }
+          ]
+        },
+        {
+          "type": "android.tap",
+          "name": "Tap",
+          "description": "Tap a selected target on the Android device.",
+          "category": "ANDROID",
+          "runtimeHandler": "android.tap",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 30000,
+          "configSchema": {
+            "type": "object",
+            "properties": {
+              "targetMode": {
+                "enum": [
+                  "ABSOLUTE_PIXELS",
+                  "SCREEN_PERCENT",
+                  "SELECTOR_ID"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "targetMode"
+            ],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {
+            "targeting": {
+              "modes": [
+                {
+                  "mode": "ABSOLUTE_PIXELS",
+                  "bindingSchema": {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "integer",
+                        "maximum": 100000,
+                        "minimum": 0
+                      },
+                      "y": {
+                        "type": "integer",
+                        "maximum": 100000,
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "x",
+                      "y"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                {
+                  "mode": "SCREEN_PERCENT",
+                  "bindingSchema": {
+                    "type": "object",
+                    "properties": {
+                      "xPercent": {
+                        "type": "integer",
+                        "maximum": 100,
+                        "minimum": 0
+                      },
+                      "yPercent": {
+                        "type": "integer",
+                        "maximum": 100,
+                        "minimum": 0
+                      }
+                    },
+                    "required": [
+                      "xPercent",
+                      "yPercent"
+                    ],
+                    "additionalProperties": false
+                  }
+                },
+                {
+                  "mode": "SELECTOR_ID",
+                  "bindingSchema": {
+                    "type": "object",
+                    "properties": {
+                      "selector_id": {
+                        "type": "string",
+                        "pattern": "^[^\\s:]+:id/[^\\s/]+$"
+                      }
+                    },
+                    "required": [
+                      "selector_id"
+                    ],
+                    "additionalProperties": false
+                  }
+                }
+              ]
+            }
+          },
+          "capabilities": [
+            {
+              "code": "android.device.control",
+              "name": "Android Device Control",
+              "description": "Allows a workflow to send interaction commands to an Android device.",
+              "isSensitive": true
+            }
+          ]
+        },
+        {
+          "type": "flow.delay",
+          "name": "Delay",
+          "description": "Wait for a bounded duration before continuing.",
+          "category": "FLOW",
+          "runtimeHandler": "flow.delay",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 300000,
+          "configSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "durationMs": {
+                "type": "integer",
+                "maximum": 300000,
+                "minimum": 0
+              }
+            },
+            "required": [
+              "durationMs"
+            ],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {
+              "durationMs": {
+                "type": "integer",
+                "minimum": 0
+              }
+            },
+            "required": [
+              "durationMs"
+            ],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {},
+          "capabilities": []
+        },
+        {
+          "type": "flow.end",
+          "name": "End",
+          "description": "End workflow execution successfully.",
+          "category": "FLOW",
+          "runtimeHandler": "flow.end",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 1000,
+          "configSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": []
+          },
+          "editorHints": {},
+          "capabilities": []
+        },
+        {
+          "type": "flow.set_variable",
+          "name": "Set Variable",
+          "description": "Save a value under a name in the current device execution or run group.",
+          "category": "FLOW",
+          "runtimeHandler": "flow.set_variable",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 1000,
+          "configSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,99}$"
+              },
+              "scope": {
+                "type": "string",
+                "pattern": "^(FLOW|RUN_GROUP)$"
+              }
+            },
+            "required": [
+              "name"
+            ],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {},
+          "capabilities": []
+        },
+        {
+          "type": "flow.start",
+          "name": "Start",
+          "description": "Start workflow execution.",
+          "category": "FLOW",
+          "runtimeHandler": "flow.start",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 1000,
+          "configSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success"
+            ]
+          },
+          "editorHints": {},
+          "capabilities": []
+        },
+        {
+          "type": "flow.switch",
+          "name": "Switch",
+          "description": "Route to the first matching rule or the default branch.",
+          "category": "FLOW",
+          "runtimeHandler": "flow.switch",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 1000,
+          "configSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "error"
+            ]
+          },
+          "editorHints": {},
+          "capabilities": []
+        },
+        {
+          "type": "flow.wait_variable",
+          "name": "Wait for Variable",
+          "description": "Wait for a named Global variable to exist in the current run group.",
+          "category": "FLOW",
+          "runtimeHandler": "flow.wait_variable",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 600000,
+          "configSchema": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,99}$"
+              },
+              "timeoutMs": {
+                "type": "integer",
+                "maximum": 600000,
+                "minimum": 1
+              }
+            },
+            "required": [
+              "name",
+              "timeoutMs"
+            ],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {},
+          "capabilities": []
+        },
+        {
+          "type": "utility.log",
+          "name": "Log",
+          "description": "Write a message to the development execution log.",
+          "category": "UTILITY",
+          "runtimeHandler": "utility.log",
+          "minimumRuntimeVersion": "0.1.0",
+          "defaultTimeoutMs": 1000,
+          "configSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "inputSchema": {
+            "type": "object",
+            "properties": {
+              "message": {
+                "type": "string",
+                "maxLength": 4000,
+                "minLength": 1
+              }
+            },
+            "required": [
+              "message"
+            ],
+            "additionalProperties": false
+          },
+          "outputSchema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+            "additionalProperties": false
+          },
+          "outputPorts": {
+            "ports": [
+              "success",
+              "error"
+            ]
+          },
+          "editorHints": {},
+          "capabilities": []
+        }
+      ]
+    },
+    "statusCode": 200
+  }

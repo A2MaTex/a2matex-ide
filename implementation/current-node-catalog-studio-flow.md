@@ -133,7 +133,6 @@ interface TargetingHint {
 
 Response hiện tại không trả:
 
-- `supportedErrorPolicies`;
 - `editorHints.icon`;
 - `editorHints.fieldOrder`;
 - port label hoặc port kind;
@@ -641,7 +640,7 @@ user xử lý hoặc thực hiện một atomic node-plus-edge command theo UX �
 
 ### 14.2. Error policy derivation
 
-Response hiện tại không trả `supportedErrorPolicies`. Theo guide contract:
+Khả năng rẽ nhánh lỗi được suy ra từ output ports. Theo guide contract:
 
 - `STOP` luôn khả dụng;
 - chỉ expose `ERROR_BRANCH` khi `outputPorts.ports` chứa `error`.
@@ -765,7 +764,7 @@ Update `electron/main/api/node-catalog.api.ts`:
 - parse `outputPorts.ports` là `string[]`;
 - parse `editorHints` rỗng hoặc có optional `targeting`;
 - parse từng mode và strict `bindingSchema`;
-- bỏ yêu cầu `icon`, `fieldOrder`, `supportedErrorPolicies`;
+- bỏ yêu cầu `icon`, `fieldOrder`;
 - normalize `name` thành domain `displayName` nếu domain vẫn dùng tên đó.
 
 ### 19.2. Domain catalog schema
@@ -967,7 +966,7 @@ Implementation:
 - update remote Zod schema trong `electron/main/api/node-catalog.api.ts`;
 - parse `outputPorts.ports` là `string[]`;
 - parse optional `editorHints.targeting` và toàn bộ mode schemas;
-- bỏ remote requirements cho icon, fieldOrder và supported error policies;
+- bỏ remote requirements cho icon và fieldOrder;
 - normalize remote node sang domain catalog shape;
 - update `src/domain/node-catalog/node-catalog.ts`;
 - bump cache format/directory hoặc migrate explicit legacy cache;

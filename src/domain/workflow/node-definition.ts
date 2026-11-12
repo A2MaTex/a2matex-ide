@@ -82,7 +82,6 @@ export interface NodeDefinition {
   requiredCapabilities: RequiredCapability[];
   requiredPermissions: string[];
   runtimeHandler: string;
-  supportedErrorPolicies: Array<'ERROR_BRANCH' | 'STOP'>;
   deprecation?: {
     message: string;
     replacement?: { type: string; version: number };

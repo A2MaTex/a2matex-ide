@@ -347,7 +347,10 @@ export function validateWorkflow(
     const errorEdges = workflow.edges.filter(
       (edge) => edge.sourceNodeId === node.id && edge.sourcePort === 'error',
     );
-    if (!definition.supportedErrorPolicies.includes(node.errorPolicy)) {
+    if (
+      node.errorPolicy === 'ERROR_BRANCH' &&
+      !logicalOutputPortsFor(definition).includes('error')
+    ) {
       issues.push(
         issue(workflow, 'ERROR_POLICY_UNSUPPORTED', 'This node does not support its error policy', {
           nodeId: node.id,

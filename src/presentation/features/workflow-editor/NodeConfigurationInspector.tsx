@@ -12,7 +12,7 @@ import {
   validateNodeConfigurationDraft,
   type NodeConfigurationDraft,
 } from '@domain/workflow/node-configuration-draft';
-import type { NodeDefinition } from '@domain/workflow/node-definition';
+import { logicalOutputPortsFor, type NodeDefinition } from '@domain/workflow/node-definition';
 import { isLiteralBinding } from '@domain/workflow/workflow-binding';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
@@ -200,7 +200,7 @@ function ConfiguredInspector(props: {
                 );
               })
             : null}
-          {definition.supportedErrorPolicies.length > 1 ? (
+          {logicalOutputPortsFor(definition).includes('error') ? (
             <div className="text-sm">
               <label htmlFor="node-error-policy" className="text-xs font-medium">
                 Error handling
@@ -215,11 +215,8 @@ function ConfiguredInspector(props: {
                 }
                 className="mt-2 h-9 w-full rounded-md border border-border bg-background px-2.5 text-xs"
               >
-                {definition.supportedErrorPolicies.map((policy) => (
-                  <option key={policy} value={policy}>
-                    {policy === 'ERROR_BRANCH' ? 'Error Branch' : 'Stop'}
-                  </option>
-                ))}
+                <option value="STOP">Stop</option>
+                <option value="ERROR_BRANCH">Error Branch</option>
               </select>
             </div>
           ) : null}
