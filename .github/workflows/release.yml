@@ -49,11 +49,6 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - name: macOS universal
-            os: macos-latest
-            args: --mac dmg --universal
-            artifact: macos
-            files: release/*.dmg
           - name: Windows x64
             os: windows-latest
             args: --win nsis --x64
@@ -69,13 +64,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       APP_VERSION: ${{ needs.prepare.outputs.version }}
-      APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.artifact == 'macos' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-      APPLE_ID: ${{ matrix.artifact == 'macos' && secrets.APPLE_ID || '' }}
-      APPLE_TEAM_ID: ${{ matrix.artifact == 'macos' && secrets.APPLE_TEAM_ID || '' }}
       BUILD_NUMBER: ${{ github.run_number }}
-      CSC_KEY_PASSWORD: ${{ matrix.artifact == 'macos' && secrets.MAC_CSC_KEY_PASSWORD || '' }}
-      CSC_LINK: ${{ matrix.artifact == 'macos' && secrets.MAC_CSC_LINK || '' }}
-      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
       VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
       VITE_PRIVACY_URL: ${{ vars.VITE_PRIVACY_URL }}
       VITE_PRIVACY_VERSION: ${{ vars.VITE_PRIVACY_VERSION }}
