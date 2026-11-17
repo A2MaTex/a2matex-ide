@@ -67,6 +67,27 @@ export const fieldValueSchema = z.discriminatedUnion('type', [
     }),
   z
     .object({
+      type: z.literal('number'),
+      ...presentationFields,
+      minimum: z.number().finite().optional(),
+      maximum: z.number().finite().optional(),
+      default: z.number().finite().optional(),
+    })
+    .strict()
+    .superRefine((schema, context) => {
+      if (
+        schema.minimum !== undefined &&
+        schema.maximum !== undefined &&
+        schema.minimum > schema.maximum
+      ) {
+        context.addIssue({ code: 'custom', message: 'minimum must not exceed maximum' });
+      }
+      if (schema.default !== undefined && !fieldValueIsValid(schema, schema.default)) {
+        context.addIssue({ code: 'custom', message: 'default must satisfy the field constraints' });
+      }
+    }),
+  z
+    .object({
       type: z.literal('boolean'),
       ...presentationFields,
       default: z.boolean().optional(),
@@ -135,6 +156,13 @@ export function fieldValueIsValid(schema: FieldValueSchema, value: unknown): boo
       return (
         typeof value === 'number' &&
         Number.isSafeInteger(value) &&
+        (schema.minimum === undefined || value >= schema.minimum) &&
+        (schema.maximum === undefined || value <= schema.maximum)
+      );
+    case 'number':
+      return (
+        typeof value === 'number' &&
+        Number.isFinite(value) &&
         (schema.minimum === undefined || value >= schema.minimum) &&
         (schema.maximum === undefined || value <= schema.maximum)
       );

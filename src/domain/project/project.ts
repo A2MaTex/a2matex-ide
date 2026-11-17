@@ -49,6 +49,11 @@ export interface WorkflowNode {
   config: Record<string, JsonValue>;
   editor: { x: number; y: number };
   bindings: Record<string, WorkflowBinding>;
+  timeoutMs?: number;
+  retryPolicy?: {
+    maxAttempts?: number;
+    delayMs?: number;
+  };
   errorPolicy: 'ERROR_BRANCH' | 'STOP';
 }
 

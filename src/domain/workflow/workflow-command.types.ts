@@ -26,6 +26,9 @@ export type WorkflowCommand =
         baseRevision: number;
         config: Record<string, JsonValue>;
         bindings: Record<string, WorkflowBinding>;
+        errorPolicy: 'ERROR_BRANCH' | 'STOP';
+        timeoutMs?: number;
+        retryPolicy?: { maxAttempts?: number; delayMs?: number };
       };
     }
   | {

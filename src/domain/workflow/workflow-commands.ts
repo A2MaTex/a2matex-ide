@@ -1,17 +1,20 @@
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
 import { WorkflowCommandError } from '@domain/workflow/workflow-command.error';
 import type { WorkflowCommand } from '@domain/workflow/workflow-command.types';
-import { fieldValueIsValid, validateObjectValue } from '@domain/schema/object-value-schema';
+import { validateObjectValue } from '@domain/schema/object-value-schema';
 import { defaultNodeValuesFor, findNodeDefinition } from '@domain/workflow/node-catalog';
 import {
+  bindingInputsFor,
   connectionInputsFor,
   connectionOutputsFor,
   inputSchemaFor,
   logicalOutputPortsFor,
+  logicalOutputPortsForNode,
+  switchRules,
   type NodeDefinition,
   type PortDefinition,
 } from '@domain/workflow/node-definition';
-import { isLiteralBinding, literalBinding } from '@domain/workflow/workflow-binding';
+import { literalBinding, validateWorkflowBinding } from '@domain/workflow/workflow-binding';
 
 export { WorkflowCommandError } from '@domain/workflow/workflow-command.error';
 export type { WorkflowCommandErrorCode } from '@domain/workflow/workflow-command.error';
@@ -38,13 +41,19 @@ function portFor(
   definition: NodeDefinition,
   direction: 'input' | 'output',
   name: string,
+  node?: WorkflowNode,
 ): PortDefinition {
   const ports =
     direction === 'input' ? connectionInputsFor(definition) : connectionOutputsFor(definition);
   const structuralPort = ports.find((candidate) => candidate.name === name);
   const port =
     structuralPort ??
-    (direction === 'output' && logicalOutputPortsFor(definition).includes(name) && ports[0]
+    (direction === 'output' &&
+    (node
+      ? logicalOutputPortsForNode(definition, node)
+      : logicalOutputPortsFor(definition)
+    ).includes(name) &&
+    ports[0]
       ? { ...ports[0], name }
       : undefined);
   if (!port) {
@@ -117,7 +126,20 @@ export function assertValidConnection(
 
   const sourceNode = findNode(workflow, edge.sourceNodeId);
   const targetNode = findNode(workflow, edge.targetNodeId);
-  const output = portFor(definitionFor(sourceNode, catalog), 'output', edge.sourcePort);
+  const sourceDefinition = definitionFor(sourceNode, catalog);
+  if (
+    sourceDefinition.switch &&
+    workflow.edges.some(
+      (candidate) =>
+        candidate.sourceNodeId === edge.sourceNodeId && candidate.sourcePort === edge.sourcePort,
+    )
+  ) {
+    throw new WorkflowCommandError(
+      'DUPLICATE_EDGE',
+      'Each Switch branch may have only one outgoing connection',
+    );
+  }
+  const output = portFor(sourceDefinition, 'output', edge.sourcePort, sourceNode);
   const input = portFor(definitionFor(targetNode, catalog), 'input', targetPort);
   if (!portsAreCompatible(output, input)) {
     throw new WorkflowCommandError('PORT_INCOMPATIBLE', 'The selected ports are incompatible');
@@ -148,22 +170,6 @@ function createNode(
     bindings: defaults.bindings,
     errorPolicy: 'STOP',
   };
-}
-
-function withDerivedErrorPolicies(workflow: WorkflowDocument): WorkflowDocument {
-  const errorBranchNodeIds = new Set(
-    workflow.edges.filter((edge) => edge.sourcePort === 'error').map((edge) => edge.sourceNodeId),
-  );
-  let changed = false;
-  const nodes = workflow.nodes.map((node) => {
-    const errorPolicy: WorkflowNode['errorPolicy'] = errorBranchNodeIds.has(node.id)
-      ? 'ERROR_BRANCH'
-      : 'STOP';
-    if (node.errorPolicy === errorPolicy) return node;
-    changed = true;
-    return { ...node, errorPolicy };
-  });
-  return changed ? { ...workflow, nodes } : workflow;
 }
 
 export function applyWorkflowCommand(
@@ -231,29 +237,101 @@ export function applyWorkflowCommand(
           'The selected target mode does not define an input schema',
         );
       }
+      const configForValidation = definition.configSchema
+        ? Object.fromEntries(
+            Object.entries(command.payload.config).filter(([field]) =>
+              Object.hasOwn(definition.configSchema!.properties, field),
+            ),
+          )
+        : command.payload.config;
+      const hasUnknownConfig = definition.configSchema
+        ? Object.keys(command.payload.config).some(
+            (field) =>
+              !Object.hasOwn(definition.configSchema!.properties, field) &&
+              !(definition.switch && field === 'rules'),
+          )
+        : false;
       if (
-        definition.configSchema &&
-        validateObjectValue(definition.configSchema, command.payload.config).length > 0
+        hasUnknownConfig ||
+        (definition.configSchema &&
+          validateObjectValue(definition.configSchema, configForValidation).length > 0)
       ) {
         throw new WorkflowCommandError(
           'INVALID_NODE_CONFIGURATION',
           'The node configuration values are invalid',
         );
       }
-      const invalidBinding =
-        inputSchema.required.some((field) => !command.payload.bindings[field]) ||
-        Object.entries(command.payload.bindings).some(([field, binding]) => {
-          const property = inputSchema.properties[field];
-          return (
-            !property || (isLiteralBinding(binding) && !fieldValueIsValid(property, binding.value))
+      const inputs = bindingInputsFor(definition, command.payload.config);
+      if (definition.switch) {
+        const rules = switchRules(command.payload.config);
+        const rawRules = command.payload.config.rules;
+        if (
+          !Array.isArray(rawRules) ||
+          rules.length !== rawRules.length ||
+          rules.length < definition.switch.minimumRules ||
+          rules.length > definition.switch.maximumRules ||
+          new Set(rules.map(({ id }) => id)).size !== rules.length ||
+          rules.some(
+            (rule) => !definition.switch!.operators.some(({ value }) => value === rule.operator),
+          )
+        ) {
+          throw new WorkflowCommandError(
+            'INVALID_NODE_CONFIGURATION',
+            'The Switch rules are invalid',
           );
-        });
+        }
+        for (const rule of rules) {
+          const operator = definition.switch.operators.find(({ value }) => value === rule.operator);
+          if (operator?.operandCount === 1) {
+            inputs[rule.id] = { ...definition.switch.operand, name: rule.id };
+          }
+        }
+      }
+      const invalidBinding =
+        Object.entries(inputs).some(
+          ([field, input]) =>
+            validateWorkflowBinding(command.payload.bindings[field], input).length > 0,
+        ) || Object.keys(command.payload.bindings).some((field) => !Object.hasOwn(inputs, field));
       if (invalidBinding) {
         throw new WorkflowCommandError(
           'INVALID_NODE_CONFIGURATION',
           'The node binding values are invalid',
         );
       }
+      if (
+        (command.payload.timeoutMs !== undefined &&
+          (!Number.isInteger(command.payload.timeoutMs) ||
+            command.payload.timeoutMs < 1 ||
+            command.payload.timeoutMs > 600_000)) ||
+        (command.payload.retryPolicy?.maxAttempts !== undefined &&
+          (!Number.isInteger(command.payload.retryPolicy.maxAttempts) ||
+            command.payload.retryPolicy.maxAttempts < 1 ||
+            command.payload.retryPolicy.maxAttempts > 10)) ||
+        (command.payload.retryPolicy?.delayMs !== undefined &&
+          (!Number.isInteger(command.payload.retryPolicy.delayMs) ||
+            command.payload.retryPolicy.delayMs < 0 ||
+            command.payload.retryPolicy.delayMs > 300_000))
+      ) {
+        throw new WorkflowCommandError(
+          'INVALID_NODE_CONFIGURATION',
+          'The execution settings are invalid',
+        );
+      }
+      if (
+        command.payload.errorPolicy === 'ERROR_BRANCH' &&
+        !logicalOutputPortsFor(definition).includes('error')
+      ) {
+        throw new WorkflowCommandError(
+          'INVALID_NODE_CONFIGURATION',
+          'This node does not support an error branch',
+        );
+      }
+      const activePorts = new Set(
+        logicalOutputPortsForNode(definition, {
+          config: command.payload.config,
+          errorPolicy: command.payload.errorPolicy,
+        }),
+      );
       return {
         ...workflow,
         nodes: workflow.nodes.map((node) =>
@@ -262,8 +340,18 @@ export function applyWorkflowCommand(
                 ...node,
                 config: structuredClone(command.payload.config),
                 bindings: structuredClone(command.payload.bindings),
+                errorPolicy: command.payload.errorPolicy,
+                ...(command.payload.timeoutMs === undefined
+                  ? { timeoutMs: undefined }
+                  : { timeoutMs: command.payload.timeoutMs }),
+                ...(command.payload.retryPolicy
+                  ? { retryPolicy: structuredClone(command.payload.retryPolicy) }
+                  : { retryPolicy: undefined }),
               }
             : node,
+        ),
+        edges: workflow.edges.filter(
+          (edge) => edge.sourceNodeId !== current.id || activePorts.has(edge.sourcePort),
         ),
       };
     }
@@ -307,7 +395,7 @@ export function applyWorkflowCommand(
     }
     case 'node.remove': {
       findNode(workflow, command.payload.nodeId);
-      return withDerivedErrorPolicies({
+      return {
         ...workflow,
         entryNodeId: workflow.entryNodeId === command.payload.nodeId ? '' : workflow.entryNodeId,
         nodes: workflow.nodes.filter((node) => node.id !== command.payload.nodeId),
@@ -316,30 +404,44 @@ export function applyWorkflowCommand(
             edge.sourceNodeId !== command.payload.nodeId &&
             edge.targetNodeId !== command.payload.nodeId,
         ),
-      });
+      };
     }
     case 'node.duplicate': {
       const source = findNode(workflow, command.payload.sourceNodeId);
+      const definition = definitionFor(source, catalog);
       if (workflow.nodes.some((node) => node.id === command.payload.nodeId)) {
         throw new WorkflowCommandError('DUPLICATE_NODE', 'Node ID already exists');
       }
       const sourcePosition = source.editor;
-      return withDerivedErrorPolicies({
+      const config = structuredClone(source.config);
+      const bindings = structuredClone(source.bindings);
+      if (definition.switch) {
+        const rules = switchRules(config);
+        const remappedRules = rules.map((rule) => {
+          const id = globalThis.crypto.randomUUID();
+          const operand = bindings[rule.id];
+          delete bindings[rule.id];
+          if (operand) bindings[id] = operand;
+          return { ...rule, id };
+        });
+        config.rules = remappedRules;
+      }
+      return {
         ...workflow,
         nodes: [
           ...workflow.nodes,
           {
             ...source,
             id: command.payload.nodeId,
-            config: structuredClone(source.config),
-            bindings: structuredClone(source.bindings),
+            config,
+            bindings,
             editor: command.payload.position ?? {
               x: sourcePosition.x + 48,
               y: sourcePosition.y + 48,
             },
           },
         ],
-      });
+      };
     }
     case 'edge.connect': {
       const edge = {
@@ -349,7 +451,7 @@ export function applyWorkflowCommand(
         targetNodeId: command.payload.target.nodeId,
       };
       assertValidConnection(workflow, edge, catalog, command.payload.target.port);
-      return withDerivedErrorPolicies({ ...workflow, edges: [...workflow.edges, edge] });
+      return { ...workflow, edges: [...workflow.edges, edge] };
     }
     case 'node.addConnected': {
       if (workflow.nodes.some((node) => node.id === command.payload.nodeId)) {
@@ -372,7 +474,7 @@ export function applyWorkflowCommand(
         targetNodeId: command.payload.nodeId,
       };
       assertValidConnection(candidate, edge, catalog, command.payload.targetPort);
-      return withDerivedErrorPolicies({ ...candidate, edges: [...candidate.edges, edge] });
+      return { ...candidate, edges: [...candidate.edges, edge] };
     }
     case 'edge.reconnect': {
       const edgeIndex = workflow.edges.findIndex((edge) => edge.id === command.payload.edgeId);
@@ -392,12 +494,12 @@ export function applyWorkflowCommand(
       assertValidConnection(withoutOriginal, edge, catalog, command.payload.target.port);
       const edges = [...workflow.edges];
       edges[edgeIndex] = edge;
-      return withDerivedErrorPolicies({ ...workflow, edges });
+      return { ...workflow, edges };
     }
     case 'edge.remove':
-      return withDerivedErrorPolicies({
+      return {
         ...workflow,
         edges: workflow.edges.filter((edge) => edge.id !== command.payload.edgeId),
-      });
+      };
   }
 }

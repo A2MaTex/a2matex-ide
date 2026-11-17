@@ -55,6 +55,11 @@ export function migrateLegacyWorkflow(input: unknown): WorkflowDocument | null {
   const startNode = legacy.data.nodes.find(
     (node) => node.type === 'flow.start' || node.type === 'trigger.start',
   );
+  const errorBranchNodeIds = new Set(
+    legacy.data.edges
+      .filter((edge) => edge.source.port === 'error')
+      .map((edge) => edge.source.nodeId),
+  );
   return {
     schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION,
     entryNodeId: startNode?.id ?? '',
@@ -68,9 +73,9 @@ export function migrateLegacyWorkflow(input: unknown): WorkflowDocument | null {
       config: {},
       editor: legacy.data.layout.nodes[node.id] ?? { x: 0, y: 0 },
       bindings: Object.fromEntries(
-        Object.entries(node.params).map(([name, value]) => [name, { kind: 'constant', value }]),
+        Object.entries(node.params).map(([name, value]) => [name, { kind: 'LITERAL', value }]),
       ),
-      errorPolicy: 'STOP',
+      errorPolicy: errorBranchNodeIds.has(node.id) ? 'ERROR_BRANCH' : 'STOP',
     })),
     edges: legacy.data.edges.map((edge) => ({
       id: edge.id,

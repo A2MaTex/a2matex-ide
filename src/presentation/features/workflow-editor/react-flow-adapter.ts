@@ -1,10 +1,12 @@
 import type { Edge, Node } from '@xyflow/react';
 
-import type { WorkflowDocument } from '@domain/project/project';
+import type { WorkflowDocument, WorkflowNode } from '@domain/project/project';
 import {
   connectionInputsFor,
   connectionOutputsFor,
   logicalOutputPortsFor,
+  logicalOutputPortsForNode,
+  switchRules,
   type NodeDefinition,
   type PortDefinition,
 } from '@domain/workflow/node-definition';
@@ -24,17 +26,36 @@ export interface AutomationNodeData extends Record<string, unknown> {
 
 export type AutomationFlowNode = Node<AutomationNodeData, 'automation'>;
 
-export function connectionOutputHandlesFor(definition: NodeDefinition): readonly PortDefinition[] {
+export function connectionOutputHandlesFor(
+  definition: NodeDefinition,
+  node?: WorkflowNode,
+): readonly PortDefinition[] {
   const structuralOutputs = connectionOutputsFor(definition);
   if (definition.type === 'flow.start' || definition.type === 'trigger.start') {
     return structuralOutputs;
   }
   const template = structuralOutputs[0];
   if (!template) return [];
-  return logicalOutputPortsFor(definition).map((name) => ({
+  const switchLabels = new Map(
+    switchRules(node?.config ?? {}).map((rule, index) => [
+      rule.id,
+      `Rule ${index + 1}: ${rule.operator}`,
+    ]),
+  );
+  const ports = node
+    ? logicalOutputPortsForNode(definition, node)
+    : logicalOutputPortsFor(definition);
+  return ports.map((name) => ({
     ...template,
     name,
-    label: name === 'success' ? 'Success' : name === 'error' ? 'Error' : name,
+    label:
+      name === 'success'
+        ? 'Success'
+        : name === 'error'
+          ? 'Error'
+          : name === 'default'
+            ? 'Default'
+            : (switchLabels.get(name) ?? name),
   }));
 }
 
@@ -58,7 +79,7 @@ export function toReactFlowNodes(
         nodeType: node.type,
         nodeVersion: definition?.version ?? 1,
         connectionInputs: definition ? connectionInputsFor(definition) : [],
-        connectionOutputs: definition ? connectionOutputHandlesFor(definition) : [],
+        connectionOutputs: definition ? connectionOutputHandlesFor(definition, node) : [],
         issueCount: issues.filter((entry) => entry.nodeId === node.id).length,
         disabled: node.disabled ?? false,
       },

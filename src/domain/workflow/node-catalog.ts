@@ -1,5 +1,5 @@
-import type { NodeDefinition } from '@domain/workflow/node-definition';
-import { literalBinding } from '@domain/workflow/workflow-binding';
+import { bindingInputsFor, type NodeDefinition } from '@domain/workflow/node-definition';
+import { defaultBindingFor, literalBinding } from '@domain/workflow/workflow-binding';
 import type { WorkflowBinding } from '@domain/project/project';
 import type { JsonValue } from '@shared/types/json-value';
 
@@ -21,6 +21,41 @@ export function defaultNodeValuesFor(definition: NodeDefinition): {
     if (property.default === undefined) continue;
     if (property.storage === 'config') config[name] = structuredClone(property.default);
     else bindings[name] = literalBinding(property.default);
+  }
+  for (const [name, property] of Object.entries(definition.configSchema?.properties ?? {})) {
+    if (property.default !== undefined && !Object.hasOwn(config, name)) {
+      config[name] = structuredClone(property.default);
+    }
+  }
+  if (definition.targeting && typeof config.targetMode !== 'string') {
+    const initialMode = definition.targeting.modes[0]?.mode;
+    if (initialMode) config.targetMode = initialMode;
+  }
+  for (const [name, input] of Object.entries(bindingInputsFor(definition, config))) {
+    if (
+      input.valueSchema?.default !== undefined &&
+      input.bindingKinds.LITERAL &&
+      !Object.hasOwn(bindings, name)
+    ) {
+      bindings[name] = literalBinding(input.valueSchema.default);
+    }
+  }
+  if (definition.switch && !Array.isArray(config.rules)) {
+    const operator = definition.switch.operators[0];
+    if (operator) {
+      const id = globalThis.crypto.randomUUID();
+      config.rules = [{ id, operator: operator.value }];
+      const kind = Object.keys(definition.switch.operand.bindingKinds)[0] as
+        | 'LITERAL'
+        | 'WORKFLOW_INPUT'
+        | 'NODE_OUTPUT'
+        | 'FLOW_VARIABLE'
+        | 'GLOBAL_VARIABLE'
+        | undefined;
+      if (operator.operandCount === 1 && kind) {
+        bindings[id] = defaultBindingFor(definition.switch.operand, kind);
+      }
+    }
   }
   return { bindings, config };
 }

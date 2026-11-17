@@ -1,19 +1,26 @@
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
-import { fieldValueIsValid, validateObjectValue } from '@domain/schema/object-value-schema';
 import {
   ANDROID_SELECTOR_V1_FORMAT,
   isAndroidSelectorV1,
 } from '@domain/android-inspector/android-selector';
 import {
+  bindingInputsFor,
   connectionInputsFor,
   connectionOutputsFor,
-  inputSchemaFor,
   logicalOutputPortsFor,
+  logicalOutputPortsForNode,
+  switchRules,
   type NodeDefinition,
   type PropertyDefinition,
 } from '@domain/workflow/node-definition';
+import { nodeOutputOptions } from '@domain/workflow/binding-options';
 import { canDisableNode } from '@domain/workflow/workflow-commands';
+import {
+  createNodeConfigurationDraft,
+  validateNodeConfigurationDraft,
+} from '@domain/workflow/node-configuration-draft';
 import { isLiteralBinding } from '@domain/workflow/workflow-binding';
+import type { JsonValue } from '@shared/types/json-value';
 
 export interface WorkflowIssue {
   id: string;
@@ -72,56 +79,20 @@ function validateNodeProperties(
   definition: NodeDefinition,
 ) {
   if (definition.configSchema) {
-    const issues: WorkflowIssue[] = validateObjectValue(definition.configSchema, node.config).map(
-      (entry) =>
-        issue(
-          workflow,
-          entry.code === 'required' ? 'PROPERTY_REQUIRED' : 'PROPERTY_INVALID',
-          entry.message,
-          { nodeId: node.id, propertyPath: `config.${entry.field}` },
-        ),
+    return validateNodeConfigurationDraft(
+      createNodeConfigurationDraft(node, 0, definition),
+      definition,
+    ).map((entry) =>
+      issue(
+        workflow,
+        entry.code === 'required' ? 'PROPERTY_REQUIRED' : 'PROPERTY_INVALID',
+        entry.message,
+        {
+          nodeId: node.id,
+          propertyPath: `${entry.storage === 'execution' ? '' : `${entry.storage}.`}${entry.field}`,
+        },
+      ),
     );
-    const inputSchema = inputSchemaFor(definition, node.config);
-    if (!inputSchema) {
-      issues.push(
-        issue(
-          workflow,
-          'INPUT_SCHEMA_MODE_MISMATCH',
-          'The selected target mode does not define an input schema',
-          { nodeId: node.id, propertyPath: 'config.targetMode' },
-        ),
-      );
-      return issues;
-    }
-    for (const field of inputSchema.required) {
-      if (!node.bindings[field]) {
-        issues.push(
-          issue(workflow, 'PROPERTY_REQUIRED', `${field} is required`, {
-            nodeId: node.id,
-            propertyPath: `bindings.${field}`,
-          }),
-        );
-      }
-    }
-    for (const [field, binding] of Object.entries(node.bindings)) {
-      const property = inputSchema.properties[field];
-      if (!property) {
-        issues.push(
-          issue(workflow, 'PROPERTY_UNKNOWN', `${field} is not supported by the selected schema`, {
-            nodeId: node.id,
-            propertyPath: `bindings.${field}`,
-          }),
-        );
-      } else if (isLiteralBinding(binding) && !fieldValueIsValid(property, binding.value)) {
-        issues.push(
-          issue(workflow, 'PROPERTY_INVALID', `${field} has an invalid value`, {
-            nodeId: node.id,
-            propertyPath: `bindings.${field}`,
-          }),
-        );
-      }
-    }
-    return issues;
   }
 
   const issues: WorkflowIssue[] = [];
@@ -194,7 +165,7 @@ function validateEdge(
   const sourcePorts = connectionOutputsFor(sourceDefinition);
   const targetPorts = connectionInputsFor(targetDefinition);
   const output =
-    logicalOutputPortsFor(sourceDefinition).includes(edge.sourcePort) && sourcePorts[0]
+    logicalOutputPortsForNode(sourceDefinition, source).includes(edge.sourcePort) && sourcePorts[0]
       ? { ...sourcePorts[0], name: edge.sourcePort }
       : undefined;
   const input = targetPorts.find((port) => port.name === 'in');
@@ -245,10 +216,86 @@ function cycleNodeIds(workflow: WorkflowDocument) {
   return cyclic;
 }
 
+function workflowInputProperty(schema: JsonValue, name: string) {
+  if (!schema || Array.isArray(schema) || typeof schema !== 'object') return undefined;
+  const properties = schema.properties;
+  if (!properties || Array.isArray(properties) || typeof properties !== 'object') return undefined;
+  const value = properties[name];
+  if (!value || Array.isArray(value) || typeof value !== 'object') return undefined;
+  const required = Array.isArray(schema.required) && schema.required.includes(name);
+  return { type: typeof value.type === 'string' ? value.type : undefined, required };
+}
+
+function validateBindingReferences(
+  workflow: WorkflowDocument,
+  node: WorkflowNode,
+  definition: NodeDefinition,
+  catalog: readonly NodeDefinition[],
+  workflowInputSchema: JsonValue,
+) {
+  const inputs = bindingInputsFor(definition, node.config);
+  if (definition.switch) {
+    for (const rule of switchRules(node.config)) {
+      const operator = definition.switch.operators.find(({ value }) => value === rule.operator);
+      if (operator?.operandCount === 1) {
+        inputs[rule.id] = { ...definition.switch.operand, name: rule.id };
+      }
+    }
+  }
+  const issues: WorkflowIssue[] = [];
+  for (const [field, input] of Object.entries(inputs)) {
+    const binding = node.bindings[field];
+    if (binding?.kind === 'WORKFLOW_INPUT' && typeof binding.inputName === 'string') {
+      const property = workflowInputProperty(workflowInputSchema, binding.inputName);
+      const compatible =
+        property &&
+        (!input.required || property.required) &&
+        (input.valueSchema
+          ? property.type === input.valueSchema.type
+          : ['string', 'number', 'integer', 'boolean'].includes(property.type ?? ''));
+      if (!compatible) {
+        issues.push(
+          issue(
+            workflow,
+            'BINDING_SOURCE_INVALID',
+            `${field} references an incompatible workflow input`,
+            {
+              nodeId: node.id,
+              propertyPath: `bindings.${field}`,
+            },
+          ),
+        );
+      }
+    }
+    if (
+      binding?.kind === 'NODE_OUTPUT' &&
+      typeof binding.nodeId === 'string' &&
+      typeof binding.field === 'string' &&
+      !nodeOutputOptions(workflow, node.id, input, catalog).some(
+        (option) => option.nodeId === binding.nodeId && option.field === binding.field,
+      )
+    ) {
+      issues.push(
+        issue(
+          workflow,
+          'BINDING_SOURCE_INVALID',
+          `${field} references an unavailable node output`,
+          {
+            nodeId: node.id,
+            propertyPath: `bindings.${field}`,
+          },
+        ),
+      );
+    }
+  }
+  return issues;
+}
+
 export function validateWorkflow(
   workflow: WorkflowDocument,
   catalog: readonly NodeDefinition[],
   manifestPermissions: readonly string[] = [],
+  workflowInputSchema: JsonValue = {},
 ): WorkflowIssue[] {
   const issues: WorkflowIssue[] = [];
   const nodes = new Map<string, WorkflowNode>();
@@ -277,6 +324,11 @@ export function validateWorkflow(
     issues.push(
       ...validateNodeProperties(workflow, node, definition).map((entry) =>
         node.disabled ? { ...entry, severity: 'warning' as const } : entry,
+      ),
+    );
+    issues.push(
+      ...validateBindingReferences(workflow, node, definition, catalog, workflowInputSchema).map(
+        (entry) => (node.disabled ? { ...entry, severity: 'warning' as const } : entry),
       ),
     );
     if (node.disabled && !canDisableNode(definition)) {
@@ -341,11 +393,16 @@ export function validateWorkflow(
           nodeId: node.id,
         }),
       );
-    } else if (node.errorPolicy === 'ERROR_BRANCH' && errorEdges.length === 0) {
+    } else if (node.errorPolicy === 'ERROR_BRANCH' && errorEdges.length !== 1) {
       issues.push(
-        issue(workflow, 'ERROR_ROUTE_REQUIRED', 'Error Branch requires an error connection', {
-          nodeId: node.id,
-        }),
+        issue(
+          workflow,
+          'ERROR_ROUTE_REQUIRED',
+          'Error Branch requires exactly one error connection',
+          {
+            nodeId: node.id,
+          },
+        ),
       );
     } else if (node.errorPolicy === 'STOP' && errorEdges.length > 0) {
       issues.push(
@@ -353,6 +410,23 @@ export function validateWorkflow(
           nodeId: node.id,
         }),
       );
+    }
+    if (definition.switch) {
+      for (const port of [...switchRules(node.config).map(({ id }) => id), 'default']) {
+        const outgoing = workflow.edges.filter(
+          (edge) => edge.sourceNodeId === node.id && edge.sourcePort === port,
+        );
+        if (outgoing.length !== 1) {
+          issues.push(
+            issue(
+              workflow,
+              'SWITCH_ROUTE_REQUIRED',
+              `Switch port ${port} requires exactly one outgoing connection`,
+              { nodeId: node.id, propertyPath: `ports.${port}` },
+            ),
+          );
+        }
+      }
     }
     for (const input of connectionInputsFor(definition).filter((port) => port.required)) {
       const incoming = workflow.edges.filter(

@@ -22,6 +22,14 @@ export const workflowNodeSchema = z
       z.string(),
       z.object({ kind: z.string().min(1).max(64) }).catchall(jsonValueSchema),
     ),
+    timeoutMs: z.number().int().min(1).max(600_000).optional(),
+    retryPolicy: z
+      .object({
+        maxAttempts: z.number().int().min(1).max(10).optional(),
+        delayMs: z.number().int().min(0).max(300_000).optional(),
+      })
+      .strict()
+      .optional(),
     errorPolicy: z.enum(['STOP', 'ERROR_BRANCH']),
   })
   .strict() satisfies z.ZodType<WorkflowNode>;

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 
-import type { WorkflowNode } from '@domain/project/project';
+import type { WorkflowDocument, WorkflowNode } from '@domain/project/project';
+import type { JsonValue } from '@shared/types/json-value';
 import type { NodeDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
@@ -12,6 +13,8 @@ import { useEditorStore } from '@presentation/stores/editor-store';
 interface NodeConfigDrawerProps {
   open: boolean;
   catalog: readonly NodeDefinition[];
+  workflow: WorkflowDocument;
+  workflowInputSchema: JsonValue;
   node: WorkflowNode | null;
   revision: number;
   issues: WorkflowIssue[];
@@ -40,6 +43,8 @@ function scheduleFocusReturn(nodeId: string | undefined) {
 export function NodeConfigDrawer({
   open,
   catalog,
+  workflow,
+  workflowInputSchema,
   node,
   revision,
   issues,
@@ -110,13 +115,15 @@ export function NodeConfigDrawer({
       aria-label="Node configuration drawer"
       inert={!open}
       className={cn(
-        'absolute inset-y-0 right-0 z-30 w-[420px] max-w-[calc(100%-1.5rem)] border-l border-border bg-panel shadow-2xl transition-transform duration-200 ease-out',
+        'absolute inset-y-0 right-0 z-30 w-[460px] max-w-[calc(100%-1rem)] border-l border-border bg-panel shadow-[-18px_0_50px_-30px_rgba(0,0,0,0.8)] transition-transform duration-200 ease-out',
         open ? 'translate-x-0' : 'pointer-events-none translate-x-full',
       )}
     >
       {open ? (
         <NodeConfigurationInspector
           catalog={catalog}
+          workflow={workflow}
+          workflowInputSchema={workflowInputSchema}
           node={node}
           revision={revision}
           issues={issues}

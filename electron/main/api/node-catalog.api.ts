@@ -7,6 +7,7 @@ import {
   type RemoteCatalogResult,
 } from '@application/node-catalog/node-catalog';
 import {
+  catalogCapabilitySchema,
   catalogObjectSchema,
   catalogNodeDefinitionSchema,
   catalogTargetingSchema,
@@ -32,23 +33,29 @@ const remoteNodeSchema = z
     outputPorts: z
       .object({
         ports: z.array(z.string().min(1).max(64)).max(100),
+        dynamicPorts: z
+          .object({ keysFrom: z.string().min(1).max(255) })
+          .strict()
+          .optional(),
       })
       .strict(),
     editorHints: z
       .object({
         targeting: catalogTargetingSchema.optional(),
+        bindingKinds: z
+          .array(
+            z.enum([
+              'LITERAL',
+              'WORKFLOW_INPUT',
+              'NODE_OUTPUT',
+              'FLOW_VARIABLE',
+              'GLOBAL_VARIABLE',
+            ]),
+          )
+          .optional(),
       })
       .strict(),
-    capabilities: z.array(
-      z
-        .object({
-          code: z.string(),
-          name: z.string(),
-          description: z.string(),
-          isSensitive: z.boolean(),
-        })
-        .strict(),
-    ),
+    capabilities: z.array(catalogCapabilitySchema),
   })
   .strict();
 
@@ -77,8 +84,9 @@ function normalizeNode(node: z.infer<typeof remoteNodeSchema>): CatalogNodeDefin
     configSchema: node.configSchema,
     inputSchema: node.inputSchema,
     outputSchema: node.outputSchema,
-    outputPorts: node.outputPorts.ports,
+    outputPorts: node.outputPorts,
     ...(node.editorHints.targeting ? { targeting: node.editorHints.targeting } : {}),
+    ...(node.editorHints.bindingKinds ? { bindingKinds: node.editorHints.bindingKinds } : {}),
     capabilities: node.capabilities,
   };
 }

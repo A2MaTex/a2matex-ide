@@ -142,7 +142,7 @@ function DiagnosticsContent({
             </div>
           </div>
           <Button className="mt-3" size="sm" variant="secondary" onClick={onValidate}>
-            <RotateCw /> Retry save and validate
+            <RotateCw /> <span className="text-sm">Retry save and validate</span>
           </Button>
         </div>
       </div>

@@ -239,9 +239,20 @@ export function MainWorkflowPage() {
   const issues = useMemo(
     () =>
       workflow && nodeCatalogStatus === 'ready'
-        ? validateWorkflow(workflow, nodeCatalog, permissionIds)
+        ? validateWorkflow(
+            workflow,
+            nodeCatalog,
+            permissionIds,
+            session?.snapshot.draftState.inputSchema ?? {},
+          )
         : [],
-    [nodeCatalog, nodeCatalogStatus, permissionIds, workflow],
+    [
+      nodeCatalog,
+      nodeCatalogStatus,
+      permissionIds,
+      session?.snapshot.draftState.inputSchema,
+      workflow,
+    ],
   );
   const {
     state: workflowValidation,
@@ -876,6 +887,8 @@ export function MainWorkflowPage() {
                 <NodeConfigDrawer
                   open={nodeConfigDrawerOpen && Boolean(selectedNode)}
                   catalog={nodeCatalog}
+                  workflow={workflow}
+                  workflowInputSchema={session.snapshot.draftState.inputSchema}
                   node={selectedNode}
                   revision={session.workingRevision}
                   issues={issues}

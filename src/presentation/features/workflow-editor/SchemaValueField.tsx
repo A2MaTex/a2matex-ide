@@ -70,18 +70,26 @@ export function SchemaValueField({
       ) : (
         <input
           id={id}
-          type={schema.type === 'integer' ? 'number' : 'text'}
+          type={schema.type === 'integer' || schema.type === 'number' ? 'number' : 'text'}
           value={value === undefined ? '' : String(value)}
-          min={schema.type === 'integer' ? schema.minimum : undefined}
-          max={schema.type === 'integer' ? schema.maximum : undefined}
+          min={schema.type === 'integer' || schema.type === 'number' ? schema.minimum : undefined}
+          max={schema.type === 'integer' || schema.type === 'number' ? schema.maximum : undefined}
           minLength={schema.type === 'string' ? schema.minLength : undefined}
           maxLength={schema.type === 'string' ? schema.maxLength : undefined}
           pattern={schema.type === 'string' ? schema.pattern : undefined}
           onChange={(event) => {
             if (!event.target.value) return onChange(undefined);
-            if (schema.type === 'integer') {
+            if (schema.type === 'integer' || schema.type === 'number') {
               const number = Number(event.target.value);
-              return onChange(Number.isSafeInteger(number) ? number : undefined);
+              return onChange(
+                schema.type === 'integer'
+                  ? Number.isSafeInteger(number)
+                    ? number
+                    : undefined
+                  : Number.isFinite(number)
+                    ? number
+                    : undefined,
+              );
             }
             onChange(event.target.value);
           }}
