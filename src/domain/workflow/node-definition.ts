@@ -1,5 +1,5 @@
 import type { JsonValue } from '@shared/types/json-value';
-import type { ObjectValueSchema } from '@domain/schema/object-value-schema';
+import { emptyObjectValueSchema, type ObjectValueSchema } from '@domain/schema/object-value-schema';
 
 export type ValueType =
   | 'flow'
@@ -103,4 +103,16 @@ export function logicalOutputPortsFor(definition: NodeDefinition): readonly stri
 export function defaultLogicalOutputPortFor(definition: NodeDefinition): string | undefined {
   const ports = logicalOutputPortsFor(definition);
   return ports.includes('success') ? 'success' : ports[0];
+}
+
+export function inputSchemaFor(
+  definition: NodeDefinition,
+  config: Readonly<Record<string, JsonValue>>,
+): ObjectValueSchema | undefined {
+  if (!definition.targeting) {
+    return definition.instanceInputSchema ?? emptyObjectValueSchema();
+  }
+  const targetMode = config.targetMode;
+  if (typeof targetMode !== 'string') return undefined;
+  return definition.targeting.modes.find(({ mode }) => mode === targetMode)?.bindingSchema;
 }

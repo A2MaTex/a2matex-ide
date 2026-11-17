@@ -34,7 +34,6 @@ import {
 import { editProjectWorkflow } from '@application/workflow/edit-workflow';
 import { addProjectWorkflow, type WorkflowKind } from '@application/workflow/manage-workflows';
 import type { ProjectDocument } from '@domain/project/project';
-import { migrateWorkflowNodeInputSchemas } from '@domain/project/workflow-input-schema-migration';
 import { migrateLegacyWorkflowOutputPorts } from '@domain/project/workflow-output-port-migration';
 import type { NodeDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
@@ -151,6 +150,16 @@ function commitDocument(state: ProjectStoreState, document: ProjectDocument) {
     redoStack: [],
     nextRevision: revision + 1,
   };
+}
+
+function unresolvedNodeIdsFor(
+  document: ProjectDocument,
+  catalog: readonly NodeDefinition[],
+): string[] {
+  const knownTypes = new Set(catalog.map(({ type }) => type));
+  return Object.values(document.workflows).flatMap((workflow) =>
+    workflow.nodes.filter((node) => !knownTypes.has(node.type)).map((node) => node.id),
+  );
 }
 
 export function createProjectStore(
@@ -577,18 +586,17 @@ export function createProjectStore(
         let unresolvedEdgeIds: string[] = [];
         set((state) => {
           if (!state.session) return state;
-          const nodeResult = migrateWorkflowNodeInputSchemas(
+          unresolvedNodeIds = unresolvedNodeIdsFor(state.session.snapshot.document, catalog);
+          const portResult = migrateLegacyWorkflowOutputPorts(
             state.session.snapshot.document,
             catalog,
           );
-          const portResult = migrateLegacyWorkflowOutputPorts(nodeResult.document, catalog);
-          unresolvedNodeIds = nodeResult.unresolvedNodeIds;
           unresolvedEdgeIds = portResult.unresolvedEdgeIds;
           const reviewCount = unresolvedNodeIds.length + unresolvedEdgeIds.length;
           const reviewError = reviewCount
             ? `${reviewCount} legacy graph item(s) need review before execution.`
             : null;
-          if (!nodeResult.changed && !portResult.changed) {
+          if (!portResult.changed) {
             return reviewError === state.error ? state : { error: reviewError };
           }
           changed = true;

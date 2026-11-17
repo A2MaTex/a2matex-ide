@@ -4,7 +4,7 @@ import type {
   WorkflowValidationErrorCode,
   WorkflowValidationOutput,
 } from '@application/workflow-validation/workflow-validation';
-import { encodeWorkflowDocument } from '@domain/project/project-schema';
+import { encodeWorkflowDocument } from '@domain/project/workflow-persistence';
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
 import { useProjectStoreApi } from '@presentation/features/project-session/use-project-store';
 import { useEditorStore } from '@presentation/stores/editor-store';

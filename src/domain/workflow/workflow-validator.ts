@@ -1,9 +1,5 @@
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
-import {
-  fieldValueIsValid,
-  objectValueSchemasEqual,
-  validateObjectValue,
-} from '@domain/schema/object-value-schema';
+import { fieldValueIsValid, validateObjectValue } from '@domain/schema/object-value-schema';
 import {
   ANDROID_SELECTOR_V1_FORMAT,
   isAndroidSelectorV1,
@@ -11,6 +7,7 @@ import {
 import {
   connectionInputsFor,
   connectionOutputsFor,
+  inputSchemaFor,
   logicalOutputPortsFor,
   type NodeDefinition,
   type PropertyDefinition,
@@ -84,7 +81,19 @@ function validateNodeProperties(
           { nodeId: node.id, propertyPath: `config.${entry.field}` },
         ),
     );
-    for (const field of node.inputSchema.required) {
+    const inputSchema = inputSchemaFor(definition, node.config);
+    if (!inputSchema) {
+      issues.push(
+        issue(
+          workflow,
+          'INPUT_SCHEMA_MODE_MISMATCH',
+          'The selected target mode does not define an input schema',
+          { nodeId: node.id, propertyPath: 'config.targetMode' },
+        ),
+      );
+      return issues;
+    }
+    for (const field of inputSchema.required) {
       if (!node.bindings[field]) {
         issues.push(
           issue(workflow, 'PROPERTY_REQUIRED', `${field} is required`, {
@@ -95,7 +104,7 @@ function validateNodeProperties(
       }
     }
     for (const [field, binding] of Object.entries(node.bindings)) {
-      const property = node.inputSchema.properties[field];
+      const property = inputSchema.properties[field];
       if (!property) {
         issues.push(
           issue(workflow, 'PROPERTY_UNKNOWN', `${field} is not supported by the selected schema`, {
@@ -109,23 +118,6 @@ function validateNodeProperties(
             nodeId: node.id,
             propertyPath: `bindings.${field}`,
           }),
-        );
-      }
-    }
-    if (definition.targeting) {
-      const targetMode = node.config.targetMode;
-      const selected =
-        typeof targetMode === 'string'
-          ? definition.targeting.modes.find(({ mode }) => mode === targetMode)
-          : undefined;
-      if (!selected || !objectValueSchemasEqual(selected.bindingSchema, node.inputSchema)) {
-        issues.push(
-          issue(
-            workflow,
-            'INPUT_SCHEMA_MODE_MISMATCH',
-            'The node input schema does not match its selected target mode',
-            { nodeId: node.id, propertyPath: 'inputSchema' },
-          ),
         );
       }
     }
@@ -205,7 +197,7 @@ function validateEdge(
     logicalOutputPortsFor(sourceDefinition).includes(edge.sourcePort) && sourcePorts[0]
       ? { ...sourcePorts[0], name: edge.sourcePort }
       : undefined;
-  const input = targetPorts.find((port) => port.name === (edge.targetPort ?? 'in'));
+  const input = targetPorts.find((port) => port.name === 'in');
   if (!output || !input) {
     issues.push(
       issue(workflow, 'EDGE_PORT_MISSING', 'Connection references a missing port', {
@@ -324,14 +316,7 @@ export function validateWorkflow(
       );
     }
     edgeIds.add(edge.id);
-    const key =
-      edge.sourceNodeId +
-      ':' +
-      edge.sourcePort +
-      '->' +
-      edge.targetNodeId +
-      ':' +
-      (edge.targetPort ?? 'in');
+    const key = edge.sourceNodeId + ':' + edge.sourcePort + '->' + edge.targetNodeId + ':in';
     if (edgeKeys.has(key)) {
       issues.push(
         issue(workflow, 'EDGE_DUPLICATE', 'Connection is duplicated', { edgeId: edge.id }),
@@ -371,7 +356,7 @@ export function validateWorkflow(
     }
     for (const input of connectionInputsFor(definition).filter((port) => port.required)) {
       const incoming = workflow.edges.filter(
-        (edge) => edge.targetNodeId === node.id && (edge.targetPort ?? 'in') === input.name,
+        (edge) => edge.targetNodeId === node.id && input.name === 'in',
       );
       if (incoming.length === 0) {
         issues.push(

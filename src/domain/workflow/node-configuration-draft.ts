@@ -6,7 +6,7 @@ import {
   type ObjectValueIssue,
   type ObjectValueSchema,
 } from '@domain/schema/object-value-schema';
-import type { NodeDefinition } from '@domain/workflow/node-definition';
+import { inputSchemaFor, type NodeDefinition } from '@domain/workflow/node-definition';
 import { isLiteralBinding, literalBinding } from '@domain/workflow/workflow-binding';
 import type { JsonValue } from '@shared/types/json-value';
 
@@ -61,11 +61,14 @@ export function createNodeConfigurationDraft(
         ),
       )
     : structuredClone(node.config);
+  const inputSchema = definition
+    ? (inputSchemaFor(definition, config) ?? emptyObjectValueSchema())
+    : emptyObjectValueSchema();
   return {
     nodeId: node.id,
     baseRevision,
     config,
-    inputSchema: structuredClone(node.inputSchema ?? emptyObjectValueSchema()),
+    inputSchema: structuredClone(inputSchema),
     bindings: structuredClone(node.bindings),
     modeBindings:
       typeof config.targetMode === 'string'
@@ -193,7 +196,6 @@ export function configurationCommitPayload(
     config: definition.configSchema
       ? withDefaults(definition.configSchema, draft.config)
       : structuredClone(draft.config),
-    inputSchema: structuredClone(draft.inputSchema),
     bindings: withBindingDefaults(draft.inputSchema, draft.bindings),
   };
 }

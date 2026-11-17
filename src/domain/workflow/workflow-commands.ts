@@ -1,16 +1,12 @@
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
 import { WorkflowCommandError } from '@domain/workflow/workflow-command.error';
 import type { WorkflowCommand } from '@domain/workflow/workflow-command.types';
-import {
-  fieldValueIsValid,
-  objectValueSchemasEqual,
-  objectValueSchema,
-  validateObjectValue,
-} from '@domain/schema/object-value-schema';
+import { fieldValueIsValid, validateObjectValue } from '@domain/schema/object-value-schema';
 import { defaultNodeValuesFor, findNodeDefinition } from '@domain/workflow/node-catalog';
 import {
   connectionInputsFor,
   connectionOutputsFor,
+  inputSchemaFor,
   logicalOutputPortsFor,
   type NodeDefinition,
   type PortDefinition,
@@ -97,8 +93,14 @@ export function assertValidConnection(
   workflow: WorkflowDocument,
   edge: WorkflowEdge,
   catalog: readonly NodeDefinition[],
-  targetPort = edge.targetPort ?? 'in',
+  targetPort = 'in',
 ) {
+  if (targetPort !== 'in') {
+    throw new WorkflowCommandError(
+      'PORT_NOT_FOUND',
+      `Target port ${targetPort} cannot be persisted by this workflow version`,
+    );
+  }
   if (workflow.edges.some((candidate) => candidate.id === edge.id)) {
     throw new WorkflowCommandError('DUPLICATE_EDGE', 'Connection ID already exists');
   }
@@ -107,8 +109,7 @@ export function assertValidConnection(
       (candidate) =>
         candidate.sourceNodeId === edge.sourceNodeId &&
         candidate.sourcePort === edge.sourcePort &&
-        candidate.targetNodeId === edge.targetNodeId &&
-        (candidate.targetPort ?? 'in') === targetPort,
+        candidate.targetNodeId === edge.targetNodeId,
     )
   ) {
     throw new WorkflowCommandError('DUPLICATE_EDGE', 'This connection already exists');
@@ -143,14 +144,6 @@ function createNode(
     id: nodeId,
     type: definition.type,
     config: defaults.config,
-    inputSchema: structuredClone(
-      definition.instanceInputSchema ?? {
-        type: 'object',
-        properties: {},
-        required: [],
-        additionalProperties: false,
-      },
-    ),
     editor: position,
     bindings: defaults.bindings,
     errorPolicy: 'STOP',
@@ -231,11 +224,11 @@ export function applyWorkflowCommand(
     case 'node.commitConfiguration': {
       const current = findNode(workflow, command.payload.nodeId);
       const definition = definitionFor(current, catalog);
-      const parsedSchema = objectValueSchema.safeParse(command.payload.inputSchema);
-      if (!parsedSchema.success) {
+      const inputSchema = inputSchemaFor(definition, command.payload.config);
+      if (!inputSchema) {
         throw new WorkflowCommandError(
           'INVALID_NODE_CONFIGURATION',
-          'The node input schema is invalid',
+          'The selected target mode does not define an input schema',
         );
       }
       if (
@@ -248,9 +241,9 @@ export function applyWorkflowCommand(
         );
       }
       const invalidBinding =
-        parsedSchema.data.required.some((field) => !command.payload.bindings[field]) ||
+        inputSchema.required.some((field) => !command.payload.bindings[field]) ||
         Object.entries(command.payload.bindings).some(([field, binding]) => {
-          const property = parsedSchema.data.properties[field];
+          const property = inputSchema.properties[field];
           return (
             !property || (isLiteralBinding(binding) && !fieldValueIsValid(property, binding.value))
           );
@@ -261,19 +254,6 @@ export function applyWorkflowCommand(
           'The node binding values are invalid',
         );
       }
-      if (definition.targeting) {
-        const targetMode = command.payload.config.targetMode;
-        const mode =
-          typeof targetMode === 'string'
-            ? definition.targeting.modes.find((entry) => entry.mode === targetMode)
-            : undefined;
-        if (!mode || !objectValueSchemasEqual(mode.bindingSchema, parsedSchema.data)) {
-          throw new WorkflowCommandError(
-            'INVALID_NODE_CONFIGURATION',
-            'The selected target mode does not match the input schema',
-          );
-        }
-      }
       return {
         ...workflow,
         nodes: workflow.nodes.map((node) =>
@@ -281,7 +261,6 @@ export function applyWorkflowCommand(
             ? {
                 ...node,
                 config: structuredClone(command.payload.config),
-                inputSchema: structuredClone(parsedSchema.data),
                 bindings: structuredClone(command.payload.bindings),
               }
             : node,
@@ -353,7 +332,6 @@ export function applyWorkflowCommand(
             ...source,
             id: command.payload.nodeId,
             config: structuredClone(source.config),
-            inputSchema: structuredClone(source.inputSchema),
             bindings: structuredClone(source.bindings),
             editor: command.payload.position ?? {
               x: sourcePosition.x + 48,
@@ -368,7 +346,6 @@ export function applyWorkflowCommand(
         id: command.payload.edgeId,
         sourcePort: command.payload.source.port,
         sourceNodeId: command.payload.source.nodeId,
-        targetPort: command.payload.target.port,
         targetNodeId: command.payload.target.nodeId,
       };
       assertValidConnection(workflow, edge, catalog, command.payload.target.port);
@@ -392,7 +369,6 @@ export function applyWorkflowCommand(
         id: command.payload.edgeId,
         sourcePort: command.payload.source.port,
         sourceNodeId: command.payload.source.nodeId,
-        targetPort: command.payload.targetPort,
         targetNodeId: command.payload.nodeId,
       };
       assertValidConnection(candidate, edge, catalog, command.payload.targetPort);
@@ -407,7 +383,6 @@ export function applyWorkflowCommand(
         id: command.payload.edgeId,
         sourcePort: command.payload.source.port,
         sourceNodeId: command.payload.source.nodeId,
-        targetPort: command.payload.target.port,
         targetNodeId: command.payload.target.nodeId,
       };
       const withoutOriginal = {

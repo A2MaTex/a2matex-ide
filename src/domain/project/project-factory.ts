@@ -4,7 +4,6 @@ import {
   DEFAULT_WORKFLOW_PATH,
   type ProjectDocument,
 } from '@domain/project/project';
-import { emptyObjectValueSchema } from '@domain/schema/object-value-schema';
 
 export function createEmptyProjectDocument(
   projectId: string,
@@ -45,7 +44,6 @@ export function createEmptyProjectDocument(
             id: startNodeId,
             type: 'flow.start',
             config: {},
-            inputSchema: emptyObjectValueSchema(),
             editor: { x: 100, y: 180 },
             bindings: {},
             errorPolicy: 'STOP',

@@ -12,7 +12,8 @@ import {
   parseWorkflowDocument,
   ProjectFormatError,
 } from '@domain/project/project-migration';
-import { encodeWorkflowDocument, projectDocumentSchema } from '@domain/project/project-schema';
+import { projectDocumentSchema } from '@domain/project/project-schema';
+import { encodeWorkflowDocument } from '@domain/project/workflow-persistence';
 import {
   type ArchiveLocation,
   LocationGrantError,

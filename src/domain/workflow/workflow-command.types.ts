@@ -1,5 +1,4 @@
 import type { WorkflowBinding } from '@domain/project/project';
-import type { ObjectValueSchema } from '@domain/schema/object-value-schema';
 import type { JsonValue } from '@shared/types/json-value';
 
 export type WorkflowCommand =
@@ -26,7 +25,6 @@ export type WorkflowCommand =
         nodeId: string;
         baseRevision: number;
         config: Record<string, JsonValue>;
-        inputSchema: ObjectValueSchema;
         bindings: Record<string, WorkflowBinding>;
       };
     }

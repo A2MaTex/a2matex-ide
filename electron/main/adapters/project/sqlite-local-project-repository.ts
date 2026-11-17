@@ -15,7 +15,11 @@ import {
   type SaveLocalProjectInput,
 } from '@application/project/local-project-repository';
 import type { ProjectDocument } from '@domain/project/project';
-import { encodeWorkflowDocument, projectDocumentSchema } from '@domain/project/project-schema';
+import { projectDocumentSchema } from '@domain/project/project-schema';
+import {
+  decodeWorkflowDocument,
+  encodeWorkflowDocument,
+} from '@domain/project/workflow-persistence';
 import {
   LOCAL_PROJECT_NAME_NORMALIZATION_VERSION,
   normalizeProjectName,
@@ -130,7 +134,7 @@ function parseProjectSnapshot(database: DatabaseSync, row: ProjectRow): LocalPro
     const workflows = Object.fromEntries(
       workflowRows.map((workflow) => [
         workflow.workflow_path,
-        parseStoredJson(workflow.document_json),
+        decodeWorkflowDocument(parseStoredJson(workflow.document_json)),
       ]),
     );
     const document = projectDocumentSchema.parse({

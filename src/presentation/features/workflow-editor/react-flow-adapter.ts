@@ -90,7 +90,7 @@ export function toReactFlowEdges(
       source: edge.sourceNodeId,
       sourceHandle: usesStructuralOutput ? 'out' : edge.sourcePort,
       target: edge.targetNodeId,
-      targetHandle: edge.targetPort ?? 'in',
+      targetHandle: 'in',
       selected: edge.id === selectedEdgeId,
       reconnectable: true,
       type: 'smoothstep',

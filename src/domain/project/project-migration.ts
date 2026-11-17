@@ -1,7 +1,8 @@
 import { z } from 'zod';
 
 import { CURRENT_PROJECT_SCHEMA_VERSION, type ProjectManifest } from '@domain/project/project';
-import { projectManifestV1Schema, workflowDocumentV1Schema } from '@domain/project/project-schema';
+import { projectManifestV1Schema } from '@domain/project/project-manifest-schema';
+import { decodeWorkflowDocument } from '@domain/project/workflow-persistence';
 
 export class ProjectFormatError extends Error {
   readonly code: 'PROJECT_FORMAT_INVALID' | 'PROJECT_SCHEMA_UNSUPPORTED';
@@ -78,9 +79,9 @@ export function parseWorkflowDocument(input: unknown) {
       `Workflow schema ${String(version)} is not supported`,
     );
   }
-  const parsed = workflowDocumentV1Schema.safeParse(input);
-  if (!parsed.success) {
+  try {
+    return decodeWorkflowDocument(input);
+  } catch {
     throw new ProjectFormatError('PROJECT_FORMAT_INVALID', 'Workflow document is invalid');
   }
-  return parsed.data;
 }

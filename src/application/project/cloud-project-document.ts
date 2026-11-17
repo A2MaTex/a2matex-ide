@@ -9,8 +9,12 @@ import type {
   JsonObject,
 } from '@application/project/project-cloud';
 import { createEmptyProjectDocument } from '@domain/project/project-factory';
-import { encodeWorkflowDocument, projectDocumentSchema } from '@domain/project/project-schema';
 import type { ProjectDocument } from '@domain/project/project';
+import { projectDocumentSchema } from '@domain/project/project-schema';
+import {
+  decodeWorkflowDocument,
+  encodeWorkflowDocument,
+} from '@domain/project/workflow-persistence';
 import type { JsonValue } from '@shared/types/json-value';
 
 const CLOUD_EDITOR_GRAPH_SCHEMA_VERSION = 1;
@@ -113,6 +117,9 @@ export function decodeCloudProject(
       : emptyDocument.manifest.entryWorkflow;
 
   try {
+    const decodedWorkflows = Object.fromEntries(
+      Object.entries(workflows).map(([path, workflow]) => [path, decodeWorkflowDocument(workflow)]),
+    );
     const document = projectDocumentSchema.parse({
       manifest: {
         schemaVersion: CLOUD_EDITOR_GRAPH_SCHEMA_VERSION,
@@ -122,7 +129,7 @@ export function decodeCloudProject(
         entryWorkflow,
         ...manifestExtension,
       },
-      workflows,
+      workflows: decodedWorkflows,
     });
     return {
       document,
