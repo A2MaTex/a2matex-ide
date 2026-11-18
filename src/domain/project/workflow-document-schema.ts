@@ -12,12 +12,16 @@ export const workflowNodeSchema = z
   .object({
     id: z.string().min(1).max(128),
     type: z.string().min(1).max(128),
-    name: z.string().max(100).optional(),
-    labelMode: z.enum(['icon', 'icon-and-name']).optional(),
-    description: z.string().max(20_000).optional(),
-    disabled: z.boolean().optional(),
     config: z.record(z.string(), jsonValueSchema),
-    editor: z.object({ x: z.number().finite(), y: z.number().finite() }).strict(),
+    editor: z
+      .object({
+        x: z.number().finite(),
+        y: z.number().finite(),
+        name: z.string().max(100).optional(),
+        labelMode: z.enum(['icon', 'icon-and-name']).optional(),
+        description: z.string().max(20_000).optional(),
+      })
+      .strict(),
     bindings: z.record(
       z.string(),
       z.object({ kind: z.string().min(1).max(64) }).catchall(jsonValueSchema),

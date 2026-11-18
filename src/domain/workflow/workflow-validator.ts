@@ -14,7 +14,6 @@ import {
   type PropertyDefinition,
 } from '@domain/workflow/node-definition';
 import { nodeOutputOptions } from '@domain/workflow/binding-options';
-import { canDisableNode } from '@domain/workflow/workflow-commands';
 import {
   createNodeConfigurationDraft,
   validateNodeConfigurationDraft,
@@ -321,24 +320,10 @@ export function validateWorkflow(
       continue;
     }
     definitions.set(node.id, definition);
+    issues.push(...validateNodeProperties(workflow, node, definition));
     issues.push(
-      ...validateNodeProperties(workflow, node, definition).map((entry) =>
-        node.disabled ? { ...entry, severity: 'warning' as const } : entry,
-      ),
+      ...validateBindingReferences(workflow, node, definition, catalog, workflowInputSchema),
     );
-    issues.push(
-      ...validateBindingReferences(workflow, node, definition, catalog, workflowInputSchema).map(
-        (entry) => (node.disabled ? { ...entry, severity: 'warning' as const } : entry),
-      ),
-    );
-    if (node.disabled && !canDisableNode(definition)) {
-      issues.push(
-        issue(workflow, 'DISABLED_BEHAVIOR_UNSUPPORTED', 'This node cannot be safely disabled', {
-          nodeId: node.id,
-        }),
-      );
-    }
-    if (node.disabled) continue;
     for (const permission of definition.requiredPermissions) {
       if (!manifestPermissions.includes(permission)) {
         issues.push(

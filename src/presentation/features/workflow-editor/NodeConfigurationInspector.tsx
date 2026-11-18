@@ -282,7 +282,7 @@ function ConfiguredInspector(props: {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-2">
                 <h2 className="truncate text-sm font-semibold text-foreground">
-                  {node.name?.trim() || definition.displayName}
+                  {node.editor.name?.trim() || definition.displayName}
                 </h2>
                 {nodeCommittedIssues.length > 0 ? (
                   <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[9px] font-medium text-destructive">
@@ -644,7 +644,7 @@ function ConfiguredInspector(props: {
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-3 border-t border-border/80 bg-panel/95 px-3.5 py-3 backdrop-blur">
+      <div className="flex shrink-0 items-center gap-3 border-t border-border/80 bg-panel/95 px-3.5 py-3 backdrop-blur text-sm">
         <div className="min-w-0 flex-1">
           {stale ? (
             <p className="truncate text-[10px] font-medium text-destructive">

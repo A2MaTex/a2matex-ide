@@ -21,7 +21,6 @@ export interface AutomationNodeData extends Record<string, unknown> {
   connectionInputs: readonly PortDefinition[];
   connectionOutputs: readonly PortDefinition[];
   issueCount: number;
-  disabled: boolean;
 }
 
 export type AutomationFlowNode = Node<AutomationNodeData, 'automation'>;
@@ -70,18 +69,17 @@ export function toReactFlowNodes(
     return {
       id: node.id,
       type: 'automation',
-      position: node.editor,
+      position: { x: node.editor.x, y: node.editor.y },
       selected: node.id === selectedNodeId,
       data: {
-        displayName: node.name?.trim() || definition?.displayName || node.type,
-        labelMode: node.labelMode ?? 'icon-and-name',
+        displayName: node.editor.name?.trim() || definition?.displayName || node.type,
+        labelMode: node.editor.labelMode ?? 'icon-and-name',
         icon: definition?.icon ?? 'workflow',
         nodeType: node.type,
         nodeVersion: definition?.version ?? 1,
         connectionInputs: definition ? connectionInputsFor(definition) : [],
         connectionOutputs: definition ? connectionOutputHandlesFor(definition, node) : [],
         issueCount: issues.filter((entry) => entry.nodeId === node.id).length,
-        disabled: node.disabled ?? false,
       },
     };
   });
@@ -130,7 +128,7 @@ export function applyReactFlowPositions(
     ...workflow,
     nodes: workflow.nodes.map((node) => ({
       ...node,
-      editor: positions.get(node.id) ?? node.editor,
+      editor: { ...node.editor, ...(positions.get(node.id) ?? {}) },
     })),
   };
 }

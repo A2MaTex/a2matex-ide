@@ -1,9 +1,9 @@
-import { CircleOff, HelpCircle, Settings2, Trash2, X } from 'lucide-react';
+import { HelpCircle, Settings2, Trash2, X } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 import type { WorkflowNode } from '@domain/project/project';
 import type { NodeDefinition } from '@domain/workflow/node-definition';
-import { canDisableNode, type WorkflowCommand } from '@domain/workflow/workflow-commands';
+import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import { Button } from '@presentation/components/ui/button';
 import { NodeIcon } from '@presentation/features/workflow-editor/node-icons';
 import { useEditorStore } from '@presentation/stores/editor-store';
@@ -27,12 +27,11 @@ export function NodeDetailDialog({
 }: NodeDetailDialogProps) {
   const helpTarget = useEditorStore((state) => state.helpTarget);
   const [tab, setTab] = useState<'config' | 'description'>('config');
-  const [name, setName] = useState(node?.name ?? '');
+  const [name, setName] = useState(node?.editor.name ?? '');
   const [labelMode, setLabelMode] = useState<'icon' | 'icon-and-name'>(
-    node?.labelMode ?? 'icon-and-name',
+    node?.editor.labelMode ?? 'icon-and-name',
   );
-  const [description, setDescription] = useState(node?.description ?? '');
-  const [disabled, setDisabled] = useState(node?.disabled ?? false);
+  const [description, setDescription] = useState(node?.editor.description ?? '');
 
   useEffect(() => {
     if (!node) return;
@@ -47,13 +46,11 @@ export function NodeDetailDialog({
   }, [helpTarget, node, onClose]);
 
   if (!node || !definition) return null;
-  const disableAllowed = canDisableNode(definition);
-
   const done = () => {
     if (
       execute({
         type: 'node.updateMetadata',
-        payload: { nodeId: node.id, name, labelMode, description, disabled },
+        payload: { nodeId: node.id, name, labelMode, description },
       })
     ) {
       onClose();
@@ -175,21 +172,6 @@ export function NodeDetailDialog({
         </div>
 
         <footer className="flex items-center gap-2 border-t border-border px-5 py-3 text-sm">
-          <Button
-            variant="ghost"
-            onClick={() => setDisabled((value) => !value)}
-            disabled={!disableAllowed && !disabled}
-            aria-pressed={disabled}
-            title={
-              disableAllowed
-                ? disabled
-                  ? 'Node will be enabled after Done'
-                  : 'Node will be disabled after Done'
-                : 'Only nodes with one control input and one control output can be disabled'
-            }
-          >
-            <CircleOff /> {disabled ? 'Disabled' : 'Enabled'}
-          </Button>
           <Button variant="ghost" onClick={onDelete}>
             <Trash2 /> Delete node and connections
           </Button>

@@ -17,7 +17,6 @@ const legacyWorkflowDocumentV1Schema = z
           name: z.string().max(100).optional(),
           labelMode: z.enum(['icon', 'icon-and-name']).optional(),
           description: z.string().max(20_000).optional(),
-          disabled: z.boolean().optional(),
         })
         .passthrough(),
     ),
@@ -66,12 +65,13 @@ export function migrateLegacyWorkflow(input: unknown): WorkflowDocument | null {
     nodes: legacy.data.nodes.map((node) => ({
       id: node.id,
       type: node.type === 'trigger.start' ? 'flow.start' : node.type,
-      ...(node.name ? { name: node.name } : {}),
-      ...(node.labelMode ? { labelMode: node.labelMode } : {}),
-      ...(node.description ? { description: node.description } : {}),
-      ...(node.disabled ? { disabled: true } : {}),
       config: {},
-      editor: legacy.data.layout.nodes[node.id] ?? { x: 0, y: 0 },
+      editor: {
+        ...(legacy.data.layout.nodes[node.id] ?? { x: 0, y: 0 }),
+        ...(node.name ? { name: node.name } : {}),
+        ...(node.labelMode ? { labelMode: node.labelMode } : {}),
+        ...(node.description ? { description: node.description } : {}),
+      },
       bindings: Object.fromEntries(
         Object.entries(node.params).map(([name, value]) => [name, { kind: 'LITERAL', value }]),
       ),

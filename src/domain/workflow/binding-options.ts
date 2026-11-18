@@ -70,7 +70,13 @@ export function nodeOutputOptions(
     return definition.outputSchema.required.flatMap((field) => {
       const schema = definition.outputSchema!.properties[field];
       return schema && compatibleField(input, schema)
-        ? [{ nodeId: node.id, nodeLabel: node.name?.trim() || definition.displayName, field }]
+        ? [
+            {
+              nodeId: node.id,
+              nodeLabel: node.editor.name?.trim() || definition.displayName,
+              field,
+            },
+          ]
         : [];
     });
   });

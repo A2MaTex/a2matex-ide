@@ -38,7 +38,6 @@ export type WorkflowCommand =
         name?: string;
         labelMode: 'icon' | 'icon-and-name';
         description?: string;
-        disabled: boolean;
       };
     }
   | { type: 'node.remove'; payload: { nodeId: string } }

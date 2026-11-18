@@ -42,12 +42,14 @@ export interface ProjectManifest {
 export interface WorkflowNode {
   id: string;
   type: string;
-  name?: string;
-  labelMode?: 'icon' | 'icon-and-name';
-  description?: string;
-  disabled?: boolean;
   config: Record<string, JsonValue>;
-  editor: { x: number; y: number };
+  editor: {
+    x: number;
+    y: number;
+    name?: string;
+    labelMode?: 'icon' | 'icon-and-name';
+    description?: string;
+  };
   bindings: Record<string, WorkflowBinding>;
   timeoutMs?: number;
   retryPolicy?: {

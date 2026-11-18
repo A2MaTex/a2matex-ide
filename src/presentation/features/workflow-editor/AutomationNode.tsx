@@ -1,4 +1,4 @@
-import { AlertTriangle, CircleOff } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { Handle, Position, type NodeProps } from '@xyflow/react';
 
 import { NodeIcon } from '@presentation/features/workflow-editor/node-icons';
@@ -9,13 +9,11 @@ export function AutomationNode({ data, selected }: NodeProps<AutomationFlowNode>
 
   return (
     <div
-      aria-label={data.displayName + (data.disabled ? ', disabled' : '')}
-      aria-disabled={data.disabled}
+      aria-label={data.displayName}
       role="group"
       className={
         'group relative rounded-lg border bg-card shadow-xl transition-all ' +
         (iconOnly ? 'min-w-16 ' : 'min-w-40 ') +
-        (data.disabled ? 'opacity-55 grayscale ' : '') +
         (selected
           ? 'border-primary shadow-primary/10'
           : data.issueCount > 0
@@ -40,11 +38,6 @@ export function AutomationNode({ data, selected }: NodeProps<AutomationFlowNode>
         </span>
         {!iconOnly ? (
           <div className="min-w-0 flex-1 truncate text-xs font-semibold">{data.displayName}</div>
-        ) : null}
-        {data.disabled ? (
-          <span className="flex items-center gap-1 rounded bg-secondary px-1.5 py-0.5 text-[9px] text-muted-foreground">
-            <CircleOff className="size-2.5" /> {!iconOnly ? 'Disabled' : null}
-          </span>
         ) : null}
         {data.issueCount > 0 ? (
           <span className="flex items-center gap-1 text-[10px] text-destructive">

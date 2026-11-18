@@ -37,7 +37,7 @@ export function WorkflowExplorer({
           flowName(path).toLocaleLowerCase().includes(normalizedQuery) ||
           workflow?.nodes.some((node) => {
             const definition = catalog.find((candidate) => candidate.type === node.type);
-            return (node.name || definition?.displayName || node.type)
+            return (node.editor.name || definition?.displayName || node.type)
               .toLocaleLowerCase()
               .includes(normalizedQuery);
           })
@@ -84,7 +84,7 @@ export function WorkflowExplorer({
               >
                 <NodeIcon icon={definition?.icon ?? 'workflow'} className="size-3.5" />
                 <span className="truncate">
-                  {node.name || definition?.displayName || node.type}
+                  {node.editor.name || definition?.displayName || node.type}
                 </span>
               </button>
             );
@@ -165,7 +165,7 @@ export function WorkflowExplorer({
           globalNodes.length > 0 ? (
             globalNodes.map((node) => (
               <div key={node.id} className="ml-6 truncate py-1 text-muted-foreground">
-                {node.name || node.type}
+                {node.editor.name || node.type}
               </div>
             ))
           ) : (

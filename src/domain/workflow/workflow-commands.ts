@@ -149,13 +149,6 @@ export function assertValidConnection(
   }
 }
 
-export function canDisableNode(definition: NodeDefinition) {
-  if (definition.type === 'flow.start') return false;
-  const controlInputs = connectionInputsFor(definition).filter((port) => port.kind === 'control');
-  const controlOutputs = connectionOutputsFor(definition).filter((port) => port.kind === 'control');
-  return controlInputs.length === 1 && controlOutputs.length === 1;
-}
-
 function createNode(
   nodeId: string,
   definition: NodeDefinition,
@@ -205,7 +198,9 @@ export function applyWorkflowCommand(
       return {
         ...workflow,
         nodes: workflow.nodes.map((node) =>
-          node.id === command.payload.nodeId ? { ...node, editor: command.payload.position } : node,
+          node.id === command.payload.nodeId
+            ? { ...node, editor: { ...node.editor, ...command.payload.position } }
+            : node,
         ),
       };
     }
@@ -356,8 +351,7 @@ export function applyWorkflowCommand(
       };
     }
     case 'node.updateMetadata': {
-      const current = findNode(workflow, command.payload.nodeId);
-      const definition = definitionFor(current, catalog);
+      findNode(workflow, command.payload.nodeId);
       const name = command.payload.name?.trim() || undefined;
       const description = command.payload.description?.replace(/\r\n/g, '\n').trim() || undefined;
       if (name && name.length > 100) {
@@ -372,22 +366,19 @@ export function applyWorkflowCommand(
           'Node description must not exceed 20,000 characters',
         );
       }
-      if (command.payload.disabled && !canDisableNode(definition)) {
-        throw new WorkflowCommandError(
-          'INVALID_NODE_METADATA',
-          'This node does not declare safe disable behavior',
-        );
-      }
       return {
         ...workflow,
         nodes: workflow.nodes.map((node) =>
           node.id === command.payload.nodeId
             ? {
                 ...node,
-                ...(name ? { name } : { name: undefined }),
-                labelMode: command.payload.labelMode,
-                ...(description ? { description } : { description: undefined }),
-                disabled: command.payload.disabled,
+                editor: {
+                  x: node.editor.x,
+                  y: node.editor.y,
+                  ...(name ? { name } : {}),
+                  labelMode: command.payload.labelMode,
+                  ...(description ? { description } : {}),
+                },
               }
             : node,
         ),
@@ -435,9 +426,12 @@ export function applyWorkflowCommand(
             id: command.payload.nodeId,
             config,
             bindings,
-            editor: command.payload.position ?? {
-              x: sourcePosition.x + 48,
-              y: sourcePosition.y + 48,
+            editor: {
+              ...source.editor,
+              ...(command.payload.position ?? {
+                x: sourcePosition.x + 48,
+                y: sourcePosition.y + 48,
+              }),
             },
           },
         ],
