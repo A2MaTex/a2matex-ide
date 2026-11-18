@@ -30,7 +30,11 @@ export interface LocalProjectDraftState extends LocalDraftArtifacts {
   observedRemoteVersion: number | null;
   remoteSavedAt: string | null;
   remoteCreatePending: boolean;
+  runtimeIrSourceRevision: number | null;
+  runtimeIrWorkflowPath: string | null;
+  sourceRevision: number;
   syncStatus: LocalProjectSyncStatus;
+  validationSourceRevision: number | null;
 }
 
 export interface LocalProjectSnapshot {
@@ -55,6 +59,15 @@ export interface SaveLocalProjectInput {
   document: ProjectDocument;
   expectedLocalRevision: number;
   localId: string;
+}
+
+export interface SaveRuntimeCompilationInput {
+  accountScope: string;
+  expectedSourceRevision: number;
+  localId: string;
+  runtimeIr: JsonValue | null;
+  validationSummary: JsonValue;
+  workflowPath: string;
 }
 
 export interface AcknowledgeRemoteDraftInput {
@@ -114,6 +127,7 @@ export interface LocalProjectRepository {
   list(accountScope: string): Promise<LocalProjectSnapshot[]>;
   materializeCloudProject(input: ApplyCloudProjectInput): Promise<LocalProjectSnapshot>;
   save(input: SaveLocalProjectInput): Promise<LocalProjectSnapshot>;
+  saveRuntimeCompilation(input: SaveRuntimeCompilationInput): Promise<LocalProjectSnapshot>;
   replaceFromCloud(input: ReplaceLocalFromCloudInput): Promise<LocalProjectSnapshot>;
   observeRemote(
     accountScope: string,

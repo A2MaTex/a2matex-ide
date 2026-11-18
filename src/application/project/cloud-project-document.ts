@@ -11,11 +11,9 @@ import type {
 import { createEmptyProjectDocument } from '@domain/project/project-factory';
 import type { ProjectDocument } from '@domain/project/project';
 import { projectDocumentSchema } from '@domain/project/project-schema';
-import {
-  decodeWorkflowDocument,
-  encodeWorkflowDocument,
-} from '@domain/project/workflow-persistence';
+import { decodeWorkflowDocument } from '@domain/project/workflow-persistence';
 import type { JsonValue } from '@shared/types/json-value';
+import { toRuntimeEditorGraph } from '@application/runtime/to-runtime-editor-graph';
 
 const CLOUD_EDITOR_GRAPH_SCHEMA_VERSION = 1;
 
@@ -63,12 +61,21 @@ export function createCloudDraftPayload(
       `Entry workflow ${manifest.entryWorkflow} is missing.`,
     );
   }
+  const runtimeCacheIsFresh =
+    draftState.runtimeIrSourceRevision === draftState.sourceRevision &&
+    draftState.runtimeIrWorkflowPath === manifest.entryWorkflow;
+  const validationCacheIsFresh = draftState.validationSourceRevision === draftState.sourceRevision;
   return {
     expectedVersion,
-    editorGraph: copyAsJsonObject(encodeWorkflowDocument(workflow), 'editorGraph'),
+    editorGraph: copyAsJsonObject(toRuntimeEditorGraph(workflow), 'editorGraph'),
     inputSchema: jsonObject(draftState.inputSchema, 'inputSchema'),
-    runtimeIr: draftState.runtimeIr === null ? null : jsonObject(draftState.runtimeIr, 'runtimeIr'),
-    validationSummary: jsonObject(draftState.validationSummary, 'validationSummary'),
+    runtimeIr:
+      runtimeCacheIsFresh && draftState.runtimeIr !== null
+        ? jsonObject(draftState.runtimeIr, 'runtimeIr')
+        : null,
+    validationSummary: validationCacheIsFresh
+      ? jsonObject(draftState.validationSummary, 'validationSummary')
+      : {},
   };
 }
 
@@ -169,7 +176,16 @@ function decodeManifestExtension(value: JsonValue | undefined, workflowPaths: st
 }
 
 function emptyArtifacts(): LocalDraftArtifacts {
-  return { inputSchema: {}, runtimeIr: null, validationSummary: {} };
+  return {
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    },
+    runtimeIr: null,
+    validationSummary: {},
+  };
 }
 
 function canonicalJson(value: JsonValue): string {

@@ -23,7 +23,12 @@ function initialDraftState(): LocalProjectDraftState {
     baseRemoteName: null,
     baseRemoteVersion: null,
     contentHash: null,
-    inputSchema: {},
+    inputSchema: {
+      type: 'object',
+      properties: {},
+      required: [],
+      additionalProperties: false,
+    },
     lastSyncedLocalRevision: null,
     localRevision: 0,
     metadataRevision: 0,
@@ -32,8 +37,12 @@ function initialDraftState(): LocalProjectDraftState {
     remoteSavedAt: null,
     remoteCreatePending: false,
     runtimeIr: null,
+    runtimeIrSourceRevision: null,
+    runtimeIrWorkflowPath: null,
+    sourceRevision: 0,
     syncStatus: 'local-only',
     validationSummary: {},
+    validationSourceRevision: null,
   };
 }
 
@@ -102,7 +111,16 @@ export class InMemoryProjectRepository implements ProjectRepository {
         ...current.draftState,
         localRevision: current.draftState.localRevision + 1,
         metadataRevision: current.draftState.metadataRevision + (metadataChanged ? 1 : 0),
-        ...(workflowsChanged ? { runtimeIr: null, validationSummary: {} } : {}),
+        ...(workflowsChanged
+          ? {
+              runtimeIr: null,
+              runtimeIrSourceRevision: null,
+              runtimeIrWorkflowPath: null,
+              sourceRevision: current.draftState.sourceRevision + 1,
+              validationSummary: {},
+              validationSourceRevision: null,
+            }
+          : {}),
       },
       updatedAt: new Date().toISOString(),
     };

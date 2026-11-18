@@ -26,10 +26,16 @@ import type {
 } from '@application/onboarding/onboarding';
 import type { PolicyManifest } from '@application/onboarding/policy-manifest';
 import type {
-  WorkflowValidationErrorCode,
   WorkflowValidationInput,
   WorkflowValidationOutput,
 } from '@application/workflow-validation/workflow-validation';
+import type {
+  RuntimeCompilationInput,
+  RuntimeCompilationResult,
+  RuntimeDevice,
+  RuntimeErrorCode,
+  RuntimeStatus,
+} from '@application/runtime/runtime.types';
 
 export interface HostError<TCode extends string = string> {
   code: TCode;
@@ -71,10 +77,18 @@ export interface StudioHostApi {
     load(runtimeVersion: string): Promise<HostResult<NodeCatalogSnapshot, NodeCatalogErrorCode>>;
     refresh(runtimeVersion: string): Promise<HostResult<NodeCatalogSnapshot, NodeCatalogErrorCode>>;
   };
-  workflowValidation: {
+  runtime: {
+    getStatus(): Promise<HostResult<RuntimeStatus, RuntimeErrorCode>>;
     validate(
       input: WorkflowValidationInput,
-    ): Promise<HostResult<WorkflowValidationOutput, WorkflowValidationErrorCode>>;
+    ): Promise<HostResult<WorkflowValidationOutput, RuntimeErrorCode>>;
+    compile(
+      input: RuntimeCompilationInput,
+    ): Promise<HostResult<RuntimeCompilationResult, RuntimeErrorCode>>;
+    listDevices(): Promise<HostResult<RuntimeDevice[], RuntimeErrorCode>>;
+    refreshDevices(): Promise<HostResult<RuntimeDevice[], RuntimeErrorCode>>;
+    shutdown(): Promise<HostResult<void, RuntimeErrorCode>>;
+    onStatusChanged(listener: (status: RuntimeStatus) => void): () => void;
   };
   cloudProject: {
     archive(projectId: string): Promise<HostResult<CloudProject, CloudProjectErrorCode>>;

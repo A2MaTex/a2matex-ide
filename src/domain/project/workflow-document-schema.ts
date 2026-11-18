@@ -25,8 +25,8 @@ export const workflowNodeSchema = z
     timeoutMs: z.number().int().min(1).max(600_000).optional(),
     retryPolicy: z
       .object({
-        maxAttempts: z.number().int().min(1).max(10).optional(),
-        delayMs: z.number().int().min(0).max(300_000).optional(),
+        maxAttempts: z.number().int().min(1).max(3).optional(),
+        delayMs: z.number().int().min(0).max(60_000).optional(),
       })
       .strict()
       .optional(),

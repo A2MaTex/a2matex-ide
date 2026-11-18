@@ -8,8 +8,10 @@ import {
   Folder,
   List,
   ListChecks,
+  Hammer,
   Network,
   Plus,
+  Power,
   Redo2,
   Save,
   SaveAll,
@@ -24,6 +26,8 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ReactFlowProvider } from '@xyflow/react';
 
 import { toWorkflowNodeCatalog } from '@application/node-catalog/to-workflow-node-catalog';
+import { toRuntimeEditorGraph } from '@application/runtime/to-runtime-editor-graph';
+import type { RuntimeStatus } from '@application/runtime/runtime.types';
 import {
   androidSelectorToJsonValue,
   getAndroidSelectorTargets,
@@ -35,7 +39,10 @@ import { validateWorkflow } from '@domain/workflow/workflow-validator';
 import { Button } from '@presentation/components/ui/button';
 import { AndroidInspectorPanel } from '@presentation/features/android-inspector/AndroidInspectorPanel';
 import { useProjectCloseGuard } from '@presentation/features/project-session/use-project-close-guard';
-import { useProjectStore } from '@presentation/features/project-session/use-project-store';
+import {
+  useProjectStore,
+  useProjectStoreApi,
+} from '@presentation/features/project-session/use-project-store';
 import { NodeConfigDrawer } from '@presentation/features/workflow-editor/NodeConfigDrawer';
 import { NodeDetailDialog } from '@presentation/features/workflow-editor/NodeDetailDialog';
 import { NodeHelpDialog } from '@presentation/features/workflow-editor/NodeHelpDialog';
@@ -90,6 +97,7 @@ function newNodeId(type: string) {
 export function MainWorkflowPage() {
   const { projectId } = useParams();
   const navigate = useNavigate();
+  const projectStore = useProjectStoreApi();
   const session = useProjectStore((state) => state.session);
   const status = useProjectStore((state) => state.status);
   const error = useProjectStore((state) => state.error);
@@ -136,6 +144,9 @@ export function MainWorkflowPage() {
     'loading',
   );
   const [nodeCatalogError, setNodeCatalogError] = useState<string | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>({ state: 'STOPPED' });
+  const [runtimeOperationError, setRuntimeOperationError] = useState<string | null>(null);
+  const [compiling, setCompiling] = useState(false);
   const [activeWorkflowPath, setActiveWorkflowPath] = useState<string | null>(null);
   const [openWorkflowPaths, setOpenWorkflowPaths] = useState<string[]>([]);
   const [actionList, setActionList] = useState<{
@@ -218,6 +229,21 @@ export function MainWorkflowPage() {
     return () => window.clearTimeout(timer);
   }, [loadNodeCatalog]);
 
+  useEffect(() => {
+    if (!window.studioHost) return;
+    let active = true;
+    void window.studioHost.runtime.getStatus().then((result) => {
+      if (active && result.ok) setRuntimeStatus(result.value);
+    });
+    const unsubscribe = window.studioHost.runtime.onStatusChanged((nextStatus) => {
+      if (active) setRuntimeStatus(nextStatus);
+    });
+    return () => {
+      active = false;
+      unsubscribe();
+    };
+  }, []);
+
   const activeProjectLocalId = session?.snapshot.localId;
 
   useEffect(() => {
@@ -259,6 +285,58 @@ export function MainWorkflowPage() {
     validate: validateActiveWorkflow,
     busy: workflowValidationBusy,
   } = useWorkflowValidation(workflowPath);
+  const compileActiveWorkflow = useCallback(async () => {
+    setRuntimeOperationError(null);
+    const starting = projectStore.getState();
+    if (starting.pendingNodeConfigurationId) {
+      setRuntimeOperationError('Save or discard the pending node configuration before compiling.');
+      return;
+    }
+    if (!(await starting.flushLocalSave())) {
+      setRuntimeOperationError('The workflow could not be saved locally before compilation.');
+      return;
+    }
+    const current = projectStore.getState().session;
+    const compileWorkflowPath = current?.snapshot.document.manifest.entryWorkflow ?? '';
+    const currentWorkflow = current?.snapshot.document.workflows[compileWorkflowPath];
+    if (!current || !currentWorkflow || !window.studioHost) {
+      setRuntimeOperationError('The saved workflow is no longer available for compilation.');
+      return;
+    }
+    const rawInputSchema = current.snapshot.draftState.inputSchema;
+    if (!rawInputSchema || Array.isArray(rawInputSchema) || typeof rawInputSchema !== 'object') {
+      setRuntimeOperationError('The workflow input schema must be a JSON object.');
+      return;
+    }
+    setCompiling(true);
+    try {
+      const result = await window.studioHost.runtime.compile({
+        editorGraph: toRuntimeEditorGraph(currentWorkflow),
+        inputSchema: rawInputSchema,
+        projectId: current.snapshot.localId,
+        sourceRevision: current.snapshot.draftState.sourceRevision,
+        workflowPath: compileWorkflowPath,
+      });
+      if (!result.ok) {
+        setRuntimeOperationError(result.error.message);
+      } else if (result.value.runtimeIr === null) {
+        setRuntimeOperationError(
+          'Compilation finished with validation errors. Open Diagnostics for details.',
+        );
+      }
+    } catch {
+      setRuntimeOperationError('The desktop Runtime bridge failed unexpectedly.');
+    } finally {
+      setCompiling(false);
+    }
+  }, [projectStore]);
+
+  const shutdownRuntime = useCallback(async () => {
+    if (!window.studioHost) return;
+    setRuntimeOperationError(null);
+    const result = await window.studioHost.runtime.shutdown();
+    if (!result.ok) setRuntimeOperationError(result.error.message);
+  }, []);
   const execute = useCallback(
     (command: WorkflowCommand) =>
       workflowPath ? executeWorkflowCommand(workflowPath, command, nodeCatalog) : false,
@@ -637,8 +715,17 @@ export function MainWorkflowPage() {
               {cloudSyncLabel}
             </span>
           ) : null}
-          <span className="ml-2 text-[10px]">
-            {workflow.nodes.length} nodes · {issues.length} problems
+          <span
+            className={`ml-1 rounded px-1.5 py-0.5 font-mono text-[10px] uppercase tracking-wider ${
+              runtimeStatus.state === 'READY'
+                ? 'bg-success/15 text-success'
+                : runtimeStatus.state === 'FAILED'
+                  ? 'bg-destructive/15 text-destructive'
+                  : 'bg-secondary text-muted-foreground'
+            }`}
+            title={runtimeStatus.errorCode ?? runtimeStatus.runtimeVersion}
+          >
+            Runtime {runtimeStatus.state.toLowerCase()}
           </span>
         </div>
         <div className="flex items-center gap-1 text-sm">
@@ -694,7 +781,7 @@ export function MainWorkflowPage() {
             variant="secondary"
             onClick={() => void validateActiveWorkflow()}
             disabled={workflowValidationBusy}
-            title="Save locally, then validate this workflow on the server"
+            title="Save locally, then validate this workflow with the local Runtime"
           >
             <ListChecks />
             {workflowValidation.phase === 'saving'
@@ -703,8 +790,28 @@ export function MainWorkflowPage() {
                 ? 'Validating…'
                 : 'Validate'}
           </Button>
-          <Button size="sm" variant="ghost" disabled title="Runtime integration begins in Phase 4">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => void compileActiveWorkflow()}
+            disabled={compiling || workflowValidationBusy || Boolean(pendingNodeConfigurationId)}
+            title="Compile the saved entry graph with the local Runtime"
+          >
+            <Hammer /> {compiling ? 'Compiling…' : 'Compile'}
+          </Button>
+          <Button size="sm" variant="ghost" disabled title="Test Run needs a Runtime run contract">
             <CirclePlay /> Run
+          </Button>
+          <Button
+            size="icon"
+            className="size-8"
+            variant="ghost"
+            onClick={() => void shutdownRuntime()}
+            disabled={!['READY', 'STARTING', 'FAILED'].includes(runtimeStatus.state)}
+            title="Shut down local Runtime"
+            aria-label="Shut down local Runtime"
+          >
+            <Power />
           </Button>
         </div>
       </div>
@@ -723,6 +830,14 @@ export function MainWorkflowPage() {
           className="border-b border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
         >
           {cloudError}
+        </div>
+      ) : null}
+      {runtimeOperationError ? (
+        <div
+          role="alert"
+          className="border-b border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning"
+        >
+          {runtimeOperationError}
         </div>
       ) : null}
 

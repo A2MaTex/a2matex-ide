@@ -13,6 +13,7 @@ import {
   type LocalProjectSyncStatus,
   type ReplaceLocalFromCloudInput,
   type SaveLocalProjectInput,
+  type SaveRuntimeCompilationInput,
 } from '@application/project/local-project-repository';
 import type { ProjectDocument } from '@domain/project/project';
 import { projectDocumentSchema } from '@domain/project/project-schema';
@@ -24,6 +25,7 @@ import {
   LOCAL_PROJECT_NAME_NORMALIZATION_VERSION,
   normalizeProjectName,
 } from '@domain/project/project-name';
+import { toRuntimeEditorGraph } from '@application/runtime/to-runtime-editor-graph';
 import { parseStoredJson, serializeJson } from '@electron/main/persistence/json-storage';
 import { SerializedProjectWriteQueue } from '@electron/main/persistence/serialized-project-write-queue';
 import { withImmediateTransaction } from '@electron/main/persistence/studio-database';
@@ -47,15 +49,26 @@ interface ProjectRow {
   remote_create_pending: number;
   remote_saved_at: string | null;
   runtime_ir_json: string | null;
+  runtime_ir_source_revision: number | null;
+  runtime_ir_workflow_path: string | null;
+  source_revision: number;
   sync_status: LocalProjectSyncStatus;
   updated_at: string;
   validation_summary_json: string;
+  validation_source_revision: number | null;
 }
 
 interface WorkflowRow {
   document_json: string;
   workflow_path: string;
 }
+
+const DEFAULT_WORKFLOW_INPUT_SCHEMA = {
+  type: 'object',
+  properties: {},
+  required: [],
+  additionalProperties: false,
+} as const;
 
 const SELECT_PROJECT = `
   SELECT
@@ -79,7 +92,11 @@ const SELECT_PROJECT = `
     d.remote_create_pending,
     d.input_schema_json,
     d.runtime_ir_json,
-    d.validation_summary_json
+    d.validation_summary_json,
+    d.source_revision,
+    d.runtime_ir_source_revision,
+    d.validation_source_revision,
+    d.runtime_ir_workflow_path
   FROM projects p
   INNER JOIN project_draft_state d ON d.local_id = p.local_id
 `;
@@ -158,10 +175,14 @@ function parseProjectSnapshot(database: DatabaseSync, row: ProjectRow): LocalPro
         row.runtime_ir_json === null
           ? null
           : (parseStoredJson(row.runtime_ir_json) as LocalDraftArtifacts['runtimeIr']),
+      runtimeIrSourceRevision: row.runtime_ir_source_revision,
+      runtimeIrWorkflowPath: row.runtime_ir_workflow_path,
+      sourceRevision: row.source_revision,
       syncStatus: row.sync_status,
       validationSummary: parseStoredJson(
         row.validation_summary_json,
       ) as LocalDraftArtifacts['validationSummary'],
+      validationSourceRevision: row.validation_source_revision,
     };
 
     return {
@@ -204,6 +225,19 @@ function artifactsOf(snapshot: LocalProjectSnapshot): LocalDraftArtifacts {
 
 function artifactsEqual(left: LocalDraftArtifacts, right: LocalDraftArtifacts) {
   return serializeJson(left) === serializeJson(right);
+}
+
+function entryEditorGraphEqual(left: ProjectDocument, right: ProjectDocument) {
+  const leftPath = left.manifest.entryWorkflow;
+  const rightPath = right.manifest.entryWorkflow;
+  if (leftPath !== rightPath) return false;
+  const leftWorkflow = left.workflows[leftPath];
+  const rightWorkflow = right.workflows[rightPath];
+  if (!leftWorkflow || !rightWorkflow) return false;
+  return (
+    serializeJson(toRuntimeEditorGraph(leftWorkflow)) ===
+    serializeJson(toRuntimeEditorGraph(rightWorkflow))
+  );
 }
 
 function writeWorkflows(
@@ -410,8 +444,8 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
 
           writeWorkflows(this.database, localId, document, timestamp);
           this.database
-            .prepare('INSERT INTO project_draft_state (local_id) VALUES (?)')
-            .run(localId);
+            .prepare('INSERT INTO project_draft_state (local_id, input_schema_json) VALUES (?, ?)')
+            .run(localId, serializeJson(DEFAULT_WORKFLOW_INPUT_SCHEMA));
         });
 
         return readProject(this.database, accountScope, localId)!;
@@ -552,6 +586,11 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
 
           const timestamp = this.now();
           const localRevision = current.draftState.localRevision + 1;
+          const sourceChanged =
+            !entryEditorGraphEqual(current.document, document) ||
+            serializeJson(current.draftState.inputSchema) !==
+              serializeJson(input.artifacts.inputSchema);
+          const sourceRevision = current.draftState.sourceRevision + (sourceChanged ? 1 : 0);
           const metadataChanged =
             current.document.manifest.name !== document.manifest.name ||
             (current.document.manifest.description ?? null) !==
@@ -582,7 +621,9 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
                    base_remote_name = ?, base_remote_description = ?,
                    base_remote_version = ?, observed_remote_version = ?, sync_status = 'synced',
                    content_hash = ?, remote_saved_at = ?, input_schema_json = ?,
-                   runtime_ir_json = ?, validation_summary_json = ?
+                   runtime_ir_json = ?, validation_summary_json = ?, source_revision = ?,
+                   runtime_ir_source_revision = NULL, validation_source_revision = NULL,
+                   runtime_ir_workflow_path = NULL
                WHERE local_id = ?`,
             )
             .run(
@@ -599,6 +640,7 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
               serializeJson(input.artifacts.inputSchema),
               input.artifacts.runtimeIr === null ? null : serializeJson(input.artifacts.runtimeIr),
               serializeJson(input.artifacts.validationSummary),
+              sourceRevision,
               localId,
             );
           return readProject(this.database, accountScope, localId)!;
@@ -637,20 +679,21 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
             serializeJson(current.document.manifest) !== serializeJson(document.manifest);
           const workflowsChanged =
             serializeJson(current.document.workflows) !== serializeJson(document.workflows);
-          const artifacts =
-            input.artifacts ??
-            (workflowsChanged
-              ? {
-                  ...persistedArtifacts,
-                  runtimeIr: null,
-                  validationSummary: {},
-                }
-              : persistedArtifacts);
+          const requestedArtifacts = input.artifacts ?? persistedArtifacts;
+          const inputSchemaChanged =
+            serializeJson(requestedArtifacts.inputSchema) !==
+            serializeJson(persistedArtifacts.inputSchema);
+          const sourceChanged =
+            !entryEditorGraphEqual(current.document, document) || inputSchemaChanged;
+          const artifacts = sourceChanged
+            ? { ...requestedArtifacts, runtimeIr: null, validationSummary: {} }
+            : requestedArtifacts;
           const draftArtifactsChanged = !artifactsEqual(persistedArtifacts, artifacts);
           if (!metadataChanged && !workflowsChanged && !draftArtifactsChanged) return current;
 
           const timestamp = this.now();
           const localRevision = current.draftState.localRevision + 1;
+          const sourceRevision = current.draftState.sourceRevision + (sourceChanged ? 1 : 0);
           const metadataRevision = current.draftState.metadataRevision + (metadataChanged ? 1 : 0);
           const syncStatus: LocalProjectSyncStatus = current.remoteProjectId
             ? 'local-ahead'
@@ -681,7 +724,10 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
             .prepare(
               `UPDATE project_draft_state
                SET local_revision = ?, metadata_revision = ?, sync_status = ?,
-                   input_schema_json = ?, runtime_ir_json = ?, validation_summary_json = ?
+                   input_schema_json = ?, runtime_ir_json = ?, validation_summary_json = ?,
+                   source_revision = ?,
+                   runtime_ir_source_revision = ?, validation_source_revision = ?,
+                   runtime_ir_workflow_path = ?
                WHERE local_id = ?`,
             )
             .run(
@@ -691,9 +737,67 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
               serializeJson(artifacts.inputSchema),
               artifacts.runtimeIr === null ? null : serializeJson(artifacts.runtimeIr),
               serializeJson(artifacts.validationSummary),
+              sourceRevision,
+              sourceChanged ? null : current.draftState.runtimeIrSourceRevision,
+              sourceChanged ? null : current.draftState.validationSourceRevision,
+              sourceChanged ? null : current.draftState.runtimeIrWorkflowPath,
               localId,
             );
 
+          return readProject(this.database, accountScope, localId)!;
+        });
+      } catch (error) {
+        return mapWriteError(error);
+      }
+    });
+  }
+
+  async saveRuntimeCompilation(input: SaveRuntimeCompilationInput): Promise<LocalProjectSnapshot> {
+    const accountScope = requireIdentifier(input.accountScope, 'accountScope');
+    const localId = requireIdentifier(input.localId, 'localId');
+    const workflowPath = requireIdentifier(input.workflowPath, 'workflowPath');
+    if (!Number.isSafeInteger(input.expectedSourceRevision) || input.expectedSourceRevision < 0) {
+      throw new TypeError('expectedSourceRevision must be a non-negative safe integer');
+    }
+
+    return this.writes.run(projectKey(accountScope, localId), () => {
+      try {
+        return withImmediateTransaction(this.database, () => {
+          const current = readProject(this.database, accountScope, localId);
+          if (!current) {
+            throw new LocalProjectPersistenceError(
+              'PROJECT_NOT_FOUND',
+              `Local project ${localId} was not found`,
+            );
+          }
+          if (
+            current.draftState.sourceRevision !== input.expectedSourceRevision ||
+            current.document.manifest.entryWorkflow !== workflowPath ||
+            !current.document.workflows[workflowPath]
+          ) {
+            throw new LocalProjectPersistenceError(
+              'LOCAL_REVISION_CONFLICT',
+              'The workflow source changed while the local Runtime was compiling it.',
+              true,
+            );
+          }
+          this.database
+            .prepare(
+              `UPDATE project_draft_state
+               SET runtime_ir_json = ?, validation_summary_json = ?,
+                   runtime_ir_source_revision = ?, validation_source_revision = ?,
+                   runtime_ir_workflow_path = ?
+               WHERE local_id = ? AND source_revision = ?`,
+            )
+            .run(
+              input.runtimeIr === null ? null : serializeJson(input.runtimeIr),
+              serializeJson(input.validationSummary),
+              input.runtimeIr === null ? null : input.expectedSourceRevision,
+              input.expectedSourceRevision,
+              input.runtimeIr === null ? null : workflowPath,
+              localId,
+              input.expectedSourceRevision,
+            );
           return readProject(this.database, accountScope, localId)!;
         });
       } catch (error) {

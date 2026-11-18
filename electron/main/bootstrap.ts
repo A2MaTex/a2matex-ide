@@ -3,6 +3,8 @@ import path from 'node:path';
 import { app, BrowserWindow, dialog, session } from 'electron';
 
 import { createAuthSessionService } from '@electron/main/auth/create-auth-session-service';
+import { accountScopeFromName } from '@application/auth/account-scope';
+import { RuntimeError } from '@application/runtime/runtime.error';
 import { getCurrentPolicies } from '@electron/main/api/policy.api';
 import { ProcessAdbClient } from '@electron/main/adapters/android/adb-client';
 import { SqliteCloudProjectCache } from '@electron/main/adapters/project/sqlite-cloud-project-cache';
@@ -14,8 +16,8 @@ import { registerCloudProjectHandlers } from '@electron/main/ipc/register-cloud-
 import { registerNodeCatalogHandlers } from '@electron/main/ipc/register-node-catalog-handlers';
 import { registerOnboardingHandlers } from '@electron/main/ipc/register-onboarding-handlers';
 import { registerProjectHandlers } from '@electron/main/ipc/register-project-handlers';
+import { registerRuntimeHandlers } from '@electron/main/ipc/register-runtime-handlers';
 import { registerSystemHandlers } from '@electron/main/ipc/register-system-handlers';
-import { registerWorkflowValidationHandlers } from '@electron/main/ipc/register-workflow-validation-handlers';
 import { loadApiConfig } from '@electron/main/config/api-config';
 import { logMain } from '@electron/main/logger';
 import { createProjectCloudService } from '@electron/main/project/create-project-cloud-service';
@@ -28,10 +30,15 @@ import {
   openStudioDatabase,
   type StudioDatabase,
 } from '@electron/main/persistence/studio-database';
-import { createWorkflowValidationService } from '@electron/main/workflow-validation/create-workflow-validation-service';
+import { createRuntimeServices } from '@electron/main/runtime/create-runtime-services';
+import { resolveRuntimeExecutable } from '@electron/main/runtime/process/runtime-executable';
+import { RuntimeProcessManager } from '@electron/main/runtime/process/runtime-process-manager';
 
 const developmentUrl = process.env.A2MATEX_DEV_SERVER_URL;
 let studioDatabase: StudioDatabase | null = null;
+let runtimeManager: RuntimeProcessManager | null = null;
+let quitInProgress = false;
+let shutdownComplete = false;
 
 export function createWindow() {
   const window = new BrowserWindow({
@@ -95,7 +102,15 @@ app.whenReady().then(() => {
     isPackaged: app.isPackaged,
   });
   registerAuthHandlers(auth);
-  registerWorkflowValidationHandlers(createWorkflowValidationService({ auth }));
+  runtimeManager = new RuntimeProcessManager({
+    resolveExecutable: () =>
+      resolveRuntimeExecutable({
+        appPath,
+        isPackaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+      }),
+  });
+  const runtime = createRuntimeServices(runtimeManager);
   try {
     studioDatabase = openStudioDatabase({
       migrationsPath: path.join(appPath, 'prisma', 'migration'),
@@ -122,6 +137,26 @@ app.whenReady().then(() => {
   );
   const projects = new SqliteLocalProjectRepository(studioDatabase.connection);
   const cloudCache = new SqliteCloudProjectCache(studioDatabase.connection);
+  registerRuntimeHandlers(runtime, {
+    persistCompilation: async (request, result) => {
+      const restored = await auth.restore();
+      if (restored.status !== 'authenticated') {
+        throw new RuntimeError(
+          'RUNTIME_INVALID_REQUEST',
+          'Sign in to persist the compiled project cache.',
+          false,
+        );
+      }
+      await projects.saveRuntimeCompilation({
+        accountScope: accountScopeFromName(restored.account),
+        expectedSourceRevision: request.sourceRevision,
+        localId: request.projectId,
+        runtimeIr: result.runtimeIr,
+        validationSummary: result.validation,
+        workflowPath: request.workflowPath,
+      });
+    },
+  });
   registerProjectHandlers({ auth, projects });
   registerCloudProjectHandlers(createProjectCloudService({ auth, cache: cloudCache, projects }));
   createWindow();
@@ -134,6 +169,28 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') app.quit();
+});
+
+app.on('before-quit', (event) => {
+  if (shutdownComplete) return;
+  event.preventDefault();
+  if (quitInProgress) return;
+  quitInProgress = true;
+  void (async () => {
+    try {
+      await runtimeManager?.shutdown();
+    } catch (error) {
+      logMain('error', 'runtime_shutdown_failed', {
+        name: error instanceof Error ? error.name : 'UnknownError',
+      });
+    } finally {
+      studioDatabase?.close();
+      studioDatabase = null;
+      runtimeManager = null;
+      shutdownComplete = true;
+      app.quit();
+    }
+  })();
 });
 
 app.on('will-quit', () => {

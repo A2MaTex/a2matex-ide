@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { LocalProjectPersistenceError } from '@application/project/local-project-repository';
 import { LOCAL_PROJECT_NAME_NORMALIZATION_VERSION } from '@domain/project/project-name';
 
-const CURRENT_DATABASE_VERSION = 5;
+const CURRENT_DATABASE_VERSION = 6;
 const DATABASE_FILE_NAME = 'studio.sqlite3';
 
 const migrations = [
@@ -28,6 +28,10 @@ const migrations = [
   {
     version: 5,
     relativePath: '0005_remove_reintroduced_workflow_fields/migration.sql',
+  },
+  {
+    version: 6,
+    relativePath: '0006_runtime_cache_provenance/migration.sql',
   },
 ] as const;
 

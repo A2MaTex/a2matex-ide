@@ -306,11 +306,11 @@ export function applyWorkflowCommand(
         (command.payload.retryPolicy?.maxAttempts !== undefined &&
           (!Number.isInteger(command.payload.retryPolicy.maxAttempts) ||
             command.payload.retryPolicy.maxAttempts < 1 ||
-            command.payload.retryPolicy.maxAttempts > 10)) ||
+            command.payload.retryPolicy.maxAttempts > 3)) ||
         (command.payload.retryPolicy?.delayMs !== undefined &&
           (!Number.isInteger(command.payload.retryPolicy.delayMs) ||
             command.payload.retryPolicy.delayMs < 0 ||
-            command.payload.retryPolicy.delayMs > 300_000))
+            command.payload.retryPolicy.delayMs > 60_000))
       ) {
         throw new WorkflowCommandError(
           'INVALID_NODE_CONFIGURATION',

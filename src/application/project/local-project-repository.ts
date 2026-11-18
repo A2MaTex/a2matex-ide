@@ -15,4 +15,5 @@ export type {
   LocalProjectSyncStatus,
   ReplaceLocalFromCloudInput,
   SaveLocalProjectInput,
+  SaveRuntimeCompilationInput,
 } from '@application/project/local-project.types';

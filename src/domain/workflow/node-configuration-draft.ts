@@ -292,7 +292,7 @@ export function validateNodeConfigurationDraft(
     draft.retryPolicy?.maxAttempts !== undefined &&
     (!Number.isInteger(draft.retryPolicy.maxAttempts) ||
       draft.retryPolicy.maxAttempts < 1 ||
-      draft.retryPolicy.maxAttempts > 10)
+      draft.retryPolicy.maxAttempts > 3)
   ) {
     issues.push({
       field: 'maxAttempts',
@@ -305,7 +305,7 @@ export function validateNodeConfigurationDraft(
     draft.retryPolicy?.delayMs !== undefined &&
     (!Number.isInteger(draft.retryPolicy.delayMs) ||
       draft.retryPolicy.delayMs < 0 ||
-      draft.retryPolicy.delayMs > 300_000)
+      draft.retryPolicy.delayMs > 60_000)
   ) {
     issues.push({
       field: 'delayMs',

@@ -1,7 +1,5 @@
 import { z } from 'zod';
 
-import { workflowValidationDiagnosticCodes } from '@application/workflow-validation/workflow-validation.constants';
-
 const jsonObjectSchema = z.record(z.string(), z.json());
 
 export const workflowValidationInputSchema = z
@@ -12,7 +10,8 @@ export const workflowValidationInputSchema = z
 
 export const workflowValidationDiagnosticSchema = z
   .object({
-    code: z.enum(workflowValidationDiagnosticCodes),
+    // Runtime may add forward-compatible diagnostic codes independently of Studio releases.
+    code: z.string().trim().min(1).max(128),
     message: z.string().min(1),
     nodeId: z.string().trim().min(1).max(100).optional(),
     edgeId: z.string().trim().min(1).max(100).optional(),
@@ -57,10 +56,3 @@ export const workflowValidationOutputSchema = z
       });
     }
   });
-
-export const workflowValidationResponseSchema = z
-  .object({
-    data: workflowValidationOutputSchema,
-    statusCode: z.literal(200),
-  })
-  .strict();
