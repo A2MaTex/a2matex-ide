@@ -35,6 +35,7 @@ import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import type { JsonValue } from '@shared/types/json-value';
 import { Button } from '@presentation/components/ui/button';
+import { toast } from '@presentation/components/ui/toast-store';
 import { LegacyPropertyField } from '@presentation/features/workflow-editor/LegacyPropertyField';
 import { BindingSourceField } from '@presentation/features/workflow-editor/BindingSourceField';
 import { NodeIcon } from '@presentation/features/workflow-editor/node-icons';
@@ -247,7 +248,12 @@ function ConfiguredInspector(props: {
       type: 'node.commitConfiguration',
       payload: configurationCommitPayload(draft, definition),
     });
-    if (applied) setDirty(false);
+    if (applied) {
+      setDirty(false);
+      toast.success('Node configuration saved');
+    } else {
+      toast.error('Unable to save node configuration');
+    }
   };
 
   const schemaIssues = (storage: 'binding' | 'config', field: string) =>

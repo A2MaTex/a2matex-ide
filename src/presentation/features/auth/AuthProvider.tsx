@@ -76,8 +76,10 @@ export function AuthProvider({ children, client }: AuthProviderProps) {
     try {
       setSession(await client.logout());
     } catch (reason) {
+      const nextError = toAuthError(reason);
       setSession({ status: 'signed-out' });
-      setError(toAuthError(reason));
+      setError(nextError);
+      throw nextError;
     } finally {
       setStatus('idle');
     }

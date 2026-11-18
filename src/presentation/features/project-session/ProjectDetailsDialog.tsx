@@ -5,7 +5,11 @@ import { useEffect, useState, type FormEvent } from 'react';
 import type { CloudProject } from '@application/project/project-cloud';
 import type { RecentProjectItem } from '@application/project/recent-projects';
 import { Button } from '@presentation/components/ui/button';
-import { useProjectStore } from '@presentation/features/project-session/use-project-store';
+import { toast } from '@presentation/components/ui/toast-store';
+import {
+  useProjectStore,
+  useProjectStoreApi,
+} from '@presentation/features/project-session/use-project-store';
 
 interface ProjectDetailsDialogProps {
   item: RecentProjectItem;
@@ -14,6 +18,7 @@ interface ProjectDetailsDialogProps {
 }
 
 export function ProjectDetailsDialog({ item, onOpenChange, open }: ProjectDetailsDialogProps) {
+  const projectStore = useProjectStoreApi();
   const getProject = useProjectStore((state) => state.getCloudProject);
   const updateProject = useProjectStore((state) => state.updateCloudProject);
   const archiveProject = useProjectStore((state) => state.archiveCloudProject);
@@ -49,6 +54,11 @@ export function ProjectDetailsDialog({ item, onOpenChange, open }: ProjectDetail
       setDetail(project);
       setName(project.name);
       setDescription(project.description ?? '');
+      toast.success('Project details updated');
+    } else {
+      toast.error('Unable to update project', {
+        description: projectStore.getState().cloudError ?? 'Cloud update failed.',
+      });
     }
   };
 
@@ -56,7 +66,14 @@ export function ProjectDetailsDialog({ item, onOpenChange, open }: ProjectDetail
     if (!remoteId || !window.confirm('Archive this cloud project? The local draft is kept.'))
       return;
     const project = await archiveProject(remoteId);
-    if (project) setDetail(project);
+    if (project) {
+      setDetail(project);
+      toast.success('Cloud project archived');
+    } else {
+      toast.error('Unable to archive project', {
+        description: projectStore.getState().cloudError ?? 'Cloud archive failed.',
+      });
+    }
   };
 
   return (

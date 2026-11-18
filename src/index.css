@@ -127,3 +127,33 @@ a {
   z-index: 10;
   box-shadow: 0 0 0 1px var(--ring);
 }
+
+@keyframes studio-toast-enter {
+  from {
+    opacity: 0;
+    transform: translate3d(18px, -4px, 0) scale(0.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+}
+
+@keyframes studio-toast-leave {
+  from {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) scale(1);
+  }
+
+  to {
+    opacity: 0;
+    transform: translate3d(12px, -2px, 0) scale(0.98);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-rht-toaster] > div {
+    animation-duration: 1ms !important;
+  }
+}

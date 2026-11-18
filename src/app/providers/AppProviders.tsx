@@ -8,6 +8,7 @@ import { hostProjectCloudClient } from '@infrastructure/electron/host-project-cl
 import { AuthProvider } from '@presentation/features/auth/AuthProvider';
 import { HostStatusProvider } from '@presentation/features/host-status/HostStatusProvider';
 import { ProjectSessionProvider } from '@presentation/features/project-session/ProjectSessionProvider';
+import { ToastViewport } from '@presentation/components/ui/toast';
 
 interface AppProvidersProps {
   children: ReactNode;
@@ -22,6 +23,7 @@ export function AppProviders({ children }: AppProvidersProps) {
         <HostStatusProvider gateway={electronHostGateway}>
           <ProjectSessionProvider repository={hostProjectRepository} cloud={cloud}>
             {children}
+            <ToastViewport />
           </ProjectSessionProvider>
         </HostStatusProvider>
       </AuthProvider>

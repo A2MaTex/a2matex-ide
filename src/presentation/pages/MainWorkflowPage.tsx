@@ -37,6 +37,7 @@ import type { NodeDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import { validateWorkflow } from '@domain/workflow/workflow-validator';
 import { Button } from '@presentation/components/ui/button';
+import { toast } from '@presentation/components/ui/toast-store';
 import { AndroidInspectorPanel } from '@presentation/features/android-inspector/AndroidInspectorPanel';
 import { useProjectCloseGuard } from '@presentation/features/project-session/use-project-close-guard';
 import {
@@ -195,8 +196,10 @@ export function MainWorkflowPage() {
     setNodeCatalog([]);
     setNodeCatalogError(null);
     if (!window.studioHost) {
+      const message = 'Node catalog is only available in the desktop app.';
       setNodeCatalogStatus('error');
-      setNodeCatalogError('Node catalog is only available in the desktop app.');
+      setNodeCatalogError(message);
+      if (refresh) toast.error('Catalog refresh failed', { description: message });
       return;
     }
 
@@ -207,11 +210,13 @@ export function MainWorkflowPage() {
       if (!result.ok) {
         setNodeCatalogStatus('error');
         setNodeCatalogError(result.error.message);
+        if (refresh) toast.error('Catalog refresh failed', { description: result.error.message });
         return;
       }
 
       setNodeCatalog(toWorkflowNodeCatalog(result.value.nodes));
       setNodeCatalogStatus('ready');
+      if (refresh) toast.success('Node catalog refreshed');
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Unable to load node catalog.';
       const needsDesktopRestart = message.includes('No handler registered');
@@ -221,6 +226,7 @@ export function MainWorkflowPage() {
           ? 'The desktop process is out of date. Restart the desktop app, then retry.'
           : message,
       );
+      if (refresh) toast.error('Catalog refresh failed', { description: message });
     }
   }, []);
 
@@ -289,23 +295,31 @@ export function MainWorkflowPage() {
     setRuntimeOperationError(null);
     const starting = projectStore.getState();
     if (starting.pendingNodeConfigurationId) {
-      setRuntimeOperationError('Save or discard the pending node configuration before compiling.');
+      const message = 'Save or discard the pending node configuration before compiling.';
+      setRuntimeOperationError(message);
+      toast.error('Compilation not started', { description: message });
       return;
     }
     if (!(await starting.flushLocalSave())) {
-      setRuntimeOperationError('The workflow could not be saved locally before compilation.');
+      const message = 'The workflow could not be saved locally before compilation.';
+      setRuntimeOperationError(message);
+      toast.error('Compilation failed', { description: message });
       return;
     }
     const current = projectStore.getState().session;
     const compileWorkflowPath = current?.snapshot.document.manifest.entryWorkflow ?? '';
     const currentWorkflow = current?.snapshot.document.workflows[compileWorkflowPath];
     if (!current || !currentWorkflow || !window.studioHost) {
-      setRuntimeOperationError('The saved workflow is no longer available for compilation.');
+      const message = 'The saved workflow is no longer available for compilation.';
+      setRuntimeOperationError(message);
+      toast.error('Compilation failed', { description: message });
       return;
     }
     const rawInputSchema = current.snapshot.draftState.inputSchema;
     if (!rawInputSchema || Array.isArray(rawInputSchema) || typeof rawInputSchema !== 'object') {
-      setRuntimeOperationError('The workflow input schema must be a JSON object.');
+      const message = 'The workflow input schema must be a JSON object.';
+      setRuntimeOperationError(message);
+      toast.error('Compilation failed', { description: message });
       return;
     }
     setCompiling(true);
@@ -319,24 +333,69 @@ export function MainWorkflowPage() {
       });
       if (!result.ok) {
         setRuntimeOperationError(result.error.message);
+        toast.error('Compilation failed', { description: result.error.message });
       } else if (result.value.runtimeIr === null) {
-        setRuntimeOperationError(
-          'Compilation finished with validation errors. Open Diagnostics for details.',
-        );
+        const message =
+          'Compilation finished with validation errors. Open Diagnostics for details.';
+        setRuntimeOperationError(message);
+        toast.warning('Compilation completed with errors', { description: message });
+      } else {
+        toast.success('Workflow compiled successfully');
       }
     } catch {
-      setRuntimeOperationError('The desktop Runtime bridge failed unexpectedly.');
+      const message = 'The desktop Runtime bridge failed unexpectedly.';
+      setRuntimeOperationError(message);
+      toast.error('Compilation failed', { description: message });
     } finally {
       setCompiling(false);
     }
   }, [projectStore]);
 
   const shutdownRuntime = useCallback(async () => {
-    if (!window.studioHost) return;
+    if (!window.studioHost) {
+      toast.error('Runtime shutdown failed', { description: 'Desktop host is unavailable.' });
+      return;
+    }
     setRuntimeOperationError(null);
-    const result = await window.studioHost.runtime.shutdown();
-    if (!result.ok) setRuntimeOperationError(result.error.message);
+    try {
+      const result = await window.studioHost.runtime.shutdown();
+      if (!result.ok) {
+        setRuntimeOperationError(result.error.message);
+        toast.error('Runtime shutdown failed', { description: result.error.message });
+        return;
+      }
+      toast.success('Runtime stopped');
+    } catch {
+      const message = 'The desktop Runtime bridge failed unexpectedly.';
+      setRuntimeOperationError(message);
+      toast.error('Runtime shutdown failed', { description: message });
+    }
   }, []);
+
+  const saveLocalWithToast = useCallback(async () => {
+    const saved = await flushLocalSave();
+    if (saved) toast.success('Project saved locally');
+    else
+      toast.error('Local save failed', {
+        description: projectStore.getState().localSaveError ?? 'Unable to save the project.',
+      });
+    return saved;
+  }, [flushLocalSave, projectStore]);
+
+  const exportWithToast = useCallback(async () => {
+    await exportProject();
+    const exportError = projectStore.getState().error;
+    if (exportError) toast.error('Project export failed', { description: exportError });
+    else toast.success('Project exported');
+  }, [exportProject, projectStore]);
+
+  const syncWithToast = useCallback(async () => {
+    if (await syncCloud()) toast.success('Project synced to cloud');
+    else
+      toast.error('Cloud sync failed', {
+        description: projectStore.getState().cloudError ?? 'Unable to sync the project.',
+      });
+  }, [projectStore, syncCloud]);
   const execute = useCallback(
     (command: WorkflowCommand) =>
       workflowPath ? executeWorkflowCommand(workflowPath, command, nodeCatalog) : false,
@@ -353,6 +412,9 @@ export function MainWorkflowPage() {
         })
       ) {
         selectNode(nodeId);
+        toast.success('Node duplicated');
+      } else {
+        toast.error('Unable to duplicate node');
       }
     },
     [execute, selectNode],
@@ -376,6 +438,9 @@ export function MainWorkflowPage() {
       if (removed) {
         selectNode(null);
         closeNodeDetail();
+        toast.success('Node deleted');
+      } else {
+        toast.error('Unable to delete node');
       }
       return removed;
     },
@@ -388,7 +453,7 @@ export function MainWorkflowPage() {
       const key = event.key.toLowerCase();
       if (modifier && key === 's') {
         event.preventDefault();
-        if (session && localSaveStatus !== 'saving-local') void flushLocalSave();
+        if (session && localSaveStatus !== 'saving-local') void saveLocalWithToast();
         return;
       }
       if (modifier && key === 'p') {
@@ -420,7 +485,7 @@ export function MainWorkflowPage() {
         duplicateNode(selectedNodeId);
       } else if (modifier && key === 'e') {
         event.preventDefault();
-        void exportProject();
+        void exportWithToast();
       } else if ((event.key === 'Delete' || event.key === 'Backspace') && selectedEdgeId) {
         event.preventDefault();
         execute({ type: 'edge.remove', payload: { edgeId: selectedEdgeId } });
@@ -442,9 +507,9 @@ export function MainWorkflowPage() {
     deleteNode,
     duplicateNode,
     execute,
-    exportProject,
+    exportWithToast,
     redo,
-    flushLocalSave,
+    saveLocalWithToast,
     helpTarget,
     localSaveStatus,
     nodeDetailNodeId,
@@ -527,17 +592,32 @@ export function MainWorkflowPage() {
       )
     )
       return;
-    if (await updateFromCloud()) resetWorkflowSession();
+    if (await updateFromCloud()) {
+      resetWorkflowSession();
+      toast.success('Project updated from cloud');
+    } else {
+      toast.error('Cloud update failed', {
+        description: projectStore.getState().cloudError ?? 'Unable to update the local project.',
+      });
+    }
   };
 
   const returnToProjects = async () => {
-    if (!(await flushLocalSave())) return;
+    if (!(await flushLocalSave())) {
+      toast.error('Unable to leave workspace', {
+        description: projectStore.getState().localSaveError ?? 'Local save failed.',
+      });
+      return;
+    }
     navigate(URL.ProjectHome);
   };
   const closeProject = async () => {
     if (!(await close())) {
       if (!window.confirm('Local save failed. Close and discard unsaved changes?')) return;
       discard();
+      toast.warning('Project closed with unsaved changes discarded');
+    } else {
+      toast.success('Project closed');
     }
     resetWorkflowSession();
     navigate(URL.ProjectHome);
@@ -557,6 +637,9 @@ export function MainWorkflowPage() {
       })
     ) {
       selectNode(nodeId);
+      toast.success('Node added', { description: definition.displayName });
+    } else {
+      toast.error('Unable to add node', { description: definition.displayName });
     }
   };
   const openWorkflow = (path: string) => {
@@ -583,11 +666,21 @@ export function MainWorkflowPage() {
     const name = window.prompt(`Name for the new ${kind}`, fallback);
     if (!name) return;
     const path = createWorkflow(name, kind);
-    if (path) openWorkflow(path);
+    if (path) {
+      openWorkflow(path);
+      toast.success(`${kind === 'flow' ? 'Flow' : 'Subflow'} created`);
+    } else {
+      toast.error(`Unable to create ${kind}`);
+    }
   };
   const deleteSelectedEdge = () => {
     if (!selectedEdgeId) return;
-    if (execute({ type: 'edge.remove', payload: { edgeId: selectedEdgeId } })) selectEdge(null);
+    if (execute({ type: 'edge.remove', payload: { edgeId: selectedEdgeId } })) {
+      selectEdge(null);
+      toast.success('Connection deleted');
+    } else {
+      toast.error('Unable to delete connection');
+    }
   };
   const actions: WorkflowAction[] = [
     {
@@ -681,7 +774,7 @@ export function MainWorkflowPage() {
       label: 'Export project',
       shortcut: 'Ctrl+E',
       icon: SaveAll,
-      run: () => void exportProject(),
+      run: () => void exportWithToast(),
     },
     {
       id: 'validate-workflow',
@@ -741,7 +834,7 @@ export function MainWorkflowPage() {
           <Button
             size="sm"
             variant="ghost"
-            onClick={() => void exportProject()}
+            onClick={() => void exportWithToast()}
             disabled={saving || exporting}
           >
             <SaveAll /> {exporting ? 'Exporting…' : 'Export'}
@@ -750,7 +843,7 @@ export function MainWorkflowPage() {
             <Button
               size="sm"
               variant="secondary"
-              onClick={() => void syncCloud()}
+              onClick={() => void syncWithToast()}
               disabled={saving || syncing}
               title="Sync the durable local revision with cloud"
             >
@@ -771,7 +864,7 @@ export function MainWorkflowPage() {
           <Button
             size="sm"
             variant="secondary"
-            onClick={() => void flushLocalSave()}
+            onClick={() => void saveLocalWithToast()}
             disabled={saving || !dirty}
           >
             <Save /> {saving ? 'Saving…' : 'Save'}

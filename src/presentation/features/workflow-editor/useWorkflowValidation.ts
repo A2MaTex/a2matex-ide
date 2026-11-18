@@ -5,6 +5,7 @@ import type { RuntimeErrorCode } from '@application/runtime/runtime.types';
 import { toRuntimeEditorGraph } from '@application/runtime/to-runtime-editor-graph';
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
 import { useProjectStoreApi } from '@presentation/features/project-session/use-project-store';
+import { toast } from '@presentation/components/ui/toast-store';
 import { useEditorStore } from '@presentation/stores/editor-store';
 import type { JsonValue } from '@shared/types/json-value';
 
@@ -93,26 +94,30 @@ export function useWorkflowValidation(workflowPath: string) {
     const runId = ++runIdRef.current;
 
     if (!startingSession || !startingProjectId || !workflowPath) {
+      const message = 'Open a workflow before validating it.';
       setRawState({
         phase: 'failed',
         projectId: startingProjectId ?? '',
         workflowPath,
-        error: preparationError('Open a workflow before validating it.'),
+        error: preparationError(message),
       });
+      toast.error('Validation not started', { description: message });
       return;
     }
 
     if (startingState.pendingNodeConfigurationId) {
+      const message = 'Save or discard the pending node configuration before validating.';
       setRawState({
         phase: 'failed',
         projectId: startingProjectId,
         workflowPath,
         error: {
           code: 'WORKFLOW_VALIDATION_PENDING_CONFIGURATION',
-          message: 'Save or discard the pending node configuration before validating.',
+          message,
           retryable: false,
         },
       });
+      toast.error('Validation not started', { description: message });
       return;
     }
 
@@ -123,44 +128,50 @@ export function useWorkflowValidation(workflowPath: string) {
     const savedState = store.getState();
     const savedSession = savedState.session;
     if (!saved || !savedSession || savedSession.snapshot.localId !== startingProjectId) {
+      const message =
+        savedState.localSaveError ??
+        'The workflow could not be saved locally, so validation was not started.';
       setRawState({
         phase: 'failed',
         projectId: startingProjectId,
         workflowPath,
         error: {
           code: 'WORKFLOW_VALIDATION_LOCAL_SAVE_FAILED',
-          message:
-            savedState.localSaveError ??
-            'The workflow could not be saved locally, so validation was not started.',
+          message,
           retryable: true,
         },
       });
+      toast.error('Validation failed', { description: message });
       return;
     }
 
     if (savedSession.workingRevision !== savedSession.savedRevision) {
+      const message =
+        'The workflow changed while it was being saved. Validate the current revision again.';
       setRawState({
         phase: 'failed',
         projectId: startingProjectId,
         workflowPath,
         error: {
           code: 'WORKFLOW_VALIDATION_LOCAL_SAVE_FAILED',
-          message:
-            'The workflow changed while it was being saved. Validate the current revision again.',
+          message,
           retryable: true,
         },
       });
+      toast.error('Validation failed', { description: message });
       return;
     }
 
     const workflow = savedSession.snapshot.document.workflows[workflowPath];
     if (!workflow) {
+      const message = 'The selected workflow no longer exists in the saved project.';
       setRawState({
         phase: 'failed',
         projectId: startingProjectId,
         workflowPath,
-        error: preparationError('The selected workflow no longer exists in the saved project.'),
+        error: preparationError(message),
       });
+      toast.error('Validation failed', { description: message });
       return;
     }
 
@@ -168,15 +179,16 @@ export function useWorkflowValidation(workflowPath: string) {
     try {
       editorGraph = toRuntimeEditorGraph(workflow);
     } catch {
+      const message =
+        'The saved workflow could not be encoded for validation. Check its connection targets.';
       setRawState({
         phase: 'failed',
         projectId: startingProjectId,
         workflowPath,
         revision: savedSession.savedRevision,
-        error: preparationError(
-          'The saved workflow could not be encoded for validation. Check its connection targets.',
-        ),
+        error: preparationError(message),
       });
+      toast.error('Validation failed', { description: message });
       return;
     }
 
@@ -191,6 +203,7 @@ export function useWorkflowValidation(workflowPath: string) {
     });
 
     if (!window.studioHost) {
+      const message = 'Workflow validation is only available in the desktop app.';
       setRawState({
         phase: 'failed',
         projectId: startingProjectId,
@@ -198,10 +211,11 @@ export function useWorkflowValidation(workflowPath: string) {
         revision,
         error: {
           code: 'WORKFLOW_VALIDATION_DESKTOP_UNAVAILABLE',
-          message: 'Workflow validation is only available in the desktop app.',
+          message,
           retryable: false,
         },
       });
+      toast.error('Validation failed', { description: message });
       return;
     }
 
@@ -221,6 +235,9 @@ export function useWorkflowValidation(workflowPath: string) {
           retryable: true,
         },
       });
+      toast.error('Validation failed', {
+        description: 'The desktop validation bridge failed unexpectedly.',
+      });
       return;
     }
 
@@ -233,6 +250,7 @@ export function useWorkflowValidation(workflowPath: string) {
         revision,
         error: result.error,
       });
+      toast.error('Validation failed', { description: result.error.message });
       return;
     }
 
@@ -244,6 +262,13 @@ export function useWorkflowValidation(workflowPath: string) {
       output: result.value,
       stale: store.getState().session?.workingRevision !== revision,
     });
+    if (result.value.status === 'VALID') toast.success('Workflow is valid');
+    else if (result.value.status === 'VALID_WITH_WARNINGS')
+      toast.warning('Validation completed with warnings');
+    else
+      toast.warning('Validation completed with errors', {
+        description: 'Open Diagnostics for details.',
+      });
   }, [setActiveBottomTab, store, workflowPath]);
 
   const state = useMemo<WorkflowValidationRunState>(() => {

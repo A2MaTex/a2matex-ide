@@ -4,6 +4,7 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@presentation/features/auth/use-auth';
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
+import { toast } from '@presentation/components/ui/toast-store';
 import { cn } from '@shared/utils/cn';
 import URL from '@/app/constants/url';
 import fullLogoUrl from '@/assets/full-logo.webp';
@@ -32,6 +33,10 @@ export function AppShell() {
     event.preventDefault();
     void flushLocalSave().then((saved) => {
       if (saved) navigate(to);
+      else
+        toast.error('Navigation cancelled', {
+          description: 'Studio could not save the current project.',
+        });
     });
   }
 
@@ -40,7 +45,15 @@ export function AppShell() {
       if (!window.confirm('Local save failed. Sign out and discard unsaved changes?')) return;
     }
     discardProject();
-    await logout();
+    try {
+      await logout();
+      toast.success('Signed out successfully');
+    } catch (reason) {
+      toast.warning('Signed out locally', {
+        description:
+          reason instanceof Error ? reason.message : 'The remote session could not be closed.',
+      });
+    }
     navigate(URL.Login, { replace: true });
   }
 

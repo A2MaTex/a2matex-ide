@@ -16,6 +16,7 @@ import { PolicyDialog } from '@presentation/features/onboarding/PolicyDialog';
 import { WelcomeStep } from '@presentation/features/onboarding/WelcomeStep';
 import { WorkspaceStep } from '@presentation/features/onboarding/WorkspaceStep';
 import { useHostStatus } from '@presentation/features/host-status/use-host-status';
+import { toast } from '@presentation/components/ui/toast-store';
 
 interface OnboardingPageProps {
   manifest?: PolicyManifest;
@@ -65,8 +66,13 @@ export function OnboardingPage({ manifest: suppliedManifest }: OnboardingPagePro
     setPolicyLoading(true);
     const result = await window.studioHost.onboarding.getPolicies();
     setPolicyLoading(false);
-    if (result.ok) setManifest(result.value);
-    else setManifest({ configured: false, documents: [], error: result.error.message });
+    if (result.ok) {
+      setManifest(result.value);
+      toast.success('Policies refreshed');
+    } else {
+      setManifest({ configured: false, documents: [], error: result.error.message });
+      toast.error('Policy refresh failed', { description: result.error.message });
+    }
   };
 
   useEffect(() => {
@@ -87,7 +93,9 @@ export function OnboardingPage({ manifest: suppliedManifest }: OnboardingPagePro
   const chooseWorkspace = async () => {
     setWorkspaceError(null);
     if (!window.studioHost) {
-      setWorkspaceError('Folder selection is available in the desktop app.');
+      const message = 'Folder selection is available in the desktop app.';
+      setWorkspaceError(message);
+      toast.error('Workspace selection failed', { description: message });
       return;
     }
     setWorkspaceBusy(true);
@@ -95,17 +103,22 @@ export function OnboardingPage({ manifest: suppliedManifest }: OnboardingPagePro
     setWorkspaceBusy(false);
     if (!result.ok) {
       setWorkspaceError(result.error.message);
+      toast.error('Workspace selection failed', { description: result.error.message });
       return;
     }
     if (result.value) {
       setWorkspace(result.value);
       setUseDefault(false);
+      toast.success('Workspace selected', { description: result.value.label });
+    } else {
+      toast.info('Workspace selection cancelled');
     }
   };
 
   const checkAdb = async () => {
     if (!window.studioHost) {
       setAdbStatus('not-found');
+      toast.error('ADB check failed', { description: 'Desktop host is unavailable.' });
       return;
     }
     setAdbBusy(true);
@@ -113,22 +126,32 @@ export function OnboardingPage({ manifest: suppliedManifest }: OnboardingPagePro
     setAdbBusy(false);
     if (!result.ok) {
       setAdbStatus(result.error.code === 'ADB_NOT_FOUND' ? 'not-found' : 'error');
+      toast.error('ADB check failed', { description: result.error.message });
       return;
     }
-    if (result.value.some((device) => device.usable)) setAdbStatus('available');
-    else if (result.value.some((device) => ['offline', 'unauthorized'].includes(device.status)))
+    if (result.value.some((device) => device.usable)) {
+      setAdbStatus('available');
+      toast.success('ADB is ready');
+    } else if (result.value.some((device) => ['offline', 'unauthorized'].includes(device.status))) {
       setAdbStatus('permission-issue');
-    else setAdbStatus('no-device');
+      toast.warning('ADB needs device permission');
+    } else {
+      setAdbStatus('no-device');
+      toast.warning('ADB is available, but no device was found');
+    }
   };
 
   const finish = async () => {
     const terms = manifest.documents.find((document) => document.id === 'terms');
     const privacy = manifest.documents.find((document) => document.id === 'privacy');
     if (!terms || !privacy || !manifest.configured) {
-      setFinishError('Policy configuration is incomplete. Go back and review the policies.');
+      const message = 'Policy configuration is incomplete. Go back and review the policies.';
+      setFinishError(message);
+      toast.error('Setup could not be completed', { description: message });
       return;
     }
     if (!window.studioHost) {
+      toast.success('Setup completed');
       navigate(URL.Login, { replace: true });
       return;
     }
@@ -144,8 +167,10 @@ export function OnboardingPage({ manifest: suppliedManifest }: OnboardingPagePro
     setFinishBusy(false);
     if (!result.ok) {
       setFinishError(result.error.message);
+      toast.error('Setup could not be completed', { description: result.error.message });
       return;
     }
+    toast.success('Setup completed');
     navigate(URL.Login, { replace: true });
   };
 

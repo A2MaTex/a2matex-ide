@@ -3,6 +3,7 @@ import { useEffect, useState, type FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 
 import { Button } from '@presentation/components/ui/button';
+import { toast } from '@presentation/components/ui/toast-store';
 import { useAuth } from '@presentation/features/auth/use-auth';
 import fullLogoUrl from '@/assets/full-logo.webp';
 
@@ -40,15 +41,19 @@ export function LoginPage() {
     const normalizedAccount = account.trim();
     if (!normalizedAccount || !password) {
       setValidationMessage('Enter your account and password.');
+      toast.error('Sign in failed', { description: 'Enter your account and password.' });
       return;
     }
 
     setValidationMessage(null);
     try {
       await login({ account: normalizedAccount, password });
+      toast.success('Signed in successfully');
       navigate(returnPath, { replace: true });
-    } catch {
-      // The provider exposes the sanitized error for rendering.
+    } catch (reason) {
+      toast.error('Sign in failed', {
+        description: reason instanceof Error ? reason.message : 'Check your credentials and retry.',
+      });
     } finally {
       setPassword('');
     }

@@ -3,11 +3,15 @@ import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 
 import { Button } from '@presentation/components/ui/button';
+import { toast } from '@presentation/components/ui/toast-store';
 import { mergeRecentProjects } from '@application/project/recent-projects';
 import { CreateProjectDialog } from '@presentation/features/project-session/CreateProjectDialog';
 import { ProjectDetailsDialog } from '@presentation/features/project-session/ProjectDetailsDialog';
 import type { RecentProjectItem } from '@application/project/recent-projects';
-import { useProjectStore } from '@presentation/features/project-session/use-project-store';
+import {
+  useProjectStore,
+  useProjectStoreApi,
+} from '@presentation/features/project-session/use-project-store';
 import URL from '@/app/constants/url';
 
 const capabilityItems = [
@@ -18,6 +22,7 @@ const capabilityItems = [
 
 export function ProjectHomePage() {
   const navigate = useNavigate();
+  const projectStore = useProjectStoreApi();
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [detailsItem, setDetailsItem] = useState<RecentProjectItem | null>(null);
   const create = useProjectStore((state) => state.create);
@@ -45,21 +50,57 @@ export function ProjectHomePage() {
     navigate(URL.MainWorkflowHome.replace(':projectId', projectId));
   const handleCreate = async (input: { description?: string; name: string }) => {
     const snapshot = await create(input);
-    if (!snapshot) return false;
+    if (!snapshot) {
+      toast.error('Project creation failed', {
+        description: projectStore.getState().error ?? 'Unable to create the project.',
+      });
+      return false;
+    }
+    toast.success('Project created', { description: snapshot.document.manifest.name });
     enterWorkspace(snapshot.localId);
     return true;
   };
   const handleImport = async () => {
     const snapshot = await importProject();
-    if (snapshot) enterWorkspace(snapshot.localId);
+    if (snapshot) {
+      toast.success('Project imported', { description: snapshot.document.manifest.name });
+      enterWorkspace(snapshot.localId);
+      return;
+    }
+    const currentError = projectStore.getState().error;
+    if (currentError) toast.error('Project import failed', { description: currentError });
+    else toast.info('Project import cancelled');
   };
   const handleRecent = async (localId: string) => {
     const snapshot = await open(localId);
-    if (snapshot) enterWorkspace(snapshot.localId);
+    if (snapshot) {
+      toast.success('Project opened', { description: snapshot.document.manifest.name });
+      enterWorkspace(snapshot.localId);
+      return;
+    }
+    toast.error('Unable to open project', {
+      description: projectStore.getState().error ?? 'The local project could not be opened.',
+    });
   };
   const handleCloudProject = async (projectId: string) => {
     const snapshot = await openCloudProject(projectId);
-    if (snapshot) enterWorkspace(snapshot.localId);
+    if (snapshot) {
+      toast.success('Cloud project opened', { description: snapshot.document.manifest.name });
+      enterWorkspace(snapshot.localId);
+      return;
+    }
+    toast.error('Unable to open cloud project', {
+      description: projectStore.getState().cloudError ?? 'The cloud project could not be opened.',
+    });
+  };
+  const handleRefreshCloud = async () => {
+    if (await refreshCloudProjects()) {
+      toast.success('Cloud projects refreshed');
+      return;
+    }
+    toast.error('Cloud refresh failed', {
+      description: projectStore.getState().cloudError ?? 'Unable to refresh cloud projects.',
+    });
   };
 
   return (
@@ -78,7 +119,7 @@ export function ProjectHomePage() {
             {cloudAvailable ? (
               <Button
                 variant="outline"
-                onClick={() => void refreshCloudProjects()}
+                onClick={() => void handleRefreshCloud()}
                 disabled={busy || refreshingCloud}
                 title="Refresh the cloud project index without overwriting local drafts"
               >

@@ -23,6 +23,7 @@ import {
 } from '@domain/android-inspector/android-selector';
 import { getInspectorCandidates } from '@domain/android-inspector/geometry';
 import { Button } from '@presentation/components/ui/button';
+import { toast } from '@presentation/components/ui/toast-store';
 import { ScreenshotViewport } from '@presentation/features/android-inspector/ScreenshotViewport';
 import { copyText } from '@infrastructure/clipboard/copy-text';
 
@@ -95,40 +96,56 @@ export function AndroidInspectorPanel({
     setFeedback('none');
   }, []);
 
-  const loadDevices = useCallback(async () => {
-    setDeviceListState('loading');
-    setError(null);
-    if (!window.studioHost) {
-      setDevices([]);
-      setDeviceListState('error');
-      setError('Android Inspector is available only in the desktop app.');
-      return;
-    }
-    try {
-      const result = await window.studioHost.androidInspector.listDevices();
-      if (!result.ok) {
+  const loadDevices = useCallback(
+    async (notify = false) => {
+      setDeviceListState('loading');
+      setError(null);
+      if (!window.studioHost) {
+        const message = 'Android Inspector is available only in the desktop app.';
         setDevices([]);
         setDeviceListState('error');
-        setError(result.error.message);
+        setError(message);
+        if (notify) toast.error('Device refresh failed', { description: message });
         return;
       }
-      setDevices(result.value);
-      setDeviceListState('ready');
-      const currentDeviceId = selectedDeviceIdRef.current;
-      if (currentDeviceId && !result.value.some((device) => device.deviceId === currentDeviceId)) {
-        captureRequestRef.current += 1;
-        selectedDeviceIdRef.current = '';
-        setSelectedDeviceId('');
-        setSnapshot(null);
-        setCaptureState('idle');
-        clearInspection();
+      try {
+        const result = await window.studioHost.androidInspector.listDevices();
+        if (!result.ok) {
+          setDevices([]);
+          setDeviceListState('error');
+          setError(result.error.message);
+          if (notify) toast.error('Device refresh failed', { description: result.error.message });
+          return;
+        }
+        setDevices(result.value);
+        setDeviceListState('ready');
+        if (notify)
+          toast.success('Android devices refreshed', {
+            description: `${result.value.length} device${result.value.length === 1 ? '' : 's'} found.`,
+          });
+        const currentDeviceId = selectedDeviceIdRef.current;
+        if (
+          currentDeviceId &&
+          !result.value.some((device) => device.deviceId === currentDeviceId)
+        ) {
+          captureRequestRef.current += 1;
+          selectedDeviceIdRef.current = '';
+          setSelectedDeviceId('');
+          setSnapshot(null);
+          setCaptureState('idle');
+          clearInspection();
+        }
+      } catch (reason) {
+        const message =
+          reason instanceof Error ? reason.message : 'Unable to list Android devices.';
+        setDevices([]);
+        setDeviceListState('error');
+        setError(message);
+        if (notify) toast.error('Device refresh failed', { description: message });
       }
-    } catch (reason) {
-      setDevices([]);
-      setDeviceListState('error');
-      setError(reason instanceof Error ? reason.message : 'Unable to list Android devices.');
-    }
-  }, [clearInspection]);
+    },
+    [clearInspection],
+  );
 
   useEffect(() => {
     const timeoutId = window.setTimeout(() => void loadDevices(), 0);
@@ -185,16 +202,21 @@ export function AndroidInspectorPanel({
       if (!result.ok) {
         setCaptureState(snapshot?.deviceId === deviceId ? 'stale' : 'error');
         setError(result.error.message);
+        toast.error('Snapshot capture failed', { description: result.error.message });
         return;
       }
       setSnapshot(result.value);
       setCaptureState('ready');
       clearInspection();
+      toast.success('Android snapshot captured');
     } catch (reason) {
       if (requestId !== captureRequestRef.current || selectedDeviceIdRef.current !== deviceId)
         return;
       setCaptureState(snapshot?.deviceId === deviceId ? 'stale' : 'error');
-      setError(reason instanceof Error ? reason.message : 'Unable to capture Android snapshot.');
+      const message =
+        reason instanceof Error ? reason.message : 'Unable to capture Android snapshot.';
+      setError(message);
+      toast.error('Snapshot capture failed', { description: message });
     }
   };
 
@@ -212,9 +234,11 @@ export function AndroidInspectorPanel({
     if (await copyText(selectedNode.resourceId)) {
       setFeedback('resourceId');
       setError(null);
+      toast.success('Resource ID copied');
     } else {
       setFeedback('none');
       setError('Unable to copy the resource ID to the clipboard.');
+      toast.error('Unable to copy resource ID');
     }
   };
 
@@ -223,9 +247,11 @@ export function AndroidInspectorPanel({
     if (await copyText(JSON.stringify(selector, null, 2))) {
       setFeedback('selector');
       setError(null);
+      toast.success('Android selector copied');
     } else {
       setFeedback('none');
       setError('Unable to copy the Android selector to the clipboard.');
+      toast.error('Unable to copy Android selector');
     }
   };
 
@@ -234,9 +260,11 @@ export function AndroidInspectorPanel({
     if (onUseSelector(selectedSelectorTarget, selector)) {
       setFeedback('applied');
       setError(null);
+      toast.success('Android selector applied to node');
     } else {
       setFeedback('none');
       setError('The Android selector could not be applied to the selected workflow node.');
+      toast.error('Unable to apply Android selector');
     }
   };
 
@@ -317,7 +345,7 @@ export function AndroidInspectorPanel({
             <Button
               size="icon"
               variant="ghost"
-              onClick={() => void loadDevices()}
+              onClick={() => void loadDevices(true)}
               disabled={deviceListState === 'loading'}
               aria-label="Refresh Android devices"
               title="Refresh Android devices"
