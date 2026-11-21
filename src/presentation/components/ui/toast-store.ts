@@ -12,11 +12,7 @@ function content(title: string, description?: string) {
   return createElement(
     'div',
     { className: 'min-w-0 py-0.5' },
-    createElement(
-      'p',
-      { className: 'text-[13px] font-semibold leading-4 text-foreground' },
-      title,
-    ),
+    createElement('p', { className: 'text-[13px] font-semibold leading-4 text-foreground' }, title),
     description
       ? createElement(
           'p',
