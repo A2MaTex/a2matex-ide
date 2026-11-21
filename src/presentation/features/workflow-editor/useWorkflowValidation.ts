@@ -6,6 +6,7 @@ import { toRuntimeEditorGraph } from '@application/runtime/to-runtime-editor-gra
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
 import { useProjectStoreApi } from '@presentation/features/project-session/use-project-store';
 import { toast } from '@presentation/components/ui/toast-store';
+import { SerializedTrailingScheduler } from '@presentation/features/workflow-editor/serialized-trailing-scheduler';
 import { useEditorStore } from '@presentation/stores/editor-store';
 import type { JsonValue } from '@shared/types/json-value';
 
@@ -47,6 +48,14 @@ interface ValidationContext {
   workflowPath: string;
 }
 
+interface AutomaticValidationTask {
+  context: ValidationContext;
+  editorGraph: Record<string, JsonValue>;
+  projectId: string;
+  revision: number;
+  workflowPath: string;
+}
+
 function sameContext(left: ValidationContext, right: ValidationContext) {
   return left.projectId === right.projectId && left.workflowPath === right.workflowPath;
 }
@@ -67,25 +76,128 @@ export function useWorkflowValidation(workflowPath: string) {
   const currentRevision = session?.workingRevision ?? null;
   const pendingNodeConfigurationId = useProjectStore((state) => state.pendingNodeConfigurationId);
   const [rawState, setRawState] = useState<WorkflowValidationRunState>({ phase: 'idle' });
-  const [automaticEnabled, setAutomaticEnabled] = useState(false);
+  const [automaticScheduler] = useState(
+    () =>
+      new SerializedTrailingScheduler<AutomaticValidationTask>({
+        delayMs: 3_000,
+        execute: async () => undefined,
+      }),
+  );
   const runIdRef = useRef(0);
-  const lastRequestedRevisionRef = useRef<number | null>(null);
+  const lastObservedRevisionRef = useRef<number | null>(currentRevision);
   const contextRef = useRef<ValidationContext>({ projectId, workflowPath });
 
   useLayoutEffect(() => {
     contextRef.current = { projectId, workflowPath };
     runIdRef.current += 1;
-    lastRequestedRevisionRef.current = null;
-  }, [projectId, workflowPath]);
+    automaticScheduler.reset();
+    lastObservedRevisionRef.current = store.getState().session?.workingRevision ?? null;
+  }, [automaticScheduler, projectId, store, workflowPath]);
+
+  useEffect(() => {
+    automaticScheduler.resume();
+    return () => {
+      runIdRef.current += 1;
+      automaticScheduler.suspend();
+    };
+  }, [automaticScheduler]);
 
   useEffect(() => {
     if (!window.studioHost) return;
     return window.studioHost.runtime.onStatusChanged((status) => {
-      if (status.state === 'STOPPING') setAutomaticEnabled(false);
+      if (status.state === 'STOPPING') automaticScheduler.suspend();
     });
-  }, []);
+  }, [automaticScheduler]);
 
-  const validate = useCallback(async () => {
+  const runAutomaticValidation = useCallback(
+    async (task: AutomaticValidationTask) => {
+      const runId = ++runIdRef.current;
+      const host = window.studioHost;
+      const isCurrentContext = () =>
+        runId === runIdRef.current && sameContext(contextRef.current, task.context);
+      const isCurrentRevision = () => {
+        const currentSession = store.getState().session;
+        return (
+          currentSession?.snapshot.localId === task.projectId &&
+          currentSession.workingRevision === task.revision
+        );
+      };
+
+      setRawState({
+        phase: 'validating',
+        projectId: task.projectId,
+        workflowPath: task.workflowPath,
+        revision: task.revision,
+      });
+
+      if (!host) {
+        if (!isCurrentContext() || !isCurrentRevision()) return;
+        setRawState({
+          phase: 'failed',
+          projectId: task.projectId,
+          workflowPath: task.workflowPath,
+          revision: task.revision,
+          error: {
+            code: 'WORKFLOW_VALIDATION_DESKTOP_UNAVAILABLE',
+            message: 'Workflow validation is only available in the desktop app.',
+            retryable: false,
+          },
+        });
+        return;
+      }
+
+      try {
+        const result = await host.runtime.validate({ editorGraph: task.editorGraph });
+        if (!isCurrentContext()) return;
+        if (!isCurrentRevision()) {
+          setRawState({ phase: 'idle' });
+          return;
+        }
+        if (!result.ok) {
+          setRawState({
+            phase: 'failed',
+            projectId: task.projectId,
+            workflowPath: task.workflowPath,
+            revision: task.revision,
+            error: result.error,
+          });
+          return;
+        }
+        setRawState({
+          phase: 'completed',
+          projectId: task.projectId,
+          workflowPath: task.workflowPath,
+          revision: task.revision,
+          output: result.value,
+          stale: false,
+        });
+      } catch {
+        if (!isCurrentContext()) return;
+        if (!isCurrentRevision()) {
+          setRawState({ phase: 'idle' });
+          return;
+        }
+        setRawState({
+          phase: 'failed',
+          projectId: task.projectId,
+          workflowPath: task.workflowPath,
+          revision: task.revision,
+          error: {
+            code: 'RUNTIME_UNKNOWN_ERROR',
+            message: 'Automatic local Runtime validation failed unexpectedly.',
+            retryable: true,
+          },
+        });
+      }
+    },
+    [store],
+  );
+
+  useLayoutEffect(() => {
+    automaticScheduler.setExecutor(runAutomaticValidation);
+  }, [automaticScheduler, runAutomaticValidation]);
+
+  const validateSavedWorkflow = useCallback(async () => {
     setActiveBottomTab('diagnostics');
     const startingState = store.getState();
     const startingSession = startingState.session;
@@ -193,8 +305,8 @@ export function useWorkflowValidation(workflowPath: string) {
     }
 
     const revision = savedSession.savedRevision;
-    lastRequestedRevisionRef.current = revision;
-    setAutomaticEnabled(true);
+    automaticScheduler.reset();
+    lastObservedRevisionRef.current = revision;
     setRawState({
       phase: 'validating',
       projectId: startingProjectId,
@@ -224,6 +336,10 @@ export function useWorkflowValidation(workflowPath: string) {
       result = await window.studioHost.runtime.validate({ editorGraph });
     } catch {
       if (runId !== runIdRef.current || !sameContext(contextRef.current, validationContext)) return;
+      if (store.getState().session?.workingRevision !== revision) {
+        setRawState({ phase: 'idle' });
+        return;
+      }
       setRawState({
         phase: 'failed',
         projectId: startingProjectId,
@@ -242,6 +358,10 @@ export function useWorkflowValidation(workflowPath: string) {
     }
 
     if (runId !== runIdRef.current || !sameContext(contextRef.current, validationContext)) return;
+    if (store.getState().session?.workingRevision !== revision) {
+      setRawState({ phase: 'idle' });
+      return;
+    }
     if (!result.ok) {
       setRawState({
         phase: 'failed',
@@ -269,7 +389,17 @@ export function useWorkflowValidation(workflowPath: string) {
       toast.warning('Validation completed with errors', {
         description: 'Open Diagnostics for details.',
       });
-  }, [setActiveBottomTab, store, workflowPath]);
+  }, [automaticScheduler, setActiveBottomTab, store, workflowPath]);
+
+  const validate = useCallback(async () => {
+    automaticScheduler.resume();
+    if (!automaticScheduler.beginImmediate()) return;
+    try {
+      await validateSavedWorkflow();
+    } finally {
+      automaticScheduler.settleImmediate();
+    }
+  }, [automaticScheduler, validateSavedWorkflow]);
 
   const state = useMemo<WorkflowValidationRunState>(() => {
     if (
@@ -290,20 +420,26 @@ export function useWorkflowValidation(workflowPath: string) {
 
   useEffect(() => {
     if (
-      !automaticEnabled ||
       !projectId ||
       currentRevision === null ||
       pendingNodeConfigurationId !== null ||
-      lastRequestedRevisionRef.current === currentRevision
+      lastObservedRevisionRef.current === currentRevision ||
+      !window.studioHost
     ) {
       return;
     }
     const startingState = store.getState();
-    const workflow = startingState.session?.snapshot.document.workflows[workflowPath];
-    if (!workflow || !window.studioHost) return;
+    const startingSession = startingState.session;
+    if (
+      !startingSession ||
+      startingSession.snapshot.localId !== projectId ||
+      startingSession.workingRevision !== currentRevision
+    ) {
+      return;
+    }
+    const workflow = startingSession.snapshot.document.workflows[workflowPath];
+    if (!workflow) return;
 
-    const revision = currentRevision;
-    const validationContext = { projectId, workflowPath };
     let editorGraph: Record<string, JsonValue>;
     try {
       editorGraph = toRuntimeEditorGraph(workflow);
@@ -311,55 +447,19 @@ export function useWorkflowValidation(workflowPath: string) {
       return;
     }
 
-    const timer = window.setTimeout(() => {
-      const runId = ++runIdRef.current;
-      lastRequestedRevisionRef.current = revision;
-      setRawState({ phase: 'validating', projectId, workflowPath, revision });
-      void window
-        .studioHost!.runtime.validate({ editorGraph })
-        .then((result) => {
-          if (runId !== runIdRef.current || !sameContext(contextRef.current, validationContext)) {
-            return;
-          }
-          if (!result.ok) {
-            setRawState({
-              phase: 'failed',
-              projectId,
-              workflowPath,
-              revision,
-              error: result.error,
-            });
-            return;
-          }
-          setRawState({
-            phase: 'completed',
-            projectId,
-            workflowPath,
-            revision,
-            output: result.value,
-            stale: store.getState().session?.workingRevision !== revision,
-          });
-        })
-        .catch(() => {
-          if (runId !== runIdRef.current || !sameContext(contextRef.current, validationContext)) {
-            return;
-          }
-          setRawState({
-            phase: 'failed',
-            projectId,
-            workflowPath,
-            revision,
-            error: {
-              code: 'RUNTIME_UNKNOWN_ERROR',
-              message: 'Automatic local Runtime validation failed unexpectedly.',
-              retryable: true,
-            },
-          });
-        });
-    }, 700);
-    return () => window.clearTimeout(timer);
+    if (
+      automaticScheduler.enqueue({
+        context: { projectId, workflowPath },
+        editorGraph,
+        projectId,
+        revision: currentRevision,
+        workflowPath,
+      })
+    ) {
+      lastObservedRevisionRef.current = currentRevision;
+    }
   }, [
-    automaticEnabled,
+    automaticScheduler,
     currentRevision,
     pendingNodeConfigurationId,
     projectId,

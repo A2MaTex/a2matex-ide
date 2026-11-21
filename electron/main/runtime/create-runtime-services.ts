@@ -29,6 +29,7 @@ function assertSupportedNodes(editorGraph: Record<string, JsonValue>, supportedT
 
 export function createRuntimeServices(manager: RuntimeProcessManager): RuntimeOperations {
   return {
+    activeRun: () => manager.withReadyRuntime((client) => client.activeRun()),
     getStatus: () => manager.getStatus(),
     onStatusChanged: (listener) => manager.onStatusChanged(listener),
     shutdown: () => manager.shutdown(),
@@ -47,5 +48,7 @@ export function createRuntimeServices(manager: RuntimeProcessManager): RuntimeOp
       }),
     listDevices: () => manager.withReadyRuntime((client) => client.listDevices(false)),
     refreshDevices: () => manager.withReadyRuntime((client) => client.listDevices(true)),
+    runById: (runGroupId) => manager.withReadyRuntime((client) => client.runById(runGroupId)),
+    startRun: (input) => manager.withReadyRuntime((client) => client.startRun(input)),
   };
 }

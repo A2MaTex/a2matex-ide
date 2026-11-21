@@ -34,13 +34,22 @@ import type {
   RuntimeCompilationResult,
   RuntimeDevice,
   RuntimeErrorCode,
+  RuntimeRunErrorCode,
+  RuntimeRunIntentResult,
+  RuntimeRunLookupResult,
+  RuntimeRunPreparationEvent,
+  RuntimeStartRunInput,
   RuntimeStatus,
 } from '@application/runtime/runtime.types';
 
 export interface HostError<TCode extends string = string> {
   code: TCode;
+  httpStatus?: number;
   message: string;
+  projectSnapshot?: ProjectSnapshot;
   retryable: boolean;
+  runtimeCode?: string;
+  validation?: WorkflowValidationOutput;
 }
 
 export type HostResult<T, TCode extends string = string> =
@@ -85,10 +94,16 @@ export interface StudioHostApi {
     compile(
       input: RuntimeCompilationInput,
     ): Promise<HostResult<RuntimeCompilationResult, RuntimeErrorCode>>;
+    startRun(
+      input: RuntimeStartRunInput,
+    ): Promise<HostResult<RuntimeRunIntentResult, RuntimeRunErrorCode>>;
+    getActiveRun(): Promise<HostResult<RuntimeRunLookupResult, RuntimeRunErrorCode>>;
+    getRun(runGroupId: string): Promise<HostResult<RuntimeRunLookupResult, RuntimeRunErrorCode>>;
     listDevices(): Promise<HostResult<RuntimeDevice[], RuntimeErrorCode>>;
     refreshDevices(): Promise<HostResult<RuntimeDevice[], RuntimeErrorCode>>;
     shutdown(): Promise<HostResult<void, RuntimeErrorCode>>;
     onStatusChanged(listener: (status: RuntimeStatus) => void): () => void;
+    onRunPreparationChanged(listener: (event: RuntimeRunPreparationEvent) => void): () => void;
   };
   cloudProject: {
     archive(projectId: string): Promise<HostResult<CloudProject, CloudProjectErrorCode>>;

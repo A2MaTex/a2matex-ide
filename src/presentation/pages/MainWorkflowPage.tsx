@@ -8,7 +8,6 @@ import {
   Folder,
   List,
   ListChecks,
-  Hammer,
   Network,
   Plus,
   Power,
@@ -26,8 +25,7 @@ import { useNavigate, useParams } from 'react-router-dom';
 import { ReactFlowProvider } from '@xyflow/react';
 
 import { toWorkflowNodeCatalog } from '@application/node-catalog/to-workflow-node-catalog';
-import { toRuntimeEditorGraph } from '@application/runtime/to-runtime-editor-graph';
-import type { RuntimeStatus } from '@application/runtime/runtime.types';
+import type { RuntimeStartDeviceInput, RuntimeStatus } from '@application/runtime/runtime.types';
 import {
   androidSelectorToJsonValue,
   getAndroidSelectorTargets,
@@ -40,6 +38,8 @@ import { Button } from '@presentation/components/ui/button';
 import { toast } from '@presentation/components/ui/toast-store';
 import { AndroidInspectorPanel } from '@presentation/features/android-inspector/AndroidInspectorPanel';
 import { useProjectCloseGuard } from '@presentation/features/project-session/use-project-close-guard';
+import { TestRunDialog } from '@presentation/features/test-run/TestRunDialog';
+import { useTestRunExecution } from '@presentation/features/test-run/useTestRunExecution';
 import {
   useProjectStore,
   useProjectStoreApi,
@@ -137,6 +137,7 @@ export function MainWorkflowPage() {
   const selectEdge = useEditorStore((state) => state.selectEdge);
   const copyNode = useEditorStore((state) => state.copyNode);
   const resetWorkflowSession = useEditorStore((state) => state.resetWorkflowSession);
+  const setActiveBottomTab = useEditorStore((state) => state.setActiveBottomTab);
   const [explorerExpanded, setExplorerExpanded] = useState(true);
   const [nodePaletteExpanded, setNodePaletteExpanded] = useState(true);
   const [androidInspectorCollapsed, setAndroidInspectorCollapsed] = useState(false);
@@ -147,7 +148,7 @@ export function MainWorkflowPage() {
   const [nodeCatalogError, setNodeCatalogError] = useState<string | null>(null);
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>({ state: 'STOPPED' });
   const [runtimeOperationError, setRuntimeOperationError] = useState<string | null>(null);
-  const [compiling, setCompiling] = useState(false);
+  const [testRunDialogOpen, setTestRunDialogOpen] = useState(false);
   const [activeWorkflowPath, setActiveWorkflowPath] = useState<string | null>(null);
   const [openWorkflowPaths, setOpenWorkflowPaths] = useState<string[]>([]);
   const [actionList, setActionList] = useState<{
@@ -158,6 +159,7 @@ export function MainWorkflowPage() {
   const nodePalettePanelRef = usePanelRef();
   const androidInspectorPanelRef = usePanelRef();
   const attemptedProjectId = useRef<string | null>(null);
+  const previousRuntimeStateRef = useRef(runtimeStatus.state);
 
   const flushBeforeClose = useCallback(
     () => (pendingNodeConfigurationId ? Promise.resolve(false) : flushLocalSave()),
@@ -251,6 +253,7 @@ export function MainWorkflowPage() {
   }, []);
 
   const activeProjectLocalId = session?.snapshot.localId;
+  const testRun = useTestRunExecution(activeProjectLocalId ?? null);
 
   useEffect(() => {
     if (nodeCatalogStatus !== 'ready' || !activeProjectLocalId) return;
@@ -291,69 +294,18 @@ export function MainWorkflowPage() {
     validate: validateActiveWorkflow,
     busy: workflowValidationBusy,
   } = useWorkflowValidation(workflowPath);
-  const compileActiveWorkflow = useCallback(async () => {
-    setRuntimeOperationError(null);
-    const starting = projectStore.getState();
-    if (starting.pendingNodeConfigurationId) {
-      const message = 'Save or discard the pending node configuration before compiling.';
-      setRuntimeOperationError(message);
-      toast.error('Compilation not started', { description: message });
-      return;
-    }
-    if (!(await starting.flushLocalSave())) {
-      const message = 'The workflow could not be saved locally before compilation.';
-      setRuntimeOperationError(message);
-      toast.error('Compilation failed', { description: message });
-      return;
-    }
-    const current = projectStore.getState().session;
-    const compileWorkflowPath = current?.snapshot.document.manifest.entryWorkflow ?? '';
-    const currentWorkflow = current?.snapshot.document.workflows[compileWorkflowPath];
-    if (!current || !currentWorkflow || !window.studioHost) {
-      const message = 'The saved workflow is no longer available for compilation.';
-      setRuntimeOperationError(message);
-      toast.error('Compilation failed', { description: message });
-      return;
-    }
-    const rawInputSchema = current.snapshot.draftState.inputSchema;
-    if (!rawInputSchema || Array.isArray(rawInputSchema) || typeof rawInputSchema !== 'object') {
-      const message = 'The workflow input schema must be a JSON object.';
-      setRuntimeOperationError(message);
-      toast.error('Compilation failed', { description: message });
-      return;
-    }
-    setCompiling(true);
-    try {
-      const result = await window.studioHost.runtime.compile({
-        editorGraph: toRuntimeEditorGraph(currentWorkflow),
-        inputSchema: rawInputSchema,
-        projectId: current.snapshot.localId,
-        sourceRevision: current.snapshot.draftState.sourceRevision,
-        workflowPath: compileWorkflowPath,
-      });
-      if (!result.ok) {
-        setRuntimeOperationError(result.error.message);
-        toast.error('Compilation failed', { description: result.error.message });
-      } else if (result.value.runtimeIr === null) {
-        const message =
-          'Compilation finished with validation errors. Open Diagnostics for details.';
-        setRuntimeOperationError(message);
-        toast.warning('Compilation completed with errors', { description: message });
-      } else {
-        toast.success('Workflow compiled successfully');
-      }
-    } catch {
-      const message = 'The desktop Runtime bridge failed unexpectedly.';
-      setRuntimeOperationError(message);
-      toast.error('Compilation failed', { description: message });
-    } finally {
-      setCompiling(false);
-    }
-  }, [projectStore]);
 
   const shutdownRuntime = useCallback(async () => {
     if (!window.studioHost) {
       toast.error('Runtime shutdown failed', { description: 'Desktop host is unavailable.' });
+      return;
+    }
+    if (
+      testRun.unresolved &&
+      !window.confirm(
+        'Stop the local Runtime? Any active or uncertain Test Run will be interrupted.',
+      )
+    ) {
       return;
     }
     setRuntimeOperationError(null);
@@ -364,13 +316,51 @@ export function MainWorkflowPage() {
         toast.error('Runtime shutdown failed', { description: result.error.message });
         return;
       }
+      testRun.runtimeStopped();
       toast.success('Runtime stopped');
     } catch {
       const message = 'The desktop Runtime bridge failed unexpectedly.';
       setRuntimeOperationError(message);
       toast.error('Runtime shutdown failed', { description: message });
     }
-  }, []);
+  }, [testRun]);
+
+  useEffect(() => {
+    const previous = previousRuntimeStateRef.current;
+    previousRuntimeStateRef.current = runtimeStatus.state;
+    if (
+      previous !== 'READY' &&
+      runtimeStatus.state === 'READY' &&
+      testRun.state.phase === 'recovery-failed'
+    ) {
+      void testRun.recover();
+    }
+  }, [runtimeStatus.state, testRun]);
+
+  const startTestRun = useCallback(
+    async (device: RuntimeStartDeviceInput) => {
+      setRuntimeOperationError(null);
+      const outcome = await testRun.start(device);
+      setTestRunDialogOpen(false);
+      setActiveBottomTab(outcome === 'COMPILE_INVALID' ? 'diagnostics' : 'output');
+      if (outcome === 'STARTED') {
+        toast.success('Test Run started');
+      } else if (outcome === 'COMPILE_INVALID') {
+        toast.warning('Test Run compilation failed', {
+          description: 'Open the Run panel for compilation diagnostics.',
+        });
+      } else if (outcome === 'UNCERTAIN') {
+        toast.warning('Test Run admission is uncertain', {
+          description: 'Retry the exact admission from the Run panel.',
+        });
+      } else {
+        toast.error('Test Run was not started', {
+          description: 'Open the Run panel for details.',
+        });
+      }
+    },
+    [setActiveBottomTab, testRun],
+  );
 
   const saveLocalWithToast = useCallback(async () => {
     const saved = await flushLocalSave();
@@ -885,15 +875,23 @@ export function MainWorkflowPage() {
           </Button>
           <Button
             size="sm"
-            variant="ghost"
-            onClick={() => void compileActiveWorkflow()}
-            disabled={compiling || workflowValidationBusy || Boolean(pendingNodeConfigurationId)}
-            title="Compile the saved entry graph with the local Runtime"
+            variant="default"
+            onClick={() => setTestRunDialogOpen(true)}
+            disabled={
+              testRun.unresolved ||
+              workflowValidationBusy ||
+              Boolean(pendingNodeConfigurationId) ||
+              !window.studioHost
+            }
+            title={
+              pendingNodeConfigurationId
+                ? 'Save or discard the pending node configuration before running'
+                : testRun.unresolved
+                  ? 'Open the Run panel to view the current execution'
+                  : 'Configure and start a Test Run on the saved entry workflow'
+            }
           >
-            <Hammer /> {compiling ? 'Compiling…' : 'Compile'}
-          </Button>
-          <Button size="sm" variant="ghost" disabled title="Test Run needs a Runtime run contract">
-            <CirclePlay /> Run
+            <CirclePlay /> {testRun.runButtonLabel}
           </Button>
           <Button
             size="icon"
@@ -1156,6 +1154,9 @@ export function MainWorkflowPage() {
             savedRevision={session.savedRevision}
             validation={workflowValidation}
             onValidate={() => void validateActiveWorkflow()}
+            run={testRun.state}
+            onRecoverRun={() => void testRun.recover()}
+            onRetryRunAdmission={() => void testRun.retryAdmission()}
           />
         </Panel>
       </Group>
@@ -1181,6 +1182,22 @@ export function MainWorkflowPage() {
           ) ?? null
         }
         onClose={closeHelp}
+      />
+      <TestRunDialog
+        key={session.snapshot.localId}
+        busy={testRun.busy}
+        hostReady={Boolean(window.studioHost)}
+        inputSchema={session.snapshot.draftState.inputSchema}
+        open={testRunDialogOpen}
+        onOpenChange={setTestRunDialogOpen}
+        onRun={startTestRun}
+        runBlockedReason={
+          pendingNodeConfigurationId
+            ? 'Save or discard the pending node configuration before starting a Test Run.'
+            : testRun.unresolved
+              ? 'Resolve or finish the current Test Run before starting another one.'
+              : null
+        }
       />
       {actionList ? (
         <WorkflowActionList

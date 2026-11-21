@@ -1,0 +1,36 @@
+{
+  "edges": [
+    {
+      "id": "edge-fb59db1d",
+      "sourceNodeId": "c1b73a23-2566-4092-b72a-47557269cde1",
+      "sourcePort": "success",
+      "targetNodeId": "07d6f851-862d-41c1-9b17-20c47732245b"
+    }
+  ],
+  "entryNodeId": "c1b73a23-2566-4092-b72a-47557269cde1",
+  "nodes": [
+    {
+      "bindings": {},
+      "config": {},
+      "editor": {
+        "x": 100,
+        "y": 180
+      },
+      "errorPolicy": "STOP",
+      "id": "c1b73a23-2566-4092-b72a-47557269cde1",
+      "type": "flow.start"
+    },
+    {
+      "bindings": {},
+      "config": {},
+      "editor": {
+        "x": 345.2697841726619,
+        "y": 77.33812949640289
+      },
+      "errorPolicy": "STOP",
+      "id": "07d6f851-862d-41c1-9b17-20c47732245b",
+      "type": "flow.end"
+    }
+  ],
+  "schemaVersion": 1
+}

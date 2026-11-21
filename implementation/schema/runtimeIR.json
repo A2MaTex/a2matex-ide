@@ -1,0 +1,100 @@
+{
+  "edges": [
+    {
+      "id": "edge-76808ea4",
+      "sourceNodeId": "17f37f72-991f-4fd0-a6fb-a16eb9d064cc",
+      "sourcePort": "success",
+      "targetNodeId": "6da0025e-e4b2-4956-bc8a-74dee818956d"
+    },
+    {
+      "id": "edge-e69548f6",
+      "sourceNodeId": "6da0025e-e4b2-4956-bc8a-74dee818956d",
+      "sourcePort": "success",
+      "targetNodeId": "f5aa5830-22d1-4eb8-9cea-6d93b6cd68ad"
+    },
+    {
+      "id": "edge-f845d3df",
+      "sourceNodeId": "6da0025e-e4b2-4956-bc8a-74dee818956d",
+      "sourcePort": "error",
+      "targetNodeId": "2dbee5a3-57f2-443c-b055-b6ec199c9c9a"
+    },
+    {
+      "id": "edge-9f214389",
+      "sourceNodeId": "2dbee5a3-57f2-443c-b055-b6ec199c9c9a",
+      "sourcePort": "success",
+      "targetNodeId": "0dac6caf-7147-4aaf-ac3c-3372f92b84ca"
+    },
+    {
+      "id": "edge-40e65916",
+      "sourceNodeId": "f5aa5830-22d1-4eb8-9cea-6d93b6cd68ad",
+      "sourcePort": "success",
+      "targetNodeId": "0dac6caf-7147-4aaf-ac3c-3372f92b84ca"
+    }
+  ],
+  "entryNodeId": "17f37f72-991f-4fd0-a6fb-a16eb9d064cc",
+  "formatVersion": 1,
+  "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "required": [],
+    "type": "object"
+  },
+  "metadata": { "sourceGraphSchemaVersion": 1 },
+  "minimumRuntimeVersion": "0.1.0",
+  "nodes": [
+    {
+      "config": {},
+      "errorPolicy": "STOP",
+      "id": "17f37f72-991f-4fd0-a6fb-a16eb9d064cc",
+      "inputs": {},
+      "retryPolicy": { "delayMs": 0, "maxAttempts": 1 },
+      "runtimeHandler": "flow.start",
+      "timeoutMs": 1000,
+      "type": "flow.start"
+    },
+    {
+      "config": { "targetMode": "SCREEN_PERCENT" },
+      "errorPolicy": "ERROR_BRANCH",
+      "id": "6da0025e-e4b2-4956-bc8a-74dee818956d",
+      "inputs": {
+        "xPercent": { "source": "LITERAL", "value": 10 },
+        "yPercent": { "source": "LITERAL", "value": 20 }
+      },
+      "retryPolicy": { "delayMs": 0, "maxAttempts": 1 },
+      "runtimeHandler": "android.tap",
+      "timeoutMs": 30000,
+      "type": "android.tap"
+    },
+    {
+      "config": {},
+      "errorPolicy": "STOP",
+      "id": "f5aa5830-22d1-4eb8-9cea-6d93b6cd68ad",
+      "inputs": { "text": { "source": "LITERAL", "value": "hi" } },
+      "retryPolicy": { "delayMs": 0, "maxAttempts": 1 },
+      "runtimeHandler": "android.input_text",
+      "timeoutMs": 30000,
+      "type": "android.input_text"
+    },
+    {
+      "config": {},
+      "errorPolicy": "STOP",
+      "id": "2dbee5a3-57f2-443c-b055-b6ec199c9c9a",
+      "inputs": {},
+      "retryPolicy": { "delayMs": 0, "maxAttempts": 1 },
+      "runtimeHandler": "android.press_home",
+      "timeoutMs": 30000,
+      "type": "android.press_home"
+    },
+    {
+      "config": {},
+      "errorPolicy": "STOP",
+      "id": "0dac6caf-7147-4aaf-ac3c-3372f92b84ca",
+      "inputs": {},
+      "retryPolicy": { "delayMs": 0, "maxAttempts": 1 },
+      "runtimeHandler": "flow.end",
+      "timeoutMs": 1000,
+      "type": "flow.end"
+    }
+  ],
+  "requiredCapabilities": ["android.device.control"]
+}

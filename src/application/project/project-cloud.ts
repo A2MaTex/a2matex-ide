@@ -527,7 +527,7 @@ export class ProjectCloudService implements ProjectCloudClient {
       ? metadataChanged && !metadataMatchesLocal
       : !metadataMatchesLocal;
 
-    const draftLocalAhead =
+    const draftRevisionLocalAhead =
       snapshot.draftState.localRevision !== snapshot.draftState.lastSyncedLocalRevision;
     const draftChanged =
       !remoteDraft ||
@@ -536,6 +536,11 @@ export class ProjectCloudService implements ProjectCloudClient {
     const draftMatchesLocal =
       remoteDraft !== null &&
       draftMatchesPayload(remoteDraft, createCloudDraftPayload(snapshot, remoteDraft.version));
+    // Compilation artifacts are persisted without changing localRevision. When the remote draft is
+    // still the acknowledged baseline, a payload mismatch therefore proves that local artifacts
+    // changed and must be uploaded even though the document revision itself is unchanged.
+    const draftArtifactLocalAhead = !draftChanged && !draftMatchesLocal;
+    const draftLocalAhead = draftRevisionLocalAhead || draftArtifactLocalAhead;
     const draftUnresolved = draftChanged && !draftMatchesLocal;
 
     if (metadataUnresolved || draftUnresolved) {

@@ -92,6 +92,7 @@ export interface ProjectStoreState {
     unresolvedNodeIds: string[];
   };
   setPendingNodeConfiguration(nodeId: string | null): void;
+  applyRuntimeProjectSnapshot(snapshot: ProjectSnapshot): boolean;
   undo(): void;
   redo(): void;
   clearCommandError(): void;
@@ -612,6 +613,30 @@ export function createProjectStore(
       },
       setPendingNodeConfiguration(pendingNodeConfigurationId) {
         set({ pendingNodeConfigurationId });
+      },
+      applyRuntimeProjectSnapshot(snapshot) {
+        let applied = false;
+        set((state) => {
+          if (
+            !state.session ||
+            state.session.snapshot.localId !== snapshot.localId ||
+            state.session.snapshot.draftState.sourceRevision !==
+              snapshot.draftState.sourceRevision ||
+            isProjectDirty(state.session)
+          ) {
+            return state;
+          }
+          applied = true;
+          const session = {
+            ...state.session,
+            snapshot: { ...snapshot, document: state.session.snapshot.document },
+          };
+          return {
+            session,
+            recentProjects: addRecent(state.recentProjects, session.snapshot),
+          };
+        });
+        return applied;
       },
       undo() {
         let changed = false;

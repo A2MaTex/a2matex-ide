@@ -4,6 +4,7 @@ import { app, BrowserWindow, dialog, session } from 'electron';
 
 import { createAuthSessionService } from '@electron/main/auth/create-auth-session-service';
 import { accountScopeFromName } from '@application/auth/account-scope';
+import type { MainAuthSession } from '@application/auth/auth-session';
 import { RuntimeError } from '@application/runtime/runtime.error';
 import { getCurrentPolicies } from '@electron/main/api/policy.api';
 import { ProcessAdbClient } from '@electron/main/adapters/android/adb-client';
@@ -33,12 +34,29 @@ import {
 import { createRuntimeServices } from '@electron/main/runtime/create-runtime-services';
 import { resolveRuntimeExecutable } from '@electron/main/runtime/process/runtime-executable';
 import { RuntimeProcessManager } from '@electron/main/runtime/process/runtime-process-manager';
+import {
+  RuntimeRunCoordinator,
+  RuntimeRunCoordinatorError,
+} from '@electron/main/runtime/run/runtime-run-coordinator';
 
 const developmentUrl = process.env.A2MATEX_DEV_SERVER_URL;
 let studioDatabase: StudioDatabase | null = null;
 let runtimeManager: RuntimeProcessManager | null = null;
+let runtimeRuns: RuntimeRunCoordinator | null = null;
 let quitInProgress = false;
 let shutdownComplete = false;
+
+async function requireRuntimeAccountScope(auth: MainAuthSession) {
+  const restored = await auth.restore();
+  if (restored.status !== 'authenticated') {
+    throw new RuntimeRunCoordinatorError(
+      'PROJECT_ACCOUNT_UNAVAILABLE',
+      'Sign in before preparing a Test Run for a local project.',
+      false,
+    );
+  }
+  return accountScopeFromName(restored.account);
+}
 
 export function createWindow() {
   const window = new BrowserWindow({
@@ -137,7 +155,14 @@ app.whenReady().then(() => {
   );
   const projects = new SqliteLocalProjectRepository(studioDatabase.connection);
   const cloudCache = new SqliteCloudProjectCache(studioDatabase.connection);
+  const runs = new RuntimeRunCoordinator({
+    accountScope: () => requireRuntimeAccountScope(auth),
+    projects,
+    runtime,
+  });
+  runtimeRuns = runs;
   registerRuntimeHandlers(runtime, {
+    runs,
     persistCompilation: async (request, result) => {
       const restored = await auth.restore();
       if (restored.status !== 'authenticated') {
@@ -175,6 +200,18 @@ app.on('before-quit', (event) => {
   if (shutdownComplete) return;
   event.preventDefault();
   if (quitInProgress) return;
+  if (runtimeRuns?.hasUnresolvedRun()) {
+    const choice = dialog.showMessageBoxSync({
+      type: 'warning',
+      buttons: ['Stay open', 'Stop and exit'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'A Test Run is still active',
+      message: 'Stop the active Test Run and exit A2MaTeX Studio?',
+      detail: 'Staying open keeps the managed Runtime and execution running.',
+    });
+    if (choice === 0) return;
+  }
   quitInProgress = true;
   void (async () => {
     try {
@@ -187,6 +224,7 @@ app.on('before-quit', (event) => {
       studioDatabase?.close();
       studioDatabase = null;
       runtimeManager = null;
+      runtimeRuns = null;
       shutdownComplete = true;
       app.quit();
     }

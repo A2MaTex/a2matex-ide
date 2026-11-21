@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 
 import type { SessionState } from '@application/auth/auth-session';
-import type { RuntimeStatus } from '@application/runtime/runtime.types';
+import type { RuntimeRunPreparationEvent, RuntimeStatus } from '@application/runtime/runtime.types';
 import type { StudioHostApi } from '@infrastructure/electron/studio-host-api';
 
 const studioHost = {
@@ -40,12 +40,22 @@ const studioHost = {
     getStatus: () => ipcRenderer.invoke('studio:runtime:get-status'),
     validate: (input) => ipcRenderer.invoke('studio:runtime:validate', input),
     compile: (input) => ipcRenderer.invoke('studio:runtime:compile', input),
+    startRun: (input) => ipcRenderer.invoke('studio:runtime:start-run', input),
+    getActiveRun: () => ipcRenderer.invoke('studio:runtime:get-active-run'),
+    getRun: (runGroupId) => ipcRenderer.invoke('studio:runtime:get-run', runGroupId),
     listDevices: () => ipcRenderer.invoke('studio:runtime:list-devices'),
     refreshDevices: () => ipcRenderer.invoke('studio:runtime:refresh-devices'),
     shutdown: () => ipcRenderer.invoke('studio:runtime:shutdown'),
     onStatusChanged: (listener: (status: RuntimeStatus) => void) => {
       const channel = 'studio:runtime:status-changed';
       const handler = (_event: IpcRendererEvent, status: RuntimeStatus) => listener(status);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+    onRunPreparationChanged: (listener: (event: RuntimeRunPreparationEvent) => void) => {
+      const channel = 'studio:runtime:run-preparation-changed';
+      const handler = (_event: IpcRendererEvent, runEvent: RuntimeRunPreparationEvent) =>
+        listener(runEvent);
       ipcRenderer.on(channel, handler);
       return () => ipcRenderer.removeListener(channel, handler);
     },

@@ -1,28 +1,38 @@
-# Workflow Validation API Integration Plan
+# Workflow Validation — Historical Backend Baseline
 
 Status: Implemented  
 Date: 2026-11-11  
-Updated: 2026-11-11 — Phases 1–4 implemented; Phase 5 compatibility decision recorded  
+Updated: 2026-11-18 — Local Runtime transport implemented
 Scope: A2MaTeX Studio desktop editor
+
+> **Transport đã được thay thế:** Action, save/revision orchestration và Diagnostics UI vẫn được giữ.
+> Các phần bên dưới yêu cầu cloud access token, refresh-token retry, Backend base URL và Backend response
+> envelope chỉ còn là lịch sử thiết kế, không phải implementation hiện tại. Validation đã chuyển hoàn toàn
+> sang managed Local Runtime theo
+> [local-runtime-integration-plan.md](local-runtime-integration-plan.md#0-quyết-định-đã-chốt-cho-validation-hiện-có).
 
 ## 0. Implementation snapshot
 
-- Implemented strict request/response schemas, diagnostic codes, status consistency checks and the
-  1 MiB client preflight.
-- Implemented Axios adapter, one-time authentication refresh/retry, trusted IPC handler, preload API
-  and Electron bootstrap registration. Access tokens remain in Electron main.
+- Implemented strict direct Runtime response schemas, forward-compatible diagnostic codes, status
+  consistency checks and the 1 MiB client preflight.
+- Cloud Axios adapter và authentication refresh/retry đã bị retire. Electron Main lazy-start managed
+  Runtime, giữ per-process token trong memory và gọi loopback client riêng với proxy/redirect disabled.
 - Implemented revision-aware `save local -> encode saved active workflow -> validate` orchestration.
   Save failure and pending Node Config drafts stop the request.
 - Implemented toolbar/Action List Validate actions and Diagnostics states for progress, all three
   engine statuses, transport/save errors, stale results, truncation and node/edge navigation.
-- Kept Problems as the local validator and kept server validation results session-only.
+- Kept Problems as the local validator; Runtime validation results remain revision-aware in UI session.
 - Phase 5 decision: do not reduce the persisted local schema from 5.000/10.000 nodes or ID length 128
   in this change, because doing so would make existing local projects fail to open. Backend limit and
   contract diagnostics remain visible in Diagnostics; a future migration must precede any persisted
   schema tightening.
-- Verification: 12 Vitest tests pass; typecheck, ESLint and desktop production build pass. The global
-  Prettier check still reports eight unrelated pre-existing files; all files changed by this feature
-  were formatted.
+- Automatic Runtime validation debounce được bật sau lần Validate chủ động đầu tiên, pause khi Node Config
+  dirty và không tự restart sau explicit Runtime shutdown.
+- Verification hiện tại: 9 Vitest tests pass; typecheck, ESLint, desktop production build và Linux real
+  Runtime smoke test pass.
+
+Các mục còn lại trong tài liệu này mô tả baseline Backend cũ để truy vết quyết định. Khi có xung đột,
+implementation và [local-runtime-integration-plan.md](local-runtime-integration-plan.md) là authoritative.
 
 ## 1. Mục tiêu
 

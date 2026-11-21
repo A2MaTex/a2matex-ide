@@ -10,6 +10,8 @@ import {
 import type { WorkflowValidationDiagnostic } from '@application/workflow-validation/workflow-validation';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import { Button } from '@presentation/components/ui/button';
+import { RunStatusPanel } from '@presentation/features/test-run/RunStatusPanel';
+import type { TestRunExecutionState } from '@presentation/features/test-run/useTestRunExecution';
 import type { WorkflowValidationRunState } from '@presentation/features/workflow-editor/useWorkflowValidation';
 import { useEditorStore, type BottomPanelTab } from '@presentation/stores/editor-store';
 
@@ -19,11 +21,15 @@ interface ProblemsPanelProps {
   savedRevision: number;
   validation: WorkflowValidationRunState;
   onValidate(): void;
+  onRecoverRun(): void;
+  onRetryRunAdmission(): void;
+  run: TestRunExecutionState;
 }
 
 const tabs: { id: BottomPanelTab; label: string }[] = [
   { id: 'problems', label: 'Problems' },
   { id: 'diagnostics', label: 'Diagnostics' },
+  { id: 'output', label: 'Run' },
 ];
 
 function diagnosticPath(path: Array<string | number>) {
@@ -120,7 +126,7 @@ function DiagnosticsContent({
         <LoaderCircle className="size-4 animate-spin text-primary" />
         {validation.phase === 'saving'
           ? 'Saving locally before validation…'
-          : `Validating saved revision ${validation.revision}…`}
+          : `Validating revision ${validation.revision}…`}
       </div>
     );
   }
@@ -159,15 +165,6 @@ function DiagnosticsContent({
 
   return (
     <div>
-      {validation.stale ? (
-        <div className="mx-3 my-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning">
-          <p>This result is outdated because the workflow changed after validation started.</p>
-          <Button className="mt-2" size="sm" variant="secondary" onClick={onValidate}>
-            <RotateCw /> Validate current revision
-          </Button>
-        </div>
-      ) : null}
-
       {validation.output.truncated ? (
         <div className="mx-3 mb-3 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs text-warning font-mono">
           Only the first 100 diagnostics are shown.
@@ -200,6 +197,9 @@ export function ProblemsPanel({
   savedRevision,
   validation,
   onValidate,
+  onRecoverRun,
+  onRetryRunAdmission,
+  run,
 }: ProblemsPanelProps) {
   const activeTab = useEditorStore((state) => state.activeBottomTab);
   const setActiveTab = useEditorStore((state) => state.setActiveBottomTab);
@@ -209,6 +209,9 @@ export function ProblemsPanel({
     validation.phase === 'completed'
       ? validation.output.errors.length + validation.output.warnings.length
       : 0;
+  const runDiagnosticCount = run.validation
+    ? run.validation.errors.length + run.validation.warnings.length
+    : 0;
 
   return (
     <section className="flex h-full flex-col bg-panel" aria-label="Problems and output panel">
@@ -227,7 +230,9 @@ export function ProblemsPanel({
           >
             {tab.label}
             {tab.id === 'problems' && issues.length > 0 ? ` (${issues.length})` : ''}
-            {tab.id === 'diagnostics' && diagnosticCount > 0 ? ` (${diagnosticCount})` : ''}
+            {tab.id === 'diagnostics' && diagnosticCount + runDiagnosticCount > 0
+              ? ` (${diagnosticCount + runDiagnosticCount})`
+              : ''}
           </button>
         ))}
       </div>
@@ -260,15 +265,39 @@ export function ProblemsPanel({
               ))}
             </div>
           )
+        ) : activeTab === 'diagnostics' ? (
+          <>
+            {run.validation ? (
+              <div className="mx-3 mb-2 rounded-md border border-warning/30 bg-warning/10 p-3 text-xs">
+                <p className="font-medium text-warning">Latest Test Run compilation</p>
+                {[...run.validation.errors, ...run.validation.warnings].map((diagnostic, index) => (
+                  <div
+                    key={`${diagnostic.code}:${diagnostic.path.join('.')}:${index}`}
+                    className="mt-2"
+                  >
+                    <p className="text-secondary-foreground">{diagnostic.message}</p>
+                    <p className="break-all font-mono text-[10px] text-muted-foreground">
+                      {diagnostic.code} · {diagnostic.path.length ? diagnostic.path.join('.') : '$'}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <DiagnosticsContent
+              validation={validation}
+              onValidate={onValidate}
+              onSelectNode={(nodeId) => {
+                selectNode(nodeId);
+                focusCanvasNode(nodeId);
+              }}
+              onSelectEdge={selectEdge}
+            />
+          </>
         ) : (
-          <DiagnosticsContent
-            validation={validation}
-            onValidate={onValidate}
-            onSelectNode={(nodeId) => {
-              selectNode(nodeId);
-              focusCanvasNode(nodeId);
-            }}
-            onSelectEdge={selectEdge}
+          <RunStatusPanel
+            state={run}
+            onRecover={onRecoverRun}
+            onRetryAdmission={onRetryRunAdmission}
           />
         )}
       </div>
