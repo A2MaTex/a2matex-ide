@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "runtime": {
+    "version": "0.1.0",
+    "repository": "A2MaTex/a2matex-runtime",
+    "commit": "b5e5f8fe4e8b3d6687d550adf1f0754000e4a34b",
+    "buildTime": "2026-11-22T17:53:04+07:00",
+    "runtimeIrFormatVersions": [1]
+  },
+  "platformTools": {
+    "version": "37.0.3",
+    "licenseUrl": "https://developer.android.com/studio/terms",
+    "linux-x64": {
+      "url": "https://dl.google.com/android/repository/platform-tools_r37.0.3-linux.zip",
+      "sha256": "214548146cadb2ca3508143d8a1d4be4c59de5bb837253e3ede89ed74cf450d1"
+    },
+    "win32-x64": {
+      "url": "https://dl.google.com/android/repository/platform-tools_r37.0.3-win.zip",
+      "sha256": "89d108360a3bf2924d3bea837239edaccc22fd6ff5befd3787c4348a9fe4f09d"
+    }
+  }
+}

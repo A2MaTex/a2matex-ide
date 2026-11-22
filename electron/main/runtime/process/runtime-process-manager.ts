@@ -26,6 +26,7 @@ interface OwnedRuntime {
 }
 
 export interface RuntimeProcessManagerOptions {
+  resolveAdbExecutable(): string;
   resolveExecutable(): string;
 }
 
@@ -212,24 +213,24 @@ export class RuntimeProcessManager {
     let pipes: ReturnType<typeof createRuntimePipes> | null = null;
     try {
       const executable = this.options.resolveExecutable();
+      const adbExecutable = this.options.resolveAdbExecutable();
       const port = await selectLoopbackPort();
       pipes = createRuntimePipes();
       child = spawn(
         executable,
-        [
-          '--owner-command-pipe=3',
-          '--owner-ready-pipe=4',
-          `--listen-address=127.0.0.1:${port}`,
-          '--log-level=warn',
-        ],
+        [...pipes.childArguments, `--listen-address=127.0.0.1:${port}`, '--log-level=warn'],
         {
+          env: {
+            ...process.env,
+            A2MATEX_RUNTIME_ADB_EXECUTABLE_PATH: adbExecutable,
+            A2MATEX_RUNTIME_ADB_ALLOW_PATH_FALLBACK: 'false',
+          },
           shell: false,
-          stdio: ['ignore', 'ignore', 'ignore', pipes.childCommandFd, pipes.childReadyFd],
+          stdio: pipes.stdio,
           windowsHide: true,
         },
       );
-      pipes.closeChildEnds();
-      const { command, ready } = pipes;
+      const { command, ready } = pipes.attach(child);
       const session = parseRuntimeReadyRecord(await readReadyFrame(ready, child));
       ready.destroy();
       const info = await new RuntimeHttpClient(session).runtimeInfo();
@@ -246,9 +247,7 @@ export class RuntimeProcessManager {
       this.setStatus({ state: 'READY', runtimeVersion: info.runtimeVersion });
       return runtime;
     } catch (error) {
-      pipes?.closeChildEnds();
-      pipes?.command.destroy();
-      pipes?.ready.destroy();
+      pipes?.dispose();
       if (child && child.exitCode === null) child.kill('SIGTERM');
       const mapped = toRuntimeError(error);
       this.setStatus({ state: 'FAILED', errorCode: mapped.code });

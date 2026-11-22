@@ -1,4 +1,5 @@
-export type AndroidDeviceStatus = 'device' | 'offline' | 'unauthorized' | 'unknown';
+export type AndroidDeviceStatus =
+  'device' | 'offline' | 'permission-denied' | 'unauthorized' | 'unknown';
 
 export interface AndroidDevice {
   deviceId: string;

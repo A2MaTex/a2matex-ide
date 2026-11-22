@@ -368,6 +368,11 @@ export function AndroidInspectorPanel({
               Offline device: reconnect it or restart ADB, then refresh.
             </p>
           ) : null}
+          {devices.some((device) => device.status === 'permission-denied') ? (
+            <p className="text-[10px] leading-4 text-warning">
+              USB permission denied: configure Linux udev rules, reconnect the device, then refresh.
+            </p>
+          ) : null}
           <Button
             className="w-full"
             size="sm"
