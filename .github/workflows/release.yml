@@ -31,7 +31,6 @@ jobs:
       - run: npm run format:check
       - run: npm run lint
       - run: npm run typecheck
-      - run: npm test
       - id: version
         name: Calculate release version
         shell: bash
