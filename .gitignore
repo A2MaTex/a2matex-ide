@@ -29,6 +29,3 @@ dist-electron
 
 test-results
 release
-release-win/
-build-resources/runtime/
-build/runtime-integrity.json

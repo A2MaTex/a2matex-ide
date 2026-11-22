@@ -1,6 +1,5 @@
 export type AndroidInspectorErrorCode =
   | 'ADB_NOT_FOUND'
-  | 'ADB_PERMISSION_DENIED'
   | 'ADB_START_FAILED'
   | 'DEVICE_NOT_FOUND'
   | 'DEVICE_OFFLINE'

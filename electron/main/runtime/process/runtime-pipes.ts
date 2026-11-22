@@ -11,16 +11,17 @@ import {
 } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync, type ChildProcess, type StdioOptions } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
 
 import { RuntimeError } from '@application/runtime/runtime.error';
 
 export interface RuntimePipes {
-  childArguments: readonly string[];
-  stdio: StdioOptions;
-  attach(child: ChildProcess): { command: Writable; ready: Readable };
-  dispose(): void;
+  childCommandFd: number;
+  childReadyFd: number;
+  closeChildEnds(): void;
+  command: Writable;
+  ready: Readable;
 }
 
 function safeClose(fd: number) {
@@ -47,32 +48,15 @@ function resolveMkfifo() {
  * requires OS pipes. Private FIFOs give each process only its directional end
  * and preserve fail-closed EOF when Studio exits.
  */
-function createWindowsRuntimePipes(): RuntimePipes {
-  let command: Writable | null = null;
-  let ready: Readable | null = null;
-  return {
-    childArguments: ['--owner-stdio'],
-    stdio: ['pipe', 'pipe', 'ignore'],
-    attach(child) {
-      if (!child.stdin || !child.stdout) {
-        throw new RuntimeError(
-          'RUNTIME_START_FAILED',
-          'The managed Runtime stdio pipes could not be opened.',
-          true,
-        );
-      }
-      command = child.stdin;
-      ready = child.stdout;
-      return { command, ready };
-    },
-    dispose() {
-      command?.destroy();
-      ready?.destroy();
-    },
-  };
-}
+export function createRuntimePipes(): RuntimePipes {
+  if (process.platform === 'win32') {
+    throw new RuntimeError(
+      'RUNTIME_PLATFORM_UNSUPPORTED',
+      'Managed Runtime pipes have not yet been verified for Windows.',
+      false,
+    );
+  }
 
-function createUnixRuntimePipes(): RuntimePipes {
   const directory = mkdtempSync(path.join(os.tmpdir(), 'a2matex-runtime-'));
   chmodSync(directory, 0o700);
   const commandPath = path.join(directory, 'command');
@@ -113,25 +97,16 @@ function createUnixRuntimePipes(): RuntimePipes {
     // Open descriptors remain valid after unlink and no other process can discover the pipes.
     rmSync(directory, { recursive: true, force: true });
     let childEndsClosed = false;
-    const command = createWriteStream(commandPath, { fd: parentCommandFd, autoClose: true });
-    const ready = createReadStream(readyPath, { fd: parentReadyFd, autoClose: true });
-    const closeChildEnds = () => {
-      if (childEndsClosed) return;
-      childEndsClosed = true;
-      safeClose(childCommandFd);
-      safeClose(childReadyFd);
-    };
     return {
-      childArguments: ['--owner-command-pipe=3', '--owner-ready-pipe=4'],
-      stdio: ['ignore', 'ignore', 'ignore', childCommandFd, childReadyFd],
-      attach() {
-        closeChildEnds();
-        return { command, ready };
-      },
-      dispose() {
-        closeChildEnds();
-        command.destroy();
-        ready.destroy();
+      childCommandFd,
+      childReadyFd,
+      command: createWriteStream(commandPath, { fd: parentCommandFd, autoClose: true }),
+      ready: createReadStream(readyPath, { fd: parentReadyFd, autoClose: true }),
+      closeChildEnds: () => {
+        if (childEndsClosed) return;
+        childEndsClosed = true;
+        safeClose(childCommandFd);
+        safeClose(childReadyFd);
       },
     };
   } catch (error) {
@@ -153,8 +128,4 @@ function createUnixRuntimePipes(): RuntimePipes {
       { cause: error },
     );
   }
-}
-
-export function createRuntimePipes(platform: NodeJS.Platform = process.platform): RuntimePipes {
-  return platform === 'win32' ? createWindowsRuntimePipes() : createUnixRuntimePipes();
 }

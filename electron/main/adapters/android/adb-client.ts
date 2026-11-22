@@ -33,23 +33,11 @@ export interface AdbProcessRunner {
 }
 
 export class NodeAdbProcessRunner implements AdbProcessRunner {
-  constructor(private readonly executable: string | (() => string) = 'adb') {}
+  constructor(private readonly executable = process.env.A2MATEX_ADB_PATH?.trim() || 'adb') {}
 
   run(args: readonly string[], options: RunAdbOptions): Promise<Buffer> {
-    let executable: string;
-    try {
-      executable = typeof this.executable === 'function' ? this.executable() : this.executable;
-    } catch (error) {
-      return Promise.reject(
-        new AndroidInspectorError(
-          'ADB_NOT_FOUND',
-          error instanceof Error ? error.message : 'Bundled ADB is unavailable.',
-          false,
-        ),
-      );
-    }
     return new Promise((resolve, reject) => {
-      const child = spawn(executable, [...args], {
+      const child = spawn(this.executable, [...args], {
         windowsHide: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -96,12 +84,10 @@ export class NodeAdbProcessRunner implements AdbProcessRunner {
       });
       child.on('error', (error: NodeJS.ErrnoException) => {
         finish(
-          error.code === 'ENOENT' || error.code === 'EACCES'
+          error.code === 'ENOENT'
             ? new AndroidInspectorError(
-                error.code === 'ENOENT' ? 'ADB_NOT_FOUND' : 'ADB_PERMISSION_DENIED',
-                error.code === 'ENOENT'
-                  ? 'ADB was not found in this Studio installation.'
-                  : 'Studio does not have permission to execute bundled ADB.',
+                'ADB_NOT_FOUND',
+                'ADB was not found. Configure A2MATEX_ADB_PATH or add adb to PATH.',
                 false,
               )
             : new AndroidInspectorError('ADB_START_FAILED', 'ADB could not be started.', true),
@@ -113,15 +99,7 @@ export class NodeAdbProcessRunner implements AdbProcessRunner {
           return;
         }
         const detail = Buffer.concat(stderr).toString('utf8').trim().slice(0, 500);
-        finish(
-          /(?:permission denied|no permissions)/i.test(detail)
-            ? new AndroidInspectorError(
-                'ADB_PERMISSION_DENIED',
-                'Studio does not have permission to access the Android device.',
-                false,
-              )
-            : new AdbCommandError(detail || 'ADB command failed.', code),
-        );
+        finish(new AdbCommandError(detail || 'ADB command failed.', code));
       });
     });
   }
@@ -135,10 +113,8 @@ export function parseAdbDevices(output: string): AndroidDevice[] {
     .flatMap((line) => {
       const [deviceId, rawStatus, ...details] = line.split(/\s+/);
       if (!deviceId || !rawStatus) return [];
-      const permissionDenied = rawStatus === 'no' && details[0] === 'permissions';
-      const status = permissionDenied
-        ? 'permission-denied'
-        : rawStatus === 'device' || rawStatus === 'offline' || rawStatus === 'unauthorized'
+      const status =
+        rawStatus === 'device' || rawStatus === 'offline' || rawStatus === 'unauthorized'
           ? rawStatus
           : 'unknown';
       const metadata = Object.fromEntries(

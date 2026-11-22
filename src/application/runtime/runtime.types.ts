@@ -145,7 +145,6 @@ export type RuntimeRunErrorCode =
 
 export type RuntimeErrorCode =
   | 'RUNTIME_NOT_INSTALLED'
-  | 'RUNTIME_INTEGRITY_FAILED'
   | 'RUNTIME_PLATFORM_UNSUPPORTED'
   | 'RUNTIME_ALREADY_RUNNING'
   | 'RUNTIME_START_FAILED'

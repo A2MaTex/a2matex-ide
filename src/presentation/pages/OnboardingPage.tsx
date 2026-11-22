@@ -125,24 +125,14 @@ export function OnboardingPage({ manifest: suppliedManifest }: OnboardingPagePro
     const result = await window.studioHost.androidInspector.listDevices();
     setAdbBusy(false);
     if (!result.ok) {
-      setAdbStatus(
-        result.error.code === 'ADB_NOT_FOUND'
-          ? 'not-found'
-          : result.error.code === 'ADB_PERMISSION_DENIED'
-            ? 'permission-issue'
-            : 'error',
-      );
+      setAdbStatus(result.error.code === 'ADB_NOT_FOUND' ? 'not-found' : 'error');
       toast.error('ADB check failed', { description: result.error.message });
       return;
     }
     if (result.value.some((device) => device.usable)) {
       setAdbStatus('available');
       toast.success('ADB is ready');
-    } else if (
-      result.value.some((device) =>
-        ['offline', 'permission-denied', 'unauthorized'].includes(device.status),
-      )
-    ) {
+    } else if (result.value.some((device) => ['offline', 'unauthorized'].includes(device.status))) {
       setAdbStatus('permission-issue');
       toast.warning('ADB needs device permission');
     } else {

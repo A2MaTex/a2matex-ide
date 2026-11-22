@@ -7,7 +7,7 @@ import { accountScopeFromName } from '@application/auth/account-scope';
 import type { MainAuthSession } from '@application/auth/auth-session';
 import { RuntimeError } from '@application/runtime/runtime.error';
 import { getCurrentPolicies } from '@electron/main/api/policy.api';
-import { NodeAdbProcessRunner, ProcessAdbClient } from '@electron/main/adapters/android/adb-client';
+import { ProcessAdbClient } from '@electron/main/adapters/android/adb-client';
 import { SqliteCloudProjectCache } from '@electron/main/adapters/project/sqlite-cloud-project-cache';
 import { SqliteLocalProjectRepository } from '@electron/main/adapters/project/sqlite-local-project-repository';
 import { createNodeCatalogService } from '@electron/main/catalog/create-node-catalog-service';
@@ -32,7 +32,7 @@ import {
   type StudioDatabase,
 } from '@electron/main/persistence/studio-database';
 import { createRuntimeServices } from '@electron/main/runtime/create-runtime-services';
-import { resolveRuntimeResources } from '@electron/main/runtime/process/runtime-executable';
+import { resolveRuntimeExecutable } from '@electron/main/runtime/process/runtime-executable';
 import { RuntimeProcessManager } from '@electron/main/runtime/process/runtime-process-manager';
 import {
   RuntimeRunCoordinator,
@@ -97,22 +97,9 @@ app.whenReady().then(() => {
     callback(false);
   });
   registerSystemHandlers();
+  registerAndroidInspectorHandlers(new DefaultAndroidInspectorService(new ProcessAdbClient()));
   const appPath = app.getAppPath();
   const userDataPath = app.getPath('userData');
-  let resolvedRuntimeResources: ReturnType<typeof resolveRuntimeResources> | null = null;
-  const runtimeResources = () => {
-    resolvedRuntimeResources ??= resolveRuntimeResources({
-      appPath,
-      isPackaged: app.isPackaged,
-      resourcesPath: process.resourcesPath,
-    });
-    return resolvedRuntimeResources;
-  };
-  registerAndroidInspectorHandlers(
-    new DefaultAndroidInspectorService(
-      new ProcessAdbClient(new NodeAdbProcessRunner(() => runtimeResources().adbExecutable)),
-    ),
-  );
   let loadPolicies;
   try {
     const apiConfig = loadApiConfig({ appPath, isPackaged: app.isPackaged });
@@ -134,8 +121,12 @@ app.whenReady().then(() => {
   });
   registerAuthHandlers(auth);
   runtimeManager = new RuntimeProcessManager({
-    resolveAdbExecutable: () => runtimeResources().adbExecutable,
-    resolveExecutable: () => runtimeResources().runtimeExecutable,
+    resolveExecutable: () =>
+      resolveRuntimeExecutable({
+        appPath,
+        isPackaged: app.isPackaged,
+        resourcesPath: process.resourcesPath,
+      }),
   });
   const runtime = createRuntimeServices(runtimeManager);
   try {

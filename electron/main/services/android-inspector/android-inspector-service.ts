@@ -43,13 +43,6 @@ export function parseScreenSize(output: string) {
 }
 
 function deviceError(device: AndroidDevice) {
-  if (device.status === 'permission-denied') {
-    return new AndroidInspectorError(
-      'ADB_PERMISSION_DENIED',
-      'Studio does not have permission to access this Android device. Configure Linux udev rules, reconnect it, then refresh devices.',
-      false,
-    );
-  }
   if (device.status === 'unauthorized') {
     return new AndroidInspectorError(
       'DEVICE_UNAUTHORIZED',

@@ -18,9 +18,6 @@ jobs:
     outputs:
       tag: ${{ steps.version.outputs.tag }}
       version: ${{ steps.version.outputs.version }}
-      runtime_commit: ${{ steps.runtime.outputs.commit }}
-      runtime_version: ${{ steps.runtime.outputs.version }}
-      runtime_build_time: ${{ steps.runtime.outputs.build_time }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -44,16 +41,6 @@ jobs:
           release_version="${BASH_REMATCH[1]}.${BASH_REMATCH[2]}.${GITHUB_RUN_NUMBER}"
           echo "version=$release_version" >> "$GITHUB_OUTPUT"
           echo "tag=main-v$release_version" >> "$GITHUB_OUTPUT"
-      - id: runtime
-        name: Read pinned Runtime dependency
-        shell: bash
-        run: |
-          runtime_commit="$(node -p "JSON.parse(require('fs').readFileSync('build/runtime-dependencies.json', 'utf8')).runtime.commit")"
-          runtime_version="$(node -p "JSON.parse(require('fs').readFileSync('build/runtime-dependencies.json', 'utf8')).runtime.version")"
-          runtime_build_time="$(node -p "JSON.parse(require('fs').readFileSync('build/runtime-dependencies.json', 'utf8')).runtime.buildTime")"
-          echo "commit=$runtime_commit" >> "$GITHUB_OUTPUT"
-          echo "version=$runtime_version" >> "$GITHUB_OUTPUT"
-          echo "build_time=$runtime_build_time" >> "$GITHUB_OUTPUT"
 
   build:
     name: Build ${{ matrix.name }}
@@ -66,10 +53,7 @@ jobs:
             os: windows-latest
             args: --win nsis --x64
             artifact: windows
-            files: |
-              release/*.exe
-              release/*.json
-              release/*.txt
+            files: release/*.exe
           - name: Linux x64
             os: ubuntu-latest
             args: --linux AppImage deb --x64
@@ -77,8 +61,6 @@ jobs:
             files: |
               release/*.AppImage
               release/*.deb
-              release/*.json
-              release/*.txt
     runs-on: ${{ matrix.os }}
     env:
       APP_VERSION: ${{ needs.prepare.outputs.version }}
@@ -88,62 +70,15 @@ jobs:
       VITE_PRIVACY_VERSION: ${{ vars.VITE_PRIVACY_VERSION }}
       VITE_TERMS_URL: ${{ vars.VITE_TERMS_URL }}
       VITE_TERMS_VERSION: ${{ vars.VITE_TERMS_VERSION }}
-      A2MATEX_ANDROID_SDK_LICENSE_ACCEPTED: ${{ vars.ANDROID_SDK_LICENSE_ACCEPTED }}
       WIN_CSC_KEY_PASSWORD: ${{ matrix.artifact == 'windows' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
       WIN_CSC_LINK: ${{ matrix.artifact == 'windows' && secrets.WIN_CSC_LINK || '' }}
     steps:
       - uses: actions/checkout@v4
-      - name: Checkout pinned Runtime source
-        uses: actions/checkout@v4
-        with:
-          repository: A2MaTex/a2matex-runtime
-          ref: ${{ needs.prepare.outputs.runtime_commit }}
-          path: a2matex-runtime
       - uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: a2matex-runtime/go.mod
-          cache-dependency-path: a2matex-runtime/go.sum
       - run: npm ci
-      - name: Require Android SDK license approval
-        shell: bash
-        run: |
-          if [[ "$A2MATEX_ANDROID_SDK_LICENSE_ACCEPTED" != "1" ]]; then
-            echo "Set repository variable ANDROID_SDK_LICENSE_ACCEPTED=1 only after project approval of the Android SDK license." >&2
-            exit 1
-          fi
-      - name: Build pinned Runtime
-        shell: bash
-        env:
-          RUNTIME_BUILD_TIME: ${{ needs.prepare.outputs.runtime_build_time }}
-          RUNTIME_COMMIT: ${{ needs.prepare.outputs.runtime_commit }}
-          RUNTIME_VERSION: ${{ needs.prepare.outputs.runtime_version }}
-        run: |
-          runtime_name=a2matex-runtime
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            runtime_name=a2matex-runtime.exe
-          fi
-          mkdir -p a2matex-runtime/bin
-          ldflags="-X github.com/A2MaTex/a2matex-runtime/internal/buildinfo.Version=$RUNTIME_VERSION -X github.com/A2MaTex/a2matex-runtime/internal/buildinfo.Commit=$RUNTIME_COMMIT -X github.com/A2MaTex/a2matex-runtime/internal/buildinfo.BuildTime=$RUNTIME_BUILD_TIME"
-          go -C a2matex-runtime build -buildvcs=false -ldflags "$ldflags" -o "bin/$runtime_name" ./cmd/agent
-      - name: Stage and verify Runtime resources
-        shell: bash
-        run: |
-          node scripts/prepare-runtime-resources.mjs \
-            --runtime-repository a2matex-runtime
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            npm run verify:runtime:win
-            npm run smoke:runtime:win
-            npm run smoke:owner-loss:win
-          else
-            npm run verify:runtime:linux
-            npm run smoke:runtime:linux
-            npm run smoke:stdio:linux
-            npm run smoke:owner-loss:linux
-          fi
       - name: Create production environment
         shell: bash
         run: |
@@ -160,50 +95,11 @@ jobs:
             printf 'VITE_PRIVACY_URL=%s\n' "$VITE_PRIVACY_URL"
           } > .env
       - run: npm run build:desktop
-      - name: Require Windows signing credentials
-        if: matrix.artifact == 'windows'
-        shell: bash
-        run: |
-          if [[ -z "$WIN_CSC_LINK" || -z "$WIN_CSC_KEY_PASSWORD" ]]; then
-            echo "Windows public releases require WIN_CSC_LINK and WIN_CSC_KEY_PASSWORD." >&2
-            exit 1
-          fi
       - name: Package ${{ matrix.name }}
         shell: bash
         run: >-
           npx electron-builder ${{ matrix.args }} --publish never
           -c.extraMetadata.version="$APP_VERSION"
-      - name: Verify Windows Authenticode signatures
-        if: matrix.artifact == 'windows'
-        shell: pwsh
-        run: |
-          $installer = Get-ChildItem release -Filter '*-setup.exe' | Select-Object -First 1
-          $files = @(
-            'release/win-unpacked/A2MaTeX Studio.exe',
-            'release/win-unpacked/resources/runtime/win32-x64/a2matex-runtime.exe',
-            $installer.FullName
-          )
-          foreach ($file in $files) {
-            if (-not $file -or -not (Test-Path $file)) {
-              throw "Missing signed Windows artifact: $file"
-            }
-            $signature = Get-AuthenticodeSignature $file
-            if ($signature.Status -ne 'Valid') {
-              throw "Invalid Authenticode signature for $file: $($signature.Status)"
-            }
-          }
-      - name: Verify packaged Runtime
-        shell: bash
-        run: |
-          if [[ "$RUNNER_OS" == "Windows" ]]; then
-            npm run verify:packaged-runtime:win
-            npm run smoke:packaged-manager:win
-          else
-            npm run verify:packaged-runtime:linux
-            npm run smoke:packaged-manager:linux
-          fi
-      - name: Generate release evidence
-        run: node scripts/generate-release-evidence.mjs --version "$APP_VERSION"
       - name: Upload ${{ matrix.name }} artifacts
         uses: actions/upload-artifact@v4
         with:
