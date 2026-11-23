@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { toRuntimeEditorGraph } from '@application/runtime/to-runtime-editor-graph';
 import type {
   RuntimeRunErrorCode,
+  RuntimeNodeAttempt,
   RuntimeRunPreparationPhase,
   RuntimeRunSnapshot,
   RuntimeStartDeviceInput,
@@ -18,6 +19,8 @@ import { useEditorStore } from '@presentation/stores/editor-store';
 
 const TERMINAL_RUN_STATES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED']);
 const POLL_INTERVAL_MS = 1_000;
+const NODE_PROGRESS_RESTART_MESSAGE =
+  'Restart A2MaTeX Studio to load the updated node-progress bridge and Runtime executable.';
 
 export type TestRunExecutionPhase =
   | 'idle'
@@ -33,7 +36,10 @@ export type TestRunExecutionPhase =
   | 'failed';
 
 export interface TestRunExecutionState {
+  attempts: RuntimeNodeAttempt[];
+  attemptsError: string | null;
   error: HostError<RuntimeRunErrorCode> | null;
+  nodeLabels: Record<string, string>;
   phase: TestRunExecutionPhase;
   pollError: string | null;
   selectedAdbSerial: string | null;
@@ -75,13 +81,42 @@ function phaseFromPreparation(phase: RuntimeRunPreparationPhase): TestRunExecuti
 }
 
 const INITIAL_STATE: TestRunExecutionState = {
+  attempts: [],
+  attemptsError: null,
   error: null,
+  nodeLabels: {},
   phase: 'idle',
   pollError: null,
   selectedAdbSerial: null,
   snapshot: null,
   validation: null,
 };
+
+function humanizeNodeType(value: string) {
+  const words = value
+    .replace(/[._-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .trim();
+  return words ? words.charAt(0).toUpperCase() + words.slice(1) : 'Workflow step';
+}
+
+function nodeLabelsFromEditorGraph(editorGraph: Record<string, unknown>) {
+  if (!Array.isArray(editorGraph.nodes)) return {};
+  return Object.fromEntries(
+    editorGraph.nodes.flatMap((value) => {
+      if (!value || Array.isArray(value) || typeof value !== 'object') return [];
+      const node = value as Record<string, unknown>;
+      if (typeof node.id !== 'string') return [];
+      const editor =
+        node.editor && !Array.isArray(node.editor) && typeof node.editor === 'object'
+          ? (node.editor as Record<string, unknown>)
+          : null;
+      const customName = typeof editor?.name === 'string' ? editor.name.trim() : '';
+      const type = typeof node.type === 'string' ? node.type : '';
+      return [[node.id, customName || humanizeNodeType(type)]];
+    }),
+  );
+}
 
 export function useTestRunExecution(projectId: string | null) {
   const store = useProjectStoreApi();
@@ -133,9 +168,12 @@ export function useTestRunExecution(projectId: string | null) {
           return;
         }
         const snapshot = result.value.snapshot;
+        const project = store.getState().session?.snapshot.document;
+        const workflow = project?.workflows[project.manifest.entryWorkflow];
         intentLockRef.current = !terminal(snapshot);
         setState({
           ...INITIAL_STATE,
+          nodeLabels: workflow ? nodeLabelsFromEditorGraph(toRuntimeEditorGraph(workflow)) : {},
           phase: terminal(snapshot) ? 'terminal' : 'running',
           selectedAdbSerial: snapshot.deviceExecutions[0]?.adbSerial ?? null,
           snapshot,
@@ -154,7 +192,7 @@ export function useTestRunExecution(projectId: string | null) {
         });
       }
     },
-    [projectId, setActiveBottomTab],
+    [projectId, setActiveBottomTab, store],
   );
 
   const recover = useCallback(
@@ -202,6 +240,7 @@ export function useTestRunExecution(projectId: string | null) {
       activeIntentIdRef.current = intent.clientIntentId ?? null;
       setState({
         ...INITIAL_STATE,
+        nodeLabels: nodeLabelsFromEditorGraph(intent.editorGraph),
         phase: 'preparing',
         selectedAdbSerial: intent.adbSerial,
       });
@@ -218,6 +257,7 @@ export function useTestRunExecution(projectId: string | null) {
           }
           setState({
             ...INITIAL_STATE,
+            nodeLabels: nodeLabelsFromEditorGraph(intent.editorGraph),
             phase: uncertain ? 'uncertain' : 'failed',
             selectedAdbSerial: intent.adbSerial,
             error: result.error,
@@ -232,6 +272,7 @@ export function useTestRunExecution(projectId: string | null) {
           intentLockRef.current = false;
           setState({
             ...INITIAL_STATE,
+            nodeLabels: nodeLabelsFromEditorGraph(intent.editorGraph),
             phase: 'failed',
             selectedAdbSerial: intent.adbSerial,
             validation: result.value.validation,
@@ -252,6 +293,7 @@ export function useTestRunExecution(projectId: string | null) {
         intentLockRef.current = !terminal(snapshot);
         setState({
           ...INITIAL_STATE,
+          nodeLabels: nodeLabelsFromEditorGraph(intent.editorGraph),
           phase: terminal(snapshot) ? 'terminal' : 'running',
           selectedAdbSerial: intent.adbSerial,
           snapshot,
@@ -267,6 +309,7 @@ export function useTestRunExecution(projectId: string | null) {
         );
         setState({
           ...INITIAL_STATE,
+          nodeLabels: nodeLabelsFromEditorGraph(intent.editorGraph),
           phase: 'uncertain',
           selectedAdbSerial: intent.adbSerial,
           error,
@@ -282,6 +325,17 @@ export function useTestRunExecution(projectId: string | null) {
     async (device: RuntimeStartDeviceInput): Promise<TestRunStartOutcome> => {
       if (intentLockRef.current) return 'FAILED';
       intentLockRef.current = true;
+      if (typeof window.studioHost?.runtime.getNodeAttempts !== 'function') {
+        intentLockRef.current = false;
+        setState({
+          ...INITIAL_STATE,
+          phase: 'failed',
+          selectedAdbSerial: device.adbSerial,
+          error: localError('RUNTIME_INCOMPATIBLE', NODE_PROGRESS_RESTART_MESSAGE, false),
+        });
+        setActiveBottomTab('output');
+        return 'FAILED';
+      }
       const startingState = store.getState();
       const startingSession = startingState.session;
       if (!startingSession || startingSession.snapshot.localId !== projectId) {
@@ -385,7 +439,7 @@ export function useTestRunExecution(projectId: string | null) {
       pendingIntentRef.current = intent;
       return submitIntent(intent);
     },
-    [projectId, store, submitIntent],
+    [projectId, setActiveBottomTab, store, submitIntent],
   );
 
   const retryAdmission = useCallback(() => {
@@ -466,6 +520,74 @@ export function useTestRunExecution(projectId: string | null) {
       if (timer) clearTimeout(timer);
     };
   }, [state.phase, state.snapshot]);
+
+  useEffect(() => {
+    const snapshot = state.snapshot;
+    const execution = snapshot?.deviceExecutions[0];
+    if (!snapshot || !execution) return;
+    const runGroupId = snapshot.runGroup.id;
+    const deviceExecutionId = execution.id;
+    let cancelled = false;
+
+    const loadAttempts = async () => {
+      const host = window.studioHost;
+      if (!host) return;
+      if (typeof host.runtime.getNodeAttempts !== 'function') {
+        setState((current) =>
+          current.snapshot?.runGroup.id === runGroupId
+            ? { ...current, attemptsError: NODE_PROGRESS_RESTART_MESSAGE }
+            : current,
+        );
+        return;
+      }
+      const attempts: RuntimeNodeAttempt[] = [];
+      let afterSequence = 0;
+      try {
+        for (;;) {
+          const result = await host.runtime.getNodeAttempts({
+            deviceExecutionId,
+            afterSequence,
+            limit: 100,
+          });
+          if (cancelled) return;
+          if (!result.ok) {
+            const message =
+              result.error.httpStatus === 404 && result.error.runtimeCode === 'RESOURCE_NOT_FOUND'
+                ? NODE_PROGRESS_RESTART_MESSAGE
+                : result.error.message;
+            setState((current) =>
+              current.snapshot?.runGroup.id === runGroupId
+                ? { ...current, attemptsError: message }
+                : current,
+            );
+            return;
+          }
+          attempts.push(...result.value.attempts);
+          const next = result.value.nextAfterSequence;
+          if (next === null) break;
+          if (next <= afterSequence) throw new Error('Attempt pagination did not advance.');
+          afterSequence = next;
+        }
+        setState((current) =>
+          current.snapshot?.runGroup.id === runGroupId
+            ? { ...current, attempts, attemptsError: null }
+            : current,
+        );
+      } catch {
+        if (cancelled) return;
+        setState((current) =>
+          current.snapshot?.runGroup.id === runGroupId
+            ? { ...current, attemptsError: 'Unable to refresh node progress.' }
+            : current,
+        );
+      }
+    };
+
+    void loadAttempts();
+    return () => {
+      cancelled = true;
+    };
+  }, [state.snapshot]);
 
   const runtimeStopped = useCallback(() => {
     const interrupted = intentLockRef.current;

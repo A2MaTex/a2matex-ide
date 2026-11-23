@@ -43,6 +43,7 @@ const studioHost = {
     startRun: (input) => ipcRenderer.invoke('studio:runtime:start-run', input),
     getActiveRun: () => ipcRenderer.invoke('studio:runtime:get-active-run'),
     getRun: (runGroupId) => ipcRenderer.invoke('studio:runtime:get-run', runGroupId),
+    getNodeAttempts: (input) => ipcRenderer.invoke('studio:runtime:get-node-attempts', input),
     listDevices: () => ipcRenderer.invoke('studio:runtime:list-devices'),
     refreshDevices: () => ipcRenderer.invoke('studio:runtime:refresh-devices'),
     shutdown: () => ipcRenderer.invoke('studio:runtime:shutdown'),

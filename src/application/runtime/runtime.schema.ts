@@ -184,6 +184,45 @@ export const runtimeRunSnapshotSchema = z
     }
   });
 
+export const runtimeNodeAttemptStatusSchema = z.enum([
+  'RUNNING',
+  'SUCCEEDED',
+  'FAILED',
+  'TIMED_OUT',
+  'CANCELLED',
+  'INTERRUPTED',
+]);
+
+export const runtimeNodeAttemptSchema = z
+  .object({
+    id: runtimeUuidV4Schema,
+    deviceExecutionId: runtimeUuidV4Schema,
+    sequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    nodeId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+    attemptNumber: z.number().int().min(1).max(3),
+    status: runtimeNodeAttemptStatusSchema,
+    startedAt: runtimeTimestampSchema,
+    finishedAt: runtimeTimestampSchema.nullable(),
+    output: jsonObjectSchema.nullable(),
+    error: runtimeApiErrorSchema.nullable(),
+  })
+  .strict();
+
+export const runtimeNodeAttemptPageSchema = z
+  .object({
+    attempts: z.array(runtimeNodeAttemptSchema).max(100),
+    nextAfterSequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).nullable(),
+  })
+  .strict();
+
+export const runtimeNodeAttemptsInputSchema = z
+  .object({
+    deviceExecutionId: runtimeUuidV4Schema,
+    afterSequence: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).default(0),
+    limit: z.number().int().min(1).max(100).default(100),
+  })
+  .strict();
+
 export const runtimeStartDeviceInputSchema = z
   .object({
     adbSerial: z.string().trim().min(1).max(512),

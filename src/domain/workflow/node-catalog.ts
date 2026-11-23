@@ -1,5 +1,9 @@
 import { bindingInputsFor, type NodeDefinition } from '@domain/workflow/node-definition';
-import { defaultBindingFor, literalBinding } from '@domain/workflow/workflow-binding';
+import {
+  defaultBindingFor,
+  firstBindingKind,
+  literalBinding,
+} from '@domain/workflow/workflow-binding';
 import type { WorkflowBinding } from '@domain/project/project';
 import type { JsonValue } from '@shared/types/json-value';
 
@@ -32,13 +36,13 @@ export function defaultNodeValuesFor(definition: NodeDefinition): {
     if (initialMode) config.targetMode = initialMode;
   }
   for (const [name, input] of Object.entries(bindingInputsFor(definition, config))) {
-    if (
-      input.valueSchema?.default !== undefined &&
-      input.bindingKinds.LITERAL &&
-      !Object.hasOwn(bindings, name)
-    ) {
+    if (Object.hasOwn(bindings, name)) continue;
+    if (input.valueSchema?.default !== undefined && input.bindingKinds.LITERAL) {
       bindings[name] = literalBinding(input.valueSchema.default);
+      continue;
     }
+    const kind = input.required ? firstBindingKind(input) : undefined;
+    if (kind) bindings[name] = defaultBindingFor(input, kind);
   }
   if (definition.switch && !Array.isArray(config.rules)) {
     const operator = definition.switch.operators[0];

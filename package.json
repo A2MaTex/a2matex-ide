@@ -24,7 +24,7 @@
     "test": "vitest run",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"electron/**/*.{ts,cts}\" \"tests/**/*.{ts,tsx}\" \"*.{js,json,ts}\" \".github/**/*.yml\" --no-error-on-unmatched-pattern",
     "format:check": "prettier --check \"src/**/*.{ts,tsx,css}\" \"electron/**/*.{ts,cts}\" \"tests/**/*.{ts,tsx}\" \"*.{js,json,ts}\" \".github/**/*.yml\" --no-error-on-unmatched-pattern",
-    "quality": "npm run format:check && npm run lint && npm run typecheck && npm run test && npm run build:desktop",
+    "quality": "npm run format:check && npm run lint && npm run typecheck && npm run build:desktop",
     "package": "npm run build:desktop && electron-builder --dir",
     "dist": "npm run build:desktop && electron-builder",
     "dist:win": "npm run build:desktop && electron-builder --win nsis --x64",

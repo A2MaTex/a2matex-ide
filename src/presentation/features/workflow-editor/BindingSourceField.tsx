@@ -4,7 +4,11 @@ import type {
   NodeDefinition,
   WorkflowBindingKind,
 } from '@domain/workflow/node-definition';
-import { defaultBindingFor, workflowBindingKind } from '@domain/workflow/workflow-binding';
+import {
+  defaultBindingFor,
+  firstBindingKind,
+  workflowBindingKind,
+} from '@domain/workflow/workflow-binding';
 import { nodeOutputOptions, variableSuggestions } from '@domain/workflow/binding-options';
 import type { JsonValue } from '@shared/types/json-value';
 import { SchemaValueField } from '@presentation/features/workflow-editor/SchemaValueField';
@@ -65,15 +69,17 @@ export function BindingSourceField({
   onChange,
 }: BindingSourceFieldProps) {
   const kinds = Object.keys(input.bindingKinds) as WorkflowBindingKind[];
-  const kind = workflowBindingKind(binding);
+  const kind =
+    workflowBindingKind(binding) ?? (input.required ? firstBindingKind(input) : undefined);
+  const selectedBinding = binding ?? (kind ? defaultBindingFor(input, kind) : undefined);
   const inputClass =
     'h-9 w-full rounded-md border border-border bg-background px-2.5 text-xs outline-none focus:border-primary';
   const outputOptions = nodeOutputOptions(workflow, consumerNodeId, input, catalog);
   const selectedOutput =
     kind === 'NODE_OUTPUT' &&
-    typeof binding?.nodeId === 'string' &&
-    typeof binding.field === 'string'
-      ? `${binding.nodeId}\u0000${binding.field}`
+    typeof selectedBinding?.nodeId === 'string' &&
+    typeof selectedBinding.field === 'string'
+      ? `${selectedBinding.nodeId}\u0000${selectedBinding.field}`
       : '';
   const suggestions =
     kind === 'FLOW_VARIABLE'
@@ -83,9 +89,9 @@ export function BindingSourceField({
         : [];
   const literalTypes = input.bindingKinds.LITERAL?.literalTypes ?? ['string'];
   const literalType =
-    typeof binding?.value === 'boolean'
+    typeof selectedBinding?.value === 'boolean'
       ? 'boolean'
-      : typeof binding?.value === 'number'
+      : typeof selectedBinding?.value === 'number'
         ? 'number'
         : 'string';
 
@@ -120,7 +126,7 @@ export function BindingSourceField({
           }}
           className={inputClass}
         >
-          <option value="">Select source…</option>
+          {!input.required ? <option value="">Select source…</option> : null}
           {kinds.map((entry) => (
             <option key={entry} value={entry}>
               {labels[entry]}
@@ -135,7 +141,7 @@ export function BindingSourceField({
             id={`${id}-literal`}
             name="Value"
             schema={input.valueSchema}
-            value={binding?.value}
+            value={selectedBinding?.value}
             errors={[]}
             onChange={(value) => onChange(value === undefined ? undefined : { kind, value })}
           />
@@ -166,7 +172,7 @@ export function BindingSourceField({
             <label className="flex h-9 flex-1 items-center gap-2 rounded border border-border px-2 text-xs">
               <input
                 type="checkbox"
-                checked={binding?.value === true}
+                checked={selectedBinding?.value === true}
                 onChange={(event) => onChange({ kind, value: event.target.checked })}
               />
               True
@@ -176,8 +182,9 @@ export function BindingSourceField({
               aria-label={`${input.name} value`}
               type={literalType === 'number' ? 'number' : 'text'}
               value={
-                typeof binding?.value === 'string' || typeof binding?.value === 'number'
-                  ? String(binding.value)
+                typeof selectedBinding?.value === 'string' ||
+                typeof selectedBinding?.value === 'number'
+                  ? String(selectedBinding.value)
                   : ''
               }
               onChange={(event) =>
@@ -194,7 +201,7 @@ export function BindingSourceField({
         <div className="pt-2.5">
           <select
             aria-label={`${input.name} workflow input`}
-            value={typeof binding?.inputName === 'string' ? binding.inputName : ''}
+            value={typeof selectedBinding?.inputName === 'string' ? selectedBinding.inputName : ''}
             onChange={(event) => onChange({ kind, inputName: event.target.value })}
             className={inputClass}
           >
@@ -233,7 +240,7 @@ export function BindingSourceField({
           <input
             aria-label={`${input.name} variable name`}
             list={`${id}-variables`}
-            value={typeof binding?.name === 'string' ? binding.name : ''}
+            value={typeof selectedBinding?.name === 'string' ? selectedBinding.name : ''}
             onChange={(event) => onChange({ kind, name: event.target.value })}
             className={inputClass}
           />

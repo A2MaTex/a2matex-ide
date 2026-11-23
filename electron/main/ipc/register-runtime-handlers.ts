@@ -3,6 +3,7 @@ import { BrowserWindow, ipcMain, type IpcMainInvokeEvent } from 'electron';
 import { RuntimeError, toRuntimeError } from '@application/runtime/runtime.error';
 import {
   runtimeCompilationInputSchema,
+  runtimeNodeAttemptsInputSchema,
   runtimeStartRunInputSchema,
   runtimeUuidV4Schema,
   runtimeValidationInputSchema,
@@ -142,6 +143,21 @@ export function registerRuntimeHandlers(
       );
     }
     return options.runs.runById(runGroupId.data);
+  });
+  register(IPC_CHANNELS.runtimeGetNodeAttempts, async (rawInput) => {
+    const input = runtimeNodeAttemptsInputSchema.safeParse(rawInput);
+    if (!input.success) {
+      throw new RuntimeError(
+        'RUNTIME_INVALID_REQUEST',
+        'A valid device execution ID and attempt page are required.',
+        false,
+      );
+    }
+    return runtime.nodeAttempts(
+      input.data.deviceExecutionId,
+      input.data.afterSequence,
+      input.data.limit,
+    );
   });
   register(IPC_CHANNELS.runtimeShutdown, async () => {
     await runtime.shutdown();

@@ -21,6 +21,7 @@ export const IPC_CHANNELS = {
   runtimeStartRun: 'studio:runtime:start-run',
   runtimeGetActiveRun: 'studio:runtime:get-active-run',
   runtimeGetRun: 'studio:runtime:get-run',
+  runtimeGetNodeAttempts: 'studio:runtime:get-node-attempts',
   runtimeRunPreparationChanged: 'studio:runtime:run-preparation-changed',
   runtimeListDevices: 'studio:runtime:list-devices',
   runtimeRefreshDevices: 'studio:runtime:refresh-devices',

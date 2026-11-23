@@ -89,6 +89,27 @@ export interface RuntimeRunSnapshot {
   deviceExecutions: RuntimeDeviceExecution[];
 }
 
+export type RuntimeNodeAttemptStatus =
+  'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'TIMED_OUT' | 'CANCELLED' | 'INTERRUPTED';
+
+export interface RuntimeNodeAttempt {
+  id: string;
+  deviceExecutionId: string;
+  sequence: number;
+  nodeId: string;
+  attemptNumber: number;
+  status: RuntimeNodeAttemptStatus;
+  startedAt: string;
+  finishedAt: string | null;
+  output: Record<string, JsonValue> | null;
+  error: RuntimeApiError | null;
+}
+
+export interface RuntimeNodeAttemptPage {
+  attempts: RuntimeNodeAttempt[];
+  nextAfterSequence: number | null;
+}
+
 export interface RuntimeStartDeviceInput {
   adbSerial: string;
   inputs: Record<string, JsonValue>;
@@ -165,6 +186,11 @@ export interface RuntimeOperations {
   compile(input: RuntimeCompilationInput): Promise<RuntimeCompilationResult>;
   getStatus(): RuntimeStatus;
   listDevices(): Promise<RuntimeDevice[]>;
+  nodeAttempts(
+    deviceExecutionId: string,
+    afterSequence?: number,
+    limit?: number,
+  ): Promise<RuntimeNodeAttemptPage>;
   onStatusChanged(listener: (status: RuntimeStatus) => void): () => void;
   refreshDevices(): Promise<RuntimeDevice[]>;
   runById(runGroupId: string): Promise<RuntimeRunLookupResult>;

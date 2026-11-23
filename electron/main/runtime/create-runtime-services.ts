@@ -47,6 +47,10 @@ export function createRuntimeServices(manager: RuntimeProcessManager): RuntimeOp
         return client.compile({ editorGraph: input.editorGraph, inputSchema: input.inputSchema });
       }),
     listDevices: () => manager.withReadyRuntime((client) => client.listDevices(false)),
+    nodeAttempts: (deviceExecutionId, afterSequence, limit) =>
+      manager.withReadyRuntime((client) =>
+        client.nodeAttempts(deviceExecutionId, afterSequence, limit),
+      ),
     refreshDevices: () => manager.withReadyRuntime((client) => client.listDevices(true)),
     runById: (runGroupId) => manager.withReadyRuntime((client) => client.runById(runGroupId)),
     startRun: (input) => manager.withReadyRuntime((client) => client.startRun(input)),

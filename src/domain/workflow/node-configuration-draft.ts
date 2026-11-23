@@ -13,6 +13,8 @@ import {
   type NodeDefinition,
 } from '@domain/workflow/node-definition';
 import {
+  defaultBindingFor,
+  firstBindingKind,
   isLiteralBinding,
   literalBinding,
   validateWorkflowBinding,
@@ -54,9 +56,13 @@ function withBindingDefaults(
 ) {
   const result: Record<string, WorkflowBinding> = structuredClone(bindings);
   for (const [field, input] of Object.entries(inputs)) {
-    if (!result[field] && input.valueSchema?.default !== undefined && input.bindingKinds.LITERAL) {
+    if (result[field]) continue;
+    if (input.valueSchema?.default !== undefined && input.bindingKinds.LITERAL) {
       result[field] = literalBinding(input.valueSchema.default);
+      continue;
     }
+    const kind = input.required ? firstBindingKind(input) : undefined;
+    if (kind) result[field] = defaultBindingFor(input, kind);
   }
   return result;
 }
@@ -78,13 +84,14 @@ export function createNodeConfigurationDraft(
         : structuredClone(binding),
     ]),
   );
+  const bindingInputs = definition ? bindingInputsFor(definition, config) : {};
   return {
     nodeId: node.id,
     baseRevision,
     config,
     inputSchema: structuredClone(inputSchema),
-    bindingInputs: definition ? bindingInputsFor(definition, config) : {},
-    bindings,
+    bindingInputs,
+    bindings: withBindingDefaults(bindingInputs, bindings),
     errorPolicy: node.errorPolicy,
     ...(node.timeoutMs === undefined ? {} : { timeoutMs: node.timeoutMs }),
     ...(node.retryPolicy ? { retryPolicy: structuredClone(node.retryPolicy) } : {}),

@@ -7,6 +7,7 @@ import {
   runtimeCompilationResultSchema,
   runtimeDevicesSchema,
   runtimeInfoSchema,
+  runtimeNodeAttemptPageSchema,
   runtimeRunSnapshotSchema,
   runtimeUuidV4Schema,
 } from '@application/runtime/runtime.schema';
@@ -14,6 +15,7 @@ import type {
   RuntimeCompilationResult,
   RuntimeDevice,
   RuntimeInfo,
+  RuntimeNodeAttemptPage,
   RuntimeRunLookupResult,
   RuntimeSession,
   RuntimeStartRequest,
@@ -71,6 +73,7 @@ export class RuntimeHttpClient {
   private async request<T>(input: {
     body?: unknown;
     method: 'GET' | 'POST';
+    params?: Record<string, number | string>;
     route: string;
     schema: ZodType<T>;
     successStatuses?: readonly number[];
@@ -81,6 +84,7 @@ export class RuntimeHttpClient {
       const response = await this.client.request({
         url: route,
         method: input.method,
+        params: input.params,
         ...(input.body === undefined
           ? {}
           : { data: input.body, headers: { 'Content-Type': 'application/json' } }),
@@ -243,6 +247,35 @@ export class RuntimeHttpClient {
       );
     }
     return this.lookupRun(`runs/${encodeURIComponent(runGroupId)}`);
+  }
+
+  async nodeAttempts(
+    deviceExecutionId: string,
+    afterSequence = 0,
+    limit = 100,
+  ): Promise<RuntimeNodeAttemptPage> {
+    if (
+      !runtimeUuidV4Schema.safeParse(deviceExecutionId).success ||
+      !Number.isSafeInteger(afterSequence) ||
+      afterSequence < 0 ||
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > 100
+    ) {
+      throw new RuntimeError(
+        'RUNTIME_INVALID_REQUEST',
+        'A valid device execution ID and attempt page are required.',
+        false,
+      );
+    }
+    const result = await this.request({
+      method: 'GET',
+      route: `device-executions/${encodeURIComponent(deviceExecutionId)}/attempts`,
+      params: { afterSequence, limit },
+      schema: runtimeNodeAttemptPageSchema,
+      successStatuses: [200],
+    });
+    return result.body;
   }
 
   private async lookupRun(route: string): Promise<RuntimeRunLookupResult> {

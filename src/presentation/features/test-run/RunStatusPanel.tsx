@@ -1,4 +1,4 @@
-import { AlertTriangle, CirclePlay, LoaderCircle, RotateCw } from 'lucide-react';
+import { AlertTriangle, Check, CirclePlay, Clock3, LoaderCircle, RotateCw, X } from 'lucide-react';
 
 import { Button } from '@presentation/components/ui/button';
 import type { TestRunExecutionState } from '@presentation/features/test-run/useTestRunExecution';
@@ -11,6 +11,26 @@ interface RunStatusPanelProps {
 
 function displayTimestamp(value: string | null) {
   return value ? new Date(value).toLocaleString() : '—';
+}
+
+function displayDuration(startedAt: string, finishedAt: string | null) {
+  const duration = Math.max(
+    0,
+    (finishedAt ? new Date(finishedAt).getTime() : Date.now()) - new Date(startedAt).getTime(),
+  );
+  if (duration < 1_000) return `${duration} ms`;
+  if (duration < 60_000) return `${(duration / 1_000).toFixed(duration < 10_000 ? 1 : 0)} s`;
+  const minutes = Math.floor(duration / 60_000);
+  const seconds = Math.floor((duration % 60_000) / 1_000);
+  return `${minutes}m ${seconds}s`;
+}
+
+function attemptIsSuccessful(status: string) {
+  return status === 'SUCCEEDED';
+}
+
+function attemptIsRunning(status: string) {
+  return status === 'RUNNING';
 }
 
 function statusTone(status: string) {
@@ -102,18 +122,6 @@ export function RunStatusPanel({ state, onRecover, onRetryAdmission }: RunStatus
           </div>
           <div className="mt-3 grid gap-2 text-[11px] text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
             <span>
-              Run ID
-              <strong className="mt-0.5 block break-all font-mono text-foreground">
-                {snapshot.runGroup.id}
-              </strong>
-            </span>
-            <span>
-              Request ID
-              <strong className="mt-0.5 block break-all font-mono text-foreground">
-                {snapshot.runGroup.requestId}
-              </strong>
-            </span>
-            <span>
               Started
               <strong className="mt-0.5 block text-foreground">
                 {displayTimestamp(snapshot.runGroup.createdAt)}
@@ -136,35 +144,133 @@ export function RunStatusPanel({ state, onRecover, onRetryAdmission }: RunStatus
             ))}
           </div>
 
-          <div className="mt-4 grid gap-2">
-            {snapshot.deviceExecutions.map((execution) => (
-              <div
-                key={execution.id}
-                className="rounded-md border border-border bg-background/40 p-3"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-xs">{execution.adbSerial}</span>
-                  <span
-                    className={`rounded px-2 py-0.5 font-mono text-[10px] ${statusTone(execution.status)}`}
+          {snapshot.deviceExecutions[0] ? (
+            <div className="mt-4 rounded-md border border-border bg-background/40 p-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div>
+                  <p className="font-medium text-foreground">Execution progress</p>
+                  <p className="mt-0.5 text-[10px] text-muted-foreground">
+                    {state.attempts.filter((attempt) => attemptIsSuccessful(attempt.status)).length}{' '}
+                    completed
+                    {state.attempts.some((attempt) => attemptIsRunning(attempt.status))
+                      ? ' · 1 running'
+                      : ''}
+                  </p>
+                </div>
+                <span
+                  className={`rounded px-2 py-0.5 font-mono text-[10px] ${statusTone(snapshot.deviceExecutions[0].status)}`}
+                >
+                  {snapshot.deviceExecutions[0].status}
+                </span>
+              </div>
+
+              {state.attempts.length > 0 ? (
+                <div className="mt-4 overflow-x-auto pb-2">
+                  <div
+                    role="list"
+                    aria-label="Node execution progress"
+                    data-orientation="horizontal"
+                    className="grid min-w-full items-start pt-1"
+                    style={{
+                      gridTemplateColumns: `repeat(${state.attempts.length}, minmax(11rem, 1fr))`,
+                      minWidth: `${state.attempts.length * 176}px`,
+                    }}
                   >
-                    {execution.status}
+                    {state.attempts.map((attempt, index) => {
+                      const successful = attemptIsSuccessful(attempt.status);
+                      const running = attemptIsRunning(attempt.status);
+                      const label =
+                        state.nodeLabels[attempt.nodeId] ?? `Workflow step ${index + 1}`;
+                      return (
+                        <div
+                          key={attempt.id}
+                          role="listitem"
+                          className="relative min-w-0 px-3 pt-8 text-center"
+                        >
+                          {index < state.attempts.length - 1 ? (
+                            <span
+                              aria-hidden="true"
+                              className={`absolute left-1/2 top-[11px] h-px w-full ${successful ? 'bg-success' : 'bg-border'}`}
+                            />
+                          ) : null}
+                          <span
+                            aria-hidden="true"
+                            className={`absolute left-1/2 top-0 z-10 flex size-6 -translate-x-1/2 items-center justify-center rounded-full border ${
+                              successful
+                                ? 'border-success bg-success text-background'
+                                : running
+                                  ? 'border-primary bg-background text-primary'
+                                  : 'border-destructive bg-background text-destructive'
+                            }`}
+                          >
+                            {successful ? (
+                              <Check className="size-3.5" strokeWidth={3} />
+                            ) : running ? (
+                              <LoaderCircle className="size-3.5 animate-spin" />
+                            ) : (
+                              <X className="size-3.5" strokeWidth={3} />
+                            )}
+                          </span>
+                          <p
+                            className="truncate font-medium text-secondary-foreground"
+                            title={label}
+                          >
+                            {label}
+                          </p>
+                          {attempt.attemptNumber > 1 ? (
+                            <p className="mt-0.5 text-[10px] text-muted-foreground">
+                              Retry attempt {attempt.attemptNumber}
+                            </p>
+                          ) : null}
+                          <p
+                            className={`mt-1 font-mono text-[10px] ${
+                              successful
+                                ? 'text-success'
+                                : running
+                                  ? 'text-primary'
+                                  : 'text-destructive'
+                            }`}
+                            title={`Started ${displayTimestamp(attempt.startedAt)}`}
+                          >
+                            {attempt.status} ·{' '}
+                            {displayDuration(attempt.startedAt, attempt.finishedAt)}
+                          </p>
+                          {attempt.error &&
+                          (snapshot.deviceExecutions[0].terminalError?.code !==
+                            attempt.error.code ||
+                            snapshot.deviceExecutions[0].terminalError?.message !==
+                              attempt.error.message) ? (
+                            <p className="mt-1 line-clamp-2 text-[10px] text-destructive">
+                              {attempt.error.message}
+                            </p>
+                          ) : null}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : (
+                <div className="mt-4 flex items-center gap-2 rounded border border-dashed border-border px-3 py-4 text-muted-foreground">
+                  <Clock3 className="size-4" />
+                  Waiting for the first node to start…
+                </div>
+              )}
+
+              {state.attemptsError ? (
+                <p role="status" className="mt-3 text-warning">
+                  Node progress refresh failed: {state.attemptsError}
+                </p>
+              ) : null}
+              {snapshot.deviceExecutions[0].terminalError ? (
+                <div className="mt-3 rounded border border-destructive/30 bg-destructive/10 p-2 text-destructive">
+                  {snapshot.deviceExecutions[0].terminalError.message}
+                  <span className="ml-1 font-mono text-[10px]">
+                    ({snapshot.deviceExecutions[0].terminalError.code})
                   </span>
                 </div>
-                <div className="mt-2 grid gap-1 text-[11px] text-muted-foreground sm:grid-cols-2">
-                  <span>Next node: {execution.nextNodeId ?? '—'}</span>
-                  <span>Started: {displayTimestamp(execution.startedAt)}</span>
-                </div>
-                {execution.terminalError ? (
-                  <div className="mt-2 rounded border border-destructive/30 bg-destructive/10 p-2 text-destructive">
-                    {execution.terminalError.message}
-                    <span className="ml-1 font-mono text-[10px]">
-                      ({execution.terminalError.code})
-                    </span>
-                  </div>
-                ) : null}
-              </div>
-            ))}
-          </div>
+              ) : null}
+            </div>
+          ) : null}
 
           {state.pollError ? (
             <p role="status" className="mt-3 text-warning">

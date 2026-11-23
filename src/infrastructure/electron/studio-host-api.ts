@@ -34,6 +34,7 @@ import type {
   RuntimeCompilationResult,
   RuntimeDevice,
   RuntimeErrorCode,
+  RuntimeNodeAttemptPage,
   RuntimeRunErrorCode,
   RuntimeRunIntentResult,
   RuntimeRunLookupResult,
@@ -99,6 +100,11 @@ export interface StudioHostApi {
     ): Promise<HostResult<RuntimeRunIntentResult, RuntimeRunErrorCode>>;
     getActiveRun(): Promise<HostResult<RuntimeRunLookupResult, RuntimeRunErrorCode>>;
     getRun(runGroupId: string): Promise<HostResult<RuntimeRunLookupResult, RuntimeRunErrorCode>>;
+    getNodeAttempts(input: {
+      deviceExecutionId: string;
+      afterSequence?: number;
+      limit?: number;
+    }): Promise<HostResult<RuntimeNodeAttemptPage, RuntimeRunErrorCode>>;
     listDevices(): Promise<HostResult<RuntimeDevice[], RuntimeErrorCode>>;
     refreshDevices(): Promise<HostResult<RuntimeDevice[], RuntimeErrorCode>>;
     shutdown(): Promise<HostResult<void, RuntimeErrorCode>>;
