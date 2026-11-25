@@ -8,19 +8,28 @@ import {
   runtimeDevicesSchema,
   runtimeInfoSchema,
   runtimeNodeAttemptPageSchema,
+  runtimeErrorEnvelopeSchema,
+  runtimeRunActionConflictSchema,
   runtimeRunSnapshotSchema,
   runtimeUuidV4Schema,
 } from '@application/runtime/runtime.schema';
 import type {
   RuntimeCompilationResult,
+  RuntimeArtifactPreview,
   RuntimeDevice,
   RuntimeInfo,
   RuntimeNodeAttemptPage,
   RuntimeRunLookupResult,
+  RuntimeRunAction,
+  RuntimeRunActionResult,
   RuntimeSession,
   RuntimeStartRequest,
   RuntimeStartRunResult,
 } from '@application/runtime/runtime.types';
+import {
+  MAX_RUNTIME_ARTIFACT_BYTES,
+  validateRuntimePng,
+} from '@electron/main/runtime/http/runtime-artifact';
 import { workflowValidationOutputSchema } from '@application/workflow-validation/workflow-validation.schema';
 import type { WorkflowValidationOutput } from '@application/workflow-validation/workflow-validation.types';
 import type { JsonValue } from '@shared/types/json-value';
@@ -125,6 +134,9 @@ export class RuntimeHttpClient {
           {
             httpStatus: response.status,
             runtimeCode,
+            unavailableDevices: errorResponse.success
+              ? errorResponse.data.unavailableDevices
+              : undefined,
             validation: errorResponse.success ? errorResponse.data.validation : undefined,
           },
         );
@@ -234,6 +246,97 @@ export class RuntimeHttpClient {
     };
   }
 
+  async submitRunAction(
+    runGroupId: string,
+    action: RuntimeRunAction,
+  ): Promise<RuntimeRunActionResult> {
+    if (!runtimeUuidV4Schema.safeParse(runGroupId).success) {
+      throw new RuntimeError(
+        'RUNTIME_INVALID_REQUEST',
+        'A canonical lowercase run group UUID v4 is required.',
+        false,
+      );
+    }
+    const route = this.assertRoute(`runs/${encodeURIComponent(runGroupId)}/actions`);
+    try {
+      const response = await this.client.request({
+        url: route,
+        method: 'POST',
+        data: { action },
+        headers: { 'Content-Type': 'application/json' },
+      });
+      if (response.status === 200 || response.status === 202) {
+        const parsed = runtimeRunSnapshotSchema.safeParse(response.data);
+        if (!parsed.success) {
+          throw new RuntimeError(
+            'RUNTIME_INVALID_RESPONSE',
+            'The local Runtime returned an invalid action snapshot.',
+            false,
+            { httpStatus: response.status, cause: parsed.error },
+          );
+        }
+        return {
+          disposition: response.status === 202 ? 'ACCEPTED' : 'ALREADY_TARGET',
+          snapshot: parsed.data,
+        };
+      }
+      if (response.status === 409) {
+        const parsed = runtimeRunActionConflictSchema.safeParse(response.data);
+        if (!parsed.success) {
+          throw new RuntimeError(
+            'RUNTIME_INVALID_RESPONSE',
+            'The local Runtime returned an invalid action conflict.',
+            false,
+            { httpStatus: response.status, cause: parsed.error },
+          );
+        }
+        return {
+          disposition: 'CONFLICT',
+          error: parsed.data.error,
+          snapshot: parsed.data.snapshot,
+        };
+      }
+      const parsed = runtimeErrorEnvelopeSchema.safeParse(response.data);
+      const runtimeCode = parsed.success ? parsed.data.error.code : undefined;
+      throw new RuntimeError(
+        response.status === 400
+          ? 'RUNTIME_INVALID_REQUEST'
+          : response.status === 401
+            ? 'RUNTIME_SESSION_STALE'
+            : response.status === 413
+              ? 'RUNTIME_PAYLOAD_TOO_LARGE'
+              : 'RUNTIME_REQUEST_REJECTED',
+        parsed.success ? parsed.data.error.message : 'The local Runtime rejected the action.',
+        parsed.success ? parsed.data.error.retryable : false,
+        { httpStatus: response.status, runtimeCode },
+      );
+    } catch (error) {
+      if (error instanceof RuntimeError) throw error;
+      if (axios.isAxiosError(error)) {
+        if (
+          error.code === 'ETIMEDOUT' ||
+          error.code === 'ECONNABORTED' ||
+          error.code === 'ERR_CANCELED'
+        ) {
+          throw new RuntimeError(
+            'RUNTIME_TIMEOUT',
+            'The Runtime action outcome is unknown.',
+            true,
+            {
+              cause: error,
+            },
+          );
+        }
+      }
+      throw new RuntimeError(
+        'RUNTIME_UNAVAILABLE',
+        'The Runtime action outcome is unknown.',
+        true,
+        { cause: error },
+      );
+    }
+  }
+
   async activeRun(): Promise<RuntimeRunLookupResult> {
     return this.lookupRun('runs/active');
   }
@@ -276,6 +379,108 @@ export class RuntimeHttpClient {
       successStatuses: [200],
     });
     return result.body;
+  }
+
+  async artifactPreview(artifactId: string, signal: AbortSignal): Promise<RuntimeArtifactPreview> {
+    if (!runtimeUuidV4Schema.safeParse(artifactId).success) {
+      throw new RuntimeError(
+        'RUNTIME_INVALID_REQUEST',
+        'A canonical lowercase artifact UUID v4 is required.',
+        false,
+      );
+    }
+    const route = this.assertRoute(`artifacts/${encodeURIComponent(artifactId)}`);
+    try {
+      const response = await this.client.request<ArrayBuffer>({
+        url: route,
+        method: 'GET',
+        headers: { Accept: 'image/png' },
+        maxContentLength: MAX_RUNTIME_ARTIFACT_BYTES,
+        responseType: 'arraybuffer',
+        signal,
+      });
+      const bytes = Uint8Array.from(new Uint8Array(response.data));
+      if (response.status < 200 || response.status >= 300) {
+        const errorBytes = bytes.subarray(0, Math.min(bytes.length, 8 * 1024));
+        let parsed: ReturnType<typeof runtimeErrorEnvelopeSchema.safeParse> | null = null;
+        try {
+          parsed = runtimeErrorEnvelopeSchema.safeParse(
+            JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(errorBytes)),
+          );
+        } catch {
+          // A malformed bounded error body is mapped to safe generic metadata.
+        }
+        const runtimeCode = parsed?.success ? parsed.data.error.code : undefined;
+        throw new RuntimeError(
+          response.status === 401
+            ? 'RUNTIME_SESSION_STALE'
+            : response.status === 400
+              ? 'RUNTIME_INVALID_REQUEST'
+              : 'RUNTIME_REQUEST_REJECTED',
+          parsed?.success ? parsed.data.error.message : 'The local Runtime rejected the artifact.',
+          parsed?.success ? parsed.data.error.retryable : false,
+          { httpStatus: response.status, runtimeCode },
+        );
+      }
+      if (response.status !== 200) {
+        throw new RuntimeError(
+          'RUNTIME_INVALID_RESPONSE',
+          'The local Runtime returned an unexpected artifact status.',
+          false,
+        );
+      }
+      const mimeType = String(response.headers['content-type'] ?? '')
+        .split(';', 1)[0]
+        .trim()
+        .toLowerCase();
+      if (mimeType !== 'image/png') {
+        throw new RuntimeError(
+          'RUNTIME_INVALID_RESPONSE',
+          'The Runtime artifact is not an image/png response.',
+          false,
+        );
+      }
+      const contentLength = Number(response.headers['content-length']);
+      if (
+        !Number.isSafeInteger(contentLength) ||
+        contentLength <= 0 ||
+        contentLength > MAX_RUNTIME_ARTIFACT_BYTES ||
+        contentLength !== bytes.byteLength
+      ) {
+        throw new RuntimeError(
+          'RUNTIME_INVALID_RESPONSE',
+          'The Runtime artifact length is missing, invalid or incomplete.',
+          false,
+        );
+      }
+      validateRuntimePng(bytes);
+      return { bytes, mimeType: 'image/png' };
+    } catch (error) {
+      if (error instanceof RuntimeError) throw error;
+      if (axios.isAxiosError(error)) {
+        if (error.code === 'ERR_CANCELED' || signal.aborted) {
+          throw new RuntimeError(
+            'RUNTIME_REQUEST_CANCELLED',
+            'The Runtime artifact preview was cancelled.',
+            false,
+          );
+        }
+        if (error.code === 'ERR_BAD_RESPONSE') {
+          throw new RuntimeError(
+            'RUNTIME_INVALID_RESPONSE',
+            'The Runtime artifact exceeded the preview limit or was incomplete.',
+            false,
+            { cause: error },
+          );
+        }
+      }
+      throw new RuntimeError(
+        'RUNTIME_UNAVAILABLE',
+        'The local Runtime artifact is unavailable.',
+        true,
+        { cause: error },
+      );
+    }
   }
 
   private async lookupRun(route: string): Promise<RuntimeRunLookupResult> {

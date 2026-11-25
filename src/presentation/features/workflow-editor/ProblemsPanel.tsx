@@ -21,8 +21,15 @@ interface ProblemsPanelProps {
   savedRevision: number;
   validation: WorkflowValidationRunState;
   onValidate(): void;
+  onCheckRunControl(): void;
+  onRunControl(action: 'PAUSE' | 'RESUME' | 'CANCEL'): void;
   onRecoverRun(): void;
+  onNextRunAttemptsPage(): void;
+  onPreviousRunAttemptsPage(): void;
+  onRefreshRunAttempts(): void;
   onRetryRunAdmission(): void;
+  onSelectRunAttempt(attemptId: string): void;
+  onSelectRunDevice(deviceExecutionId: string): void;
   run: TestRunExecutionState;
 }
 
@@ -197,8 +204,15 @@ export function ProblemsPanel({
   savedRevision,
   validation,
   onValidate,
+  onCheckRunControl,
+  onRunControl,
   onRecoverRun,
+  onNextRunAttemptsPage,
+  onPreviousRunAttemptsPage,
+  onRefreshRunAttempts,
   onRetryRunAdmission,
+  onSelectRunAttempt,
+  onSelectRunDevice,
   run,
 }: ProblemsPanelProps) {
   const activeTab = useEditorStore((state) => state.activeBottomTab);
@@ -296,8 +310,15 @@ export function ProblemsPanel({
         ) : (
           <RunStatusPanel
             state={run}
+            onCheckControl={onCheckRunControl}
+            onControl={onRunControl}
+            onNextAttemptsPage={onNextRunAttemptsPage}
+            onPreviousAttemptsPage={onPreviousRunAttemptsPage}
             onRecover={onRecoverRun}
+            onRefreshAttempts={onRefreshRunAttempts}
             onRetryAdmission={onRetryRunAdmission}
+            onSelectAttempt={onSelectRunAttempt}
+            onSelectDevice={onSelectRunDevice}
           />
         )}
       </div>

@@ -1,21 +1,21 @@
 import * as Dialog from '@radix-ui/react-dialog';
 import { CirclePlay, X } from 'lucide-react';
-import type { FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 
 import type { RuntimeStartDeviceInput } from '@application/runtime/runtime.types';
 import type { JsonValue } from '@shared/types/json-value';
 import { Button } from '@presentation/components/ui/button';
 import { DevicePicker } from '@presentation/features/test-run/DevicePicker';
+import { useMultiDeviceWorkflowInputs } from '@presentation/features/test-run/useMultiDeviceWorkflowInputs';
 import { WorkflowInputsForm } from '@presentation/features/test-run/WorkflowInputsForm';
 import { useTestRun } from '@presentation/features/test-run/useTestRun';
-import { useWorkflowInputs } from '@presentation/features/test-run/useWorkflowInputs';
 
 interface TestRunDialogProps {
   busy: boolean;
   hostReady: boolean;
   inputSchema: JsonValue;
   onOpenChange(open: boolean): void;
-  onRun(input: RuntimeStartDeviceInput): Promise<void> | void;
+  onRun(input: RuntimeStartDeviceInput[]): Promise<void> | void;
   open: boolean;
   runBlockedReason?: string | null;
 }
@@ -30,15 +30,28 @@ export function TestRunDialog({
   runBlockedReason = null,
 }: TestRunDialogProps) {
   const devices = useTestRun(open);
-  const inputs = useWorkflowInputs(inputSchema);
+  const inputs = useMultiDeviceWorkflowInputs(inputSchema, devices.selectedAdbSerials);
+  const [activeInputSerial, setActiveInputSerial] = useState<string | null>(null);
+  const selectedInputSerial =
+    activeInputSerial && devices.selectedAdbSerials.includes(activeInputSerial)
+      ? activeInputSerial
+      : (devices.selectedAdbSerials.at(0) ?? null);
+
   const canRun =
-    hostReady && !busy && !runBlockedReason && devices.selectedDevice !== null && inputs.valid;
+    hostReady && !busy && !runBlockedReason && devices.allSelectedReady && inputs.valid;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!canRun || !devices.selectedDevice) return;
-    void onRun({ adbSerial: devices.selectedDevice.adbSerial, inputs: inputs.values });
+    if (!canRun) return;
+    void onRun(
+      devices.selectedAdbSerials.map((adbSerial) => ({
+        adbSerial,
+        inputs: inputs.valuesFor(adbSerial),
+      })),
+    );
   };
+
+  const activeDeviceInputs = selectedInputSerial ? inputs.deviceStates[selectedInputSerial] : null;
 
   return (
     <Dialog.Root open={open} onOpenChange={(nextOpen) => !busy && onOpenChange(nextOpen)}>
@@ -52,7 +65,7 @@ export function TestRunDialog({
             <div className="min-w-0 flex-1">
               <Dialog.Title className="text-lg font-semibold">Test Run</Dialog.Title>
               <Dialog.Description className="mt-1 text-xs leading-5 text-muted-foreground">
-                Choose one Runtime-ready Android device and provide the entry workflow inputs.
+                Choose one or more Runtime-ready Android devices and provide inputs for each member.
               </Dialog.Description>
             </div>
             <Dialog.Close asChild>
@@ -76,10 +89,84 @@ export function TestRunDialog({
               onRefresh={() => void devices.refresh()}
               onSelect={devices.select}
               refreshing={devices.refreshing}
-              selectedAdbSerial={devices.selectedAdbSerial}
+              selectedAdbSerials={devices.selectedAdbSerials}
+              unavailableSelections={devices.unavailableSelections}
             />
             <div className="my-6 border-t border-border" />
-            <WorkflowInputsForm disabled={busy} state={inputs} />
+            <WorkflowInputsForm
+              disabled={busy}
+              heading="Shared input defaults"
+              idPrefix="test-run-shared-input"
+              description="Edit reusable defaults, then explicitly copy them to all selected devices. Existing device values do not change automatically."
+              state={inputs.shared}
+            />
+
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <p className="text-[11px] text-muted-foreground">
+                {devices.selectedAdbSerials.length} device
+                {devices.selectedAdbSerials.length === 1 ? '' : 's'} selected
+              </p>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                disabled={busy || !inputs.shared.valid || devices.selectedAdbSerials.length === 0}
+                onClick={inputs.applySharedDefaults}
+              >
+                Apply to selected devices
+              </Button>
+            </div>
+
+            {devices.selectedAdbSerials.length > 0 ? (
+              <div className="mt-5 rounded-lg border border-border bg-background/30 p-3">
+                <div
+                  className="flex max-w-full gap-1 overflow-x-auto pb-2 text-sm"
+                  role="tablist"
+                  aria-label="Selected device inputs"
+                >
+                  {devices.selectedAdbSerials.map((adbSerial) => {
+                    const valid = inputs.deviceStates[adbSerial]?.valid === true;
+                    return (
+                      <button
+                        key={adbSerial}
+                        type="button"
+                        role="tab"
+                        aria-selected={selectedInputSerial === adbSerial}
+                        onClick={() => setActiveInputSerial(adbSerial)}
+                        className={
+                          'shrink-0 rounded-md border px-3 py-2 text-left font-mono text-[10px] ' +
+                          (selectedInputSerial === adbSerial
+                            ? 'border-primary bg-primary/10 text-foreground'
+                            : 'border-border text-muted-foreground hover:bg-accent/40')
+                        }
+                      >
+                        <span className="block max-w-48 truncate">{adbSerial}</span>
+                        <span
+                          className={valid ? 'text-success text-xs' : 'text-destructive text-xs'}
+                        >
+                          {valid ? 'Inputs valid' : 'Needs attention'}
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedInputSerial && activeDeviceInputs ? (
+                  <div className="mt-3 border-t border-border pt-4">
+                    <WorkflowInputsForm
+                      disabled={busy}
+                      heading={`Inputs for ${selectedInputSerial}`}
+                      idPrefix={`test-run-device-input-${selectedInputSerial.replace(/[^A-Za-z0-9_-]/g, '-')}`}
+                      description="These values belong only to this device execution."
+                      state={activeDeviceInputs}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <p className="mt-5 rounded-md border border-dashed border-border p-3 text-xs text-muted-foreground">
+                Select at least one READY device to configure per-device inputs.
+              </p>
+            )}
 
             {!hostReady ? (
               <p role="alert" className="mt-5 text-xs text-destructive">

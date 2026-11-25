@@ -22,6 +22,7 @@ const SUPPORTED_RUNTIME_IR_FORMAT = 1;
 interface OwnedRuntime {
   child: ChildProcess;
   command: Writable;
+  generation: number;
   session: RuntimeSession;
 }
 
@@ -164,15 +165,55 @@ function waitForExit(child: ChildProcess, timeoutMs: number): Promise<boolean> {
 }
 
 export class RuntimeProcessManager {
+  private automaticWorkSuppressed = false;
+  private automaticWorkSuppressionLocked = false;
   private owned: OwnedRuntime | null = null;
+  private shutdownFlight: Promise<void> | null = null;
   private startFlight: Promise<OwnedRuntime> | null = null;
   private status: RuntimeStatus = { state: 'STOPPED' };
   private readonly listeners = new Set<(status: RuntimeStatus) => void>();
+  private sessionGeneration = 0;
+  private workGeneration = 0;
 
   constructor(private readonly options: RuntimeProcessManagerOptions) {}
 
   getStatus(): RuntimeStatus {
     return { ...this.status };
+  }
+
+  getSessionGeneration() {
+    return this.sessionGeneration;
+  }
+
+  suppressAutomaticWork(lock = false) {
+    this.automaticWorkSuppressed = true;
+    this.workGeneration += 1;
+    if (lock) this.automaticWorkSuppressionLocked = true;
+  }
+
+  resumeAutomaticWork() {
+    if (this.automaticWorkSuppressionLocked) return;
+    this.automaticWorkSuppressed = false;
+  }
+
+  private assertAutomaticWorkAllowed() {
+    if (this.automaticWorkSuppressed) {
+      throw new RuntimeError(
+        'RUNTIME_AUTOMATIC_WORK_SUPPRESSED',
+        'The managed Runtime is stopped until a new explicit Runtime action is requested.',
+        false,
+      );
+    }
+  }
+
+  assertWorkGeneration(expectedGeneration: number) {
+    if (expectedGeneration !== this.workGeneration || this.automaticWorkSuppressed) {
+      throw new RuntimeError(
+        'RUNTIME_REQUEST_CANCELLED',
+        'The Runtime operation was invalidated by owner shutdown.',
+        false,
+      );
+    }
   }
 
   onStatusChanged(listener: (status: RuntimeStatus) => void) {
@@ -207,6 +248,7 @@ export class RuntimeProcessManager {
   }
 
   private async start(): Promise<OwnedRuntime> {
+    this.assertAutomaticWorkAllowed();
     this.setStatus({ state: 'STARTING' });
     let child: ChildProcess | null = null;
     let pipes: ReturnType<typeof createRuntimePipes> | null = null;
@@ -233,6 +275,7 @@ export class RuntimeProcessManager {
       const session = parseRuntimeReadyRecord(await readReadyFrame(ready, child));
       ready.destroy();
       const info = await new RuntimeHttpClient(session).runtimeInfo();
+      this.assertAutomaticWorkAllowed();
       if (!info.runtimeIrFormatVersions.includes(SUPPORTED_RUNTIME_IR_FORMAT)) {
         throw new RuntimeError(
           'RUNTIME_INCOMPATIBLE',
@@ -240,7 +283,7 @@ export class RuntimeProcessManager {
           false,
         );
       }
-      const runtime = { child, command, session };
+      const runtime = { child, command, generation: (this.sessionGeneration += 1), session };
       this.owned = runtime;
       this.watchOwned(runtime);
       this.setStatus({ state: 'READY', runtimeVersion: info.runtimeVersion });
@@ -257,6 +300,7 @@ export class RuntimeProcessManager {
   }
 
   async ensureReady(): Promise<OwnedRuntime> {
+    this.assertAutomaticWorkAllowed();
     if (this.owned && this.owned.child.exitCode === null && !this.owned.command.destroyed) {
       return this.owned;
     }
@@ -266,6 +310,39 @@ export class RuntimeProcessManager {
       });
     }
     return this.startFlight;
+  }
+
+  async acquireReadySession() {
+    const runtime = await this.ensureReady();
+    return {
+      generation: runtime.generation,
+      session: { ...runtime.session },
+      workGeneration: this.workGeneration,
+    };
+  }
+
+  async recoverReadySession(expectedGeneration: number) {
+    let runtime = await this.ensureReady();
+    if (runtime.generation !== expectedGeneration) {
+      return { generation: runtime.generation, replaced: true, session: { ...runtime.session } };
+    }
+    try {
+      await new RuntimeHttpClient(runtime.session).runtimeInfo();
+      return { generation: runtime.generation, replaced: false, session: { ...runtime.session } };
+    } catch (error) {
+      const mapped = toRuntimeError(error);
+      if (
+        !['RUNTIME_SESSION_STALE', 'RUNTIME_UNAVAILABLE', 'RUNTIME_TIMEOUT'].includes(mapped.code)
+      ) {
+        throw mapped;
+      }
+      if (this.owned?.generation === expectedGeneration) {
+        this.setStatus({ state: 'FAILED', errorCode: mapped.code });
+        await this.terminateOwned();
+      }
+      runtime = await this.ensureReady();
+      return { generation: runtime.generation, replaced: true, session: { ...runtime.session } };
+    }
   }
 
   private async terminateOwned() {
@@ -281,31 +358,53 @@ export class RuntimeProcessManager {
     runtime.child.kill('SIGTERM');
     if (await waitForExit(runtime.child, SHUTDOWN_TIMEOUT_MS)) return;
     runtime.child.kill('SIGKILL');
-    await waitForExit(runtime.child, SHUTDOWN_TIMEOUT_MS);
+    if (!(await waitForExit(runtime.child, SHUTDOWN_TIMEOUT_MS))) {
+      throw new RuntimeError(
+        'RUNTIME_UNAVAILABLE',
+        'The managed Runtime did not confirm process exit.',
+        false,
+      );
+    }
   }
 
-  async shutdown() {
+  shutdown() {
+    this.suppressAutomaticWork();
+    if (this.shutdownFlight) return this.shutdownFlight;
     this.setStatus({ state: 'STOPPING' });
-    if (this.startFlight) {
-      try {
-        await this.startFlight;
-      } catch {
-        // A failed startup already cleared its child and credentials.
+    this.shutdownFlight = (async () => {
+      if (this.startFlight) {
+        try {
+          await this.startFlight;
+        } catch {
+          // A failed or suppressed startup already cleared its child and credentials.
+        }
       }
-    }
-    await this.terminateOwned();
-    this.setStatus({ state: 'STOPPED' });
+      try {
+        await this.terminateOwned();
+        this.setStatus({ state: 'STOPPED' });
+      } catch (error) {
+        this.setStatus({ state: 'FAILED', errorCode: 'RUNTIME_UNAVAILABLE' });
+        throw error;
+      }
+    })().finally(() => {
+      this.shutdownFlight = null;
+    });
+    return this.shutdownFlight;
   }
 
   async withReadyRuntime<T>(
     operation: (client: RuntimeHttpClient, info: RuntimeInfo) => Promise<T>,
   ) {
+    const operationGeneration = this.workGeneration;
     let runtime = await this.ensureReady();
+    this.assertWorkGeneration(operationGeneration);
     for (let attempt = 0; attempt < 2; attempt += 1) {
       const client = new RuntimeHttpClient(runtime.session);
       try {
         const info = await client.runtimeInfo();
-        return await operation(client, info);
+        const result = await operation(client, info);
+        this.assertWorkGeneration(operationGeneration);
+        return result;
       } catch (error) {
         const mapped = toRuntimeError(error);
         const replaceable = [

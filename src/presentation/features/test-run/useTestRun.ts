@@ -6,14 +6,15 @@ import type { HostResult } from '@infrastructure/electron/studio-host-api';
 type DeviceResult = HostResult<RuntimeDevice[]>;
 
 export interface TestRunDeviceState {
+  allSelectedReady: boolean;
   devices: RuntimeDevice[];
   error: string | null;
   initialLoading: boolean;
   refresh(): Promise<void>;
   refreshing: boolean;
-  select(adbSerial: string | null): void;
-  selectedAdbSerial: string | null;
-  selectedDevice: RuntimeDevice | null;
+  select(adbSerial: string, selected: boolean): void;
+  selectedAdbSerials: string[];
+  unavailableSelections: Array<{ adbSerial: string; message: string }>;
 }
 
 function bridgeFailure(): string {
@@ -22,7 +23,7 @@ function bridgeFailure(): string {
 
 export function useTestRun(open: boolean): TestRunDeviceState {
   const [devices, setDevices] = useState<RuntimeDevice[]>([]);
-  const [selectedAdbSerial, setSelectedAdbSerial] = useState<string | null>(null);
+  const [selectedAdbSerials, setSelectedAdbSerials] = useState<string[]>([]);
   const [initialLoading, setInitialLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -31,12 +32,6 @@ export function useTestRun(open: boolean): TestRunDeviceState {
 
   const applyDevices = useCallback((nextDevices: RuntimeDevice[]) => {
     setDevices(nextDevices);
-    setSelectedAdbSerial((current) =>
-      current &&
-      nextDevices.some((device) => device.adbSerial === current && device.status === 'READY')
-        ? current
-        : null,
-    );
   }, []);
 
   const requestRefresh = useCallback((): Promise<DeviceResult> => {
@@ -120,34 +115,47 @@ export function useTestRun(open: boolean): TestRunDeviceState {
   }, [applyDevices, open, refreshForGeneration]);
 
   const select = useCallback(
-    (adbSerial: string | null) => {
-      if (adbSerial === null) {
-        setSelectedAdbSerial(null);
-        return;
-      }
-      if (devices.some((device) => device.adbSerial === adbSerial && device.status === 'READY')) {
-        setSelectedAdbSerial(adbSerial);
-      }
+    (adbSerial: string, selected: boolean) => {
+      setSelectedAdbSerials((current) => {
+        if (!selected) return current.filter((serial) => serial !== adbSerial);
+        if (
+          current.includes(adbSerial) ||
+          !devices.some((device) => device.adbSerial === adbSerial && device.status === 'READY')
+        ) {
+          return current;
+        }
+        return [...current, adbSerial];
+      });
     },
     [devices],
   );
 
-  const selectedDevice = useMemo(
+  const unavailableSelections = useMemo(
     () =>
-      devices.find(
-        (device) => device.adbSerial === selectedAdbSerial && device.status === 'READY',
-      ) ?? null,
-    [devices, selectedAdbSerial],
+      selectedAdbSerials.flatMap((adbSerial) => {
+        const device = devices.find((candidate) => candidate.adbSerial === adbSerial);
+        if (device?.status === 'READY') return [];
+        return [
+          {
+            adbSerial,
+            message:
+              device?.error?.message ??
+              'This selected device is no longer present in the Runtime inventory.',
+          },
+        ];
+      }),
+    [devices, selectedAdbSerials],
   );
 
   return {
+    allSelectedReady: selectedAdbSerials.length > 0 && unavailableSelections.length === 0,
     devices,
     error,
     initialLoading,
     refresh,
     refreshing,
     select,
-    selectedAdbSerial,
-    selectedDevice,
+    selectedAdbSerials,
+    unavailableSelections,
   };
 }

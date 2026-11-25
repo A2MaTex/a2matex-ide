@@ -32,15 +32,21 @@ import type {
 import type {
   RuntimeCompilationInput,
   RuntimeCompilationResult,
+  RuntimeControlSubmissionResult,
+  RuntimeArtifactPreview,
   RuntimeDevice,
   RuntimeErrorCode,
   RuntimeNodeAttemptPage,
+  RuntimeObservationEnvelope,
+  RuntimeObservationStart,
   RuntimeRunErrorCode,
   RuntimeRunIntentResult,
   RuntimeRunLookupResult,
   RuntimeRunPreparationEvent,
+  RuntimeRunAction,
   RuntimeStartRunInput,
   RuntimeStatus,
+  RuntimeUnavailableDevice,
 } from '@application/runtime/runtime.types';
 
 export interface HostError<TCode extends string = string> {
@@ -50,6 +56,7 @@ export interface HostError<TCode extends string = string> {
   projectSnapshot?: ProjectSnapshot;
   retryable: boolean;
   runtimeCode?: string;
+  unavailableDevices?: RuntimeUnavailableDevice[];
   validation?: WorkflowValidationOutput;
 }
 
@@ -100,16 +107,43 @@ export interface StudioHostApi {
     ): Promise<HostResult<RuntimeRunIntentResult, RuntimeRunErrorCode>>;
     getActiveRun(): Promise<HostResult<RuntimeRunLookupResult, RuntimeRunErrorCode>>;
     getRun(runGroupId: string): Promise<HostResult<RuntimeRunLookupResult, RuntimeRunErrorCode>>;
+    submitRunAction(input: {
+      runGroupId: string;
+      action: RuntimeRunAction;
+    }): Promise<HostResult<RuntimeControlSubmissionResult, RuntimeRunErrorCode>>;
+    checkRunControl(input: {
+      runGroupId: string;
+    }): Promise<HostResult<RuntimeControlSubmissionResult, RuntimeRunErrorCode>>;
     getNodeAttempts(input: {
       deviceExecutionId: string;
       afterSequence?: number;
       limit?: number;
     }): Promise<HostResult<RuntimeNodeAttemptPage, RuntimeRunErrorCode>>;
+    getArtifactPreview(input: {
+      requestId: string;
+      artifactId: string;
+    }): Promise<HostResult<RuntimeArtifactPreview, RuntimeRunErrorCode>>;
+    cancelArtifactPreview(input: {
+      requestId: string;
+    }): Promise<HostResult<void, RuntimeRunErrorCode>>;
+    observeRun(input: {
+      runGroupId: string;
+    }): Promise<HostResult<RuntimeObservationStart, RuntimeRunErrorCode>>;
+    selectObservedDevice(input: {
+      observationId: string;
+      deviceExecutionId: string;
+    }): Promise<HostResult<void, RuntimeRunErrorCode>>;
+    stopObserving(input: { observationId: string }): Promise<HostResult<void, RuntimeRunErrorCode>>;
+    ackObservation(input: {
+      observationId: string;
+      version: number;
+    }): Promise<HostResult<void, RuntimeRunErrorCode>>;
     listDevices(): Promise<HostResult<RuntimeDevice[], RuntimeErrorCode>>;
     refreshDevices(): Promise<HostResult<RuntimeDevice[], RuntimeErrorCode>>;
     shutdown(): Promise<HostResult<void, RuntimeErrorCode>>;
     onStatusChanged(listener: (status: RuntimeStatus) => void): () => void;
     onRunPreparationChanged(listener: (event: RuntimeRunPreparationEvent) => void): () => void;
+    onObservationChanged(listener: (event: RuntimeObservationEnvelope) => void): () => void;
   };
   cloudProject: {
     archive(projectId: string): Promise<HostResult<CloudProject, CloudProjectErrorCode>>;

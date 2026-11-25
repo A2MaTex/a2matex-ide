@@ -6,6 +6,7 @@ import { createAuthSessionService } from '@electron/main/auth/create-auth-sessio
 import { accountScopeFromName } from '@application/auth/account-scope';
 import type { MainAuthSession } from '@application/auth/auth-session';
 import { RuntimeError } from '@application/runtime/runtime.error';
+import type { RuntimeOperations } from '@application/runtime/runtime.types';
 import { getCurrentPolicies } from '@electron/main/api/policy.api';
 import { ProcessAdbClient } from '@electron/main/adapters/android/adb-client';
 import { SqliteCloudProjectCache } from '@electron/main/adapters/project/sqlite-cloud-project-cache';
@@ -42,9 +43,56 @@ import {
 const developmentUrl = process.env.A2MATEX_DEV_SERVER_URL;
 let studioDatabase: StudioDatabase | null = null;
 let runtimeManager: RuntimeProcessManager | null = null;
+let runtimeServices: RuntimeOperations | null = null;
 let runtimeRuns: RuntimeRunCoordinator | null = null;
 let quitInProgress = false;
 let shutdownComplete = false;
+
+function requestApplicationQuit(parent?: BrowserWindow) {
+  if (shutdownComplete || quitInProgress) return;
+  if (runtimeRuns?.hasUnresolvedRun() || runtimeServices?.hasUnresolvedControl()) {
+    const options = {
+      type: 'warning' as const,
+      buttons: ['Stay open', 'Stop and exit'],
+      defaultId: 0,
+      cancelId: 0,
+      title: 'Runtime work is still active',
+      message: 'Stop managed Runtime work and exit A2MaTeX Studio?',
+      detail:
+        'Staying open keeps the window, managed Runtime, pending controls and execution running.',
+    };
+    const choice = parent
+      ? dialog.showMessageBoxSync(parent, options)
+      : dialog.showMessageBoxSync(options);
+    if (choice === 0) return;
+  }
+
+  quitInProgress = true;
+  runtimeServices?.suppressAutomaticWork(true);
+  runtimeManager?.suppressAutomaticWork(true);
+  void (async () => {
+    try {
+      if (runtimeServices) await runtimeServices.shutdown();
+      else await runtimeManager?.shutdown();
+    } catch (error) {
+      logMain('error', 'runtime_shutdown_failed', {
+        name: error instanceof Error ? error.name : 'UnknownError',
+      });
+      dialog.showErrorBox(
+        'Managed Runtime shutdown encountered an error',
+        'Studio stopped automatic Runtime work and will now exit. Check the application logs before starting another local execution.',
+      );
+    } finally {
+      studioDatabase?.close();
+      studioDatabase = null;
+      runtimeServices = null;
+      runtimeManager = null;
+      runtimeRuns = null;
+      shutdownComplete = true;
+      app.quit();
+    }
+  })();
+}
 
 async function requireRuntimeAccountScope(auth: MainAuthSession) {
   const restored = await auth.restore();
@@ -82,6 +130,11 @@ export function createWindow() {
     if (targetUrl !== window.webContents.getURL()) event.preventDefault();
   });
   window.once('ready-to-show', () => window.show());
+  window.on('close', (event) => {
+    if (shutdownComplete) return;
+    event.preventDefault();
+    requestApplicationQuit(window);
+  });
 
   if (developmentUrl) {
     void window.loadURL(developmentUrl);
@@ -129,6 +182,7 @@ app.whenReady().then(() => {
       }),
   });
   const runtime = createRuntimeServices(runtimeManager);
+  runtimeServices = runtime;
   try {
     studioDatabase = openStudioDatabase({
       migrationsPath: path.join(appPath, 'prisma', 'migration'),
@@ -188,7 +242,7 @@ app.whenReady().then(() => {
   logMain('info', 'app_ready', { packaged: app.isPackaged });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (!quitInProgress && BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
@@ -199,36 +253,7 @@ app.on('window-all-closed', () => {
 app.on('before-quit', (event) => {
   if (shutdownComplete) return;
   event.preventDefault();
-  if (quitInProgress) return;
-  if (runtimeRuns?.hasUnresolvedRun()) {
-    const choice = dialog.showMessageBoxSync({
-      type: 'warning',
-      buttons: ['Stay open', 'Stop and exit'],
-      defaultId: 0,
-      cancelId: 0,
-      title: 'A Test Run is still active',
-      message: 'Stop the active Test Run and exit A2MaTeX Studio?',
-      detail: 'Staying open keeps the managed Runtime and execution running.',
-    });
-    if (choice === 0) return;
-  }
-  quitInProgress = true;
-  void (async () => {
-    try {
-      await runtimeManager?.shutdown();
-    } catch (error) {
-      logMain('error', 'runtime_shutdown_failed', {
-        name: error instanceof Error ? error.name : 'UnknownError',
-      });
-    } finally {
-      studioDatabase?.close();
-      studioDatabase = null;
-      runtimeManager = null;
-      runtimeRuns = null;
-      shutdownComplete = true;
-      app.quit();
-    }
-  })();
+  requestApplicationQuit(BrowserWindow.getFocusedWindow() ?? undefined);
 });
 
 app.on('will-quit', () => {

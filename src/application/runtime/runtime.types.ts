@@ -47,6 +47,12 @@ export interface RuntimeDevice {
   error?: RuntimeApiError;
 }
 
+export interface RuntimeUnavailableDevice {
+  index: number;
+  adbSerial: string;
+  reason: RuntimeApiError;
+}
+
 export type RuntimeRunGroupStatus =
   'RUNNING' | 'PAUSED' | 'SUCCEEDED' | 'FAILED' | 'CANCELLED' | 'INTERRUPTED';
 
@@ -89,6 +95,38 @@ export interface RuntimeRunSnapshot {
   deviceExecutions: RuntimeDeviceExecution[];
 }
 
+export type RuntimeRunAction = 'PAUSE' | 'RESUME' | 'CANCEL';
+export type RuntimeControlPhase = 'IDLE' | 'SUBMITTING' | 'PENDING' | 'UNCERTAIN' | 'RESOLVED';
+export type RuntimeControlResolution =
+  | 'TARGET_OBSERVED'
+  | 'ALREADY_TARGET'
+  | 'TERMINAL_WINNER'
+  | 'CONFLICT'
+  | 'REJECTED'
+  | 'SESSION_ENDED';
+
+export interface RuntimeControlState {
+  action: RuntimeRunAction | null;
+  lastError: RuntimeApiError | null;
+  phase: RuntimeControlPhase;
+  resolution: RuntimeControlResolution | null;
+  runGroupId: string;
+  sessionGeneration: number;
+  submissionVersion: number;
+}
+
+export interface RuntimeRunActionResult {
+  disposition: 'ACCEPTED' | 'ALREADY_TARGET' | 'CONFLICT';
+  error?: RuntimeApiError;
+  snapshot: RuntimeRunSnapshot;
+}
+
+export interface RuntimeControlSubmissionResult {
+  controlState: RuntimeControlState;
+  disposition: RuntimeRunActionResult['disposition'] | null;
+  snapshot: RuntimeRunSnapshot | null;
+}
+
 export type RuntimeNodeAttemptStatus =
   'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'TIMED_OUT' | 'CANCELLED' | 'INTERRUPTED';
 
@@ -110,6 +148,97 @@ export interface RuntimeNodeAttemptPage {
   nextAfterSequence: number | null;
 }
 
+export type RuntimeExecutionEvent =
+  | {
+      cursor: string;
+      type: 'RUN_GROUP_STATE_CHANGED';
+      occurredAt: string;
+      runGroupId: string;
+      payload: { status: RuntimeRunGroupStatus };
+    }
+  | {
+      cursor: string;
+      type: 'DEVICE_EXECUTION_STATE_CHANGED';
+      occurredAt: string;
+      runGroupId: string;
+      deviceExecutionId: string;
+      payload: {
+        status: RuntimeDeviceExecutionStatus;
+        nextNodeId: string | null;
+        error?: RuntimeApiError;
+      };
+    }
+  | {
+      cursor: string;
+      type: 'NODE_ATTEMPT_STATE_CHANGED';
+      occurredAt: string;
+      runGroupId: string;
+      deviceExecutionId: string;
+      nodeAttemptId: string;
+      nodeId: string;
+      payload: {
+        status: RuntimeNodeAttemptStatus;
+        attemptNumber: number;
+        output?: Record<string, JsonValue>;
+        error?: RuntimeApiError;
+      };
+    }
+  | {
+      cursor: string;
+      type: 'NODE_RETRY_SCHEDULED';
+      occurredAt: string;
+      runGroupId: string;
+      deviceExecutionId: string;
+      nodeAttemptId: string;
+      nodeId: string;
+      payload: { nextAttemptNumber: number; delayMs: number };
+    };
+
+export type RuntimeObservationHealth = 'connecting' | 'live' | 'reconnecting' | 'stale' | 'error';
+
+export interface RuntimeLiveAttemptFact {
+  attemptNumber: number;
+  nodeAttemptId: string;
+  nodeId: string;
+  status: RuntimeNodeAttemptStatus;
+}
+
+export interface RuntimeRetryFact {
+  delayMs: number;
+  nextAttemptNumber: number;
+  nodeAttemptId: string;
+  nodeId: string;
+}
+
+export interface RuntimeObservationView {
+  attemptsRevision: number;
+  cursor: string;
+  controlState: RuntimeControlState;
+  error: RuntimeApiError | null;
+  health: RuntimeObservationHealth;
+  liveAttempt: RuntimeLiveAttemptFact | null;
+  pendingRetry: RuntimeRetryFact | null;
+  selectedDeviceExecutionId: string | null;
+  snapshot: RuntimeRunSnapshot;
+  stale: boolean;
+}
+
+export interface RuntimeObservationEnvelope {
+  observationId: string;
+  version: number;
+  view: RuntimeObservationView;
+}
+
+export interface RuntimeObservationStart {
+  initialView: RuntimeObservationEnvelope;
+  observationId: string;
+}
+
+export interface RuntimeArtifactPreview {
+  bytes: Uint8Array;
+  mimeType: 'image/png';
+}
+
 export interface RuntimeStartDeviceInput {
   adbSerial: string;
   inputs: Record<string, JsonValue>;
@@ -118,13 +247,12 @@ export interface RuntimeStartDeviceInput {
 export interface RuntimeStartRequest {
   requestId: string;
   runtimeIr: Record<string, JsonValue>;
-  devices: [RuntimeStartDeviceInput];
+  devices: RuntimeStartDeviceInput[];
 }
 
 export interface RuntimeStartRunInput extends RuntimeCompilationInput {
-  adbSerial: string;
   clientIntentId?: string;
-  inputs: Record<string, JsonValue>;
+  devices: RuntimeStartDeviceInput[];
 }
 
 export type RuntimeRunPreparationPhase =
@@ -178,12 +306,17 @@ export type RuntimeErrorCode =
   | 'RUNTIME_REQUEST_REJECTED'
   | 'RUNTIME_INVALID_RESPONSE'
   | 'RUNTIME_PAYLOAD_TOO_LARGE'
+  | 'RUNTIME_REQUEST_CANCELLED'
+  | 'RUNTIME_AUTOMATIC_WORK_SUPPRESSED'
   | 'RUNTIME_TIMEOUT'
   | 'RUNTIME_UNKNOWN_ERROR';
 
 export interface RuntimeOperations {
   activeRun(): Promise<RuntimeRunLookupResult>;
+  artifactPreview(artifactId: string, signal: AbortSignal): Promise<RuntimeArtifactPreview>;
+  ackObservation(observationId: string, version: number): void;
   compile(input: RuntimeCompilationInput): Promise<RuntimeCompilationResult>;
+  checkRunControl(runGroupId: string): Promise<RuntimeControlSubmissionResult>;
   getStatus(): RuntimeStatus;
   listDevices(): Promise<RuntimeDevice[]>;
   nodeAttempts(
@@ -192,9 +325,22 @@ export interface RuntimeOperations {
     limit?: number,
   ): Promise<RuntimeNodeAttemptPage>;
   onStatusChanged(listener: (status: RuntimeStatus) => void): () => void;
+  observeRun(
+    runGroupId: string,
+    listener: (envelope: RuntimeObservationEnvelope) => void,
+  ): Promise<RuntimeObservationStart>;
   refreshDevices(): Promise<RuntimeDevice[]>;
+  resumeAutomaticWork(): void;
   runById(runGroupId: string): Promise<RuntimeRunLookupResult>;
+  selectObservedDevice(observationId: string, deviceExecutionId: string): void;
   shutdown(): Promise<void>;
+  submitRunAction(
+    runGroupId: string,
+    action: RuntimeRunAction,
+  ): Promise<RuntimeControlSubmissionResult>;
+  suppressAutomaticWork(lock?: boolean): void;
+  hasUnresolvedControl(): boolean;
   startRun(input: RuntimeStartRequest): Promise<RuntimeStartRunResult>;
+  stopObserving(observationId: string): void;
   validate(editorGraph: Record<string, JsonValue>): Promise<WorkflowValidationOutput>;
 }

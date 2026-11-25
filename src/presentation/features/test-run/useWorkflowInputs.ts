@@ -8,7 +8,7 @@ import {
 } from '@domain/schema/object-value-schema';
 import type { JsonValue } from '@shared/types/json-value';
 
-function initialInputs(schema: ObjectValueSchema | null): Record<string, JsonValue> {
+export function initialWorkflowInputs(schema: ObjectValueSchema | null): Record<string, JsonValue> {
   if (!schema) return {};
   return Object.fromEntries(
     Object.entries(schema.properties).flatMap(([name, property]) => {
@@ -42,12 +42,12 @@ export function useWorkflowInputs(inputSchema: JsonValue): WorkflowInputsState {
   const schema = parsedSchema.success ? parsedSchema.data : null;
   const [versionedValues, setVersionedValues] = useState<VersionedInputValues>(() => ({
     schemaFingerprint,
-    values: initialInputs(schema),
+    values: initialWorkflowInputs(schema),
   }));
   const values =
     versionedValues.schemaFingerprint === schemaFingerprint
       ? versionedValues.values
-      : initialInputs(schema);
+      : initialWorkflowInputs(schema);
 
   const issues = useMemo(
     () => (schema ? validateObjectValue(schema, values) : []),
@@ -57,7 +57,9 @@ export function useWorkflowInputs(inputSchema: JsonValue): WorkflowInputsState {
     (name: string, value: JsonValue | undefined) => {
       setVersionedValues((current) => {
         const currentValues =
-          current.schemaFingerprint === schemaFingerprint ? current.values : initialInputs(schema);
+          current.schemaFingerprint === schemaFingerprint
+            ? current.values
+            : initialWorkflowInputs(schema);
         if (value === undefined) {
           if (!Object.hasOwn(currentValues, name)) {
             return { schemaFingerprint, values: currentValues };

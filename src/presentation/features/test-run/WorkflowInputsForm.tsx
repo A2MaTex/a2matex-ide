@@ -8,16 +8,25 @@ function titleFromName(name: string) {
 }
 
 interface WorkflowInputsFormProps {
+  description?: string;
   disabled?: boolean;
+  heading?: string;
+  idPrefix?: string;
   state: WorkflowInputsState;
 }
 
-export function WorkflowInputsForm({ disabled = false, state }: WorkflowInputsFormProps) {
+export function WorkflowInputsForm({
+  description = 'Values are validated locally against the current Project Draft schema.',
+  disabled = false,
+  heading = 'Workflow inputs',
+  idPrefix = 'test-run-input',
+  state,
+}: WorkflowInputsFormProps) {
   if (!state.schema) {
     return (
       <section aria-labelledby="test-run-inputs-heading">
         <h3 id="test-run-inputs-heading" className="text-sm font-semibold">
-          Workflow inputs
+          {heading}
         </h3>
         <p role="alert" className="mt-3 text-xs text-destructive">
           {state.schemaError}
@@ -30,11 +39,9 @@ export function WorkflowInputsForm({ disabled = false, state }: WorkflowInputsFo
   return (
     <section aria-labelledby="test-run-inputs-heading">
       <h3 id="test-run-inputs-heading" className="text-sm font-semibold">
-        Workflow inputs
+        {heading}
       </h3>
-      <p className="mt-1 text-[11px] text-muted-foreground">
-        Values are validated locally against the current Project Draft schema.
-      </p>
+      <p className="mt-1 text-[11px] text-muted-foreground">{description}</p>
 
       {entries.length === 0 ? (
         <p className="mt-3 rounded-md border border-border bg-background/40 p-3 text-xs text-muted-foreground">
@@ -43,7 +50,7 @@ export function WorkflowInputsForm({ disabled = false, state }: WorkflowInputsFo
       ) : (
         <div className="mt-3 grid gap-4 sm:grid-cols-2">
           {entries.map(([name, property]) => {
-            const id = `test-run-input-${name}`;
+            const id = `${idPrefix}-${name}`;
             const required = state.schema!.required.includes(name);
             const fieldIssues = state.issues.filter((issue) => issue.field === name);
             const value = state.values[name];

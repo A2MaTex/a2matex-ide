@@ -1,7 +1,11 @@
 import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron';
 
 import type { SessionState } from '@application/auth/auth-session';
-import type { RuntimeRunPreparationEvent, RuntimeStatus } from '@application/runtime/runtime.types';
+import type {
+  RuntimeObservationEnvelope,
+  RuntimeRunPreparationEvent,
+  RuntimeStatus,
+} from '@application/runtime/runtime.types';
 import type { StudioHostApi } from '@infrastructure/electron/studio-host-api';
 
 const studioHost = {
@@ -43,7 +47,17 @@ const studioHost = {
     startRun: (input) => ipcRenderer.invoke('studio:runtime:start-run', input),
     getActiveRun: () => ipcRenderer.invoke('studio:runtime:get-active-run'),
     getRun: (runGroupId) => ipcRenderer.invoke('studio:runtime:get-run', runGroupId),
+    submitRunAction: (input) => ipcRenderer.invoke('studio:runtime:submit-run-action', input),
+    checkRunControl: (input) => ipcRenderer.invoke('studio:runtime:check-run-control', input),
     getNodeAttempts: (input) => ipcRenderer.invoke('studio:runtime:get-node-attempts', input),
+    getArtifactPreview: (input) => ipcRenderer.invoke('studio:runtime:get-artifact-preview', input),
+    cancelArtifactPreview: (input) =>
+      ipcRenderer.invoke('studio:runtime:cancel-artifact-preview', input),
+    observeRun: (input) => ipcRenderer.invoke('studio:runtime:observe-run', input),
+    selectObservedDevice: (input) =>
+      ipcRenderer.invoke('studio:runtime:select-observed-device', input),
+    stopObserving: (input) => ipcRenderer.invoke('studio:runtime:stop-observing', input),
+    ackObservation: (input) => ipcRenderer.invoke('studio:runtime:ack-observation', input),
     listDevices: () => ipcRenderer.invoke('studio:runtime:list-devices'),
     refreshDevices: () => ipcRenderer.invoke('studio:runtime:refresh-devices'),
     shutdown: () => ipcRenderer.invoke('studio:runtime:shutdown'),
@@ -57,6 +71,13 @@ const studioHost = {
       const channel = 'studio:runtime:run-preparation-changed';
       const handler = (_event: IpcRendererEvent, runEvent: RuntimeRunPreparationEvent) =>
         listener(runEvent);
+      ipcRenderer.on(channel, handler);
+      return () => ipcRenderer.removeListener(channel, handler);
+    },
+    onObservationChanged: (listener: (event: RuntimeObservationEnvelope) => void) => {
+      const channel = 'studio:runtime:observation-changed';
+      const handler = (_event: IpcRendererEvent, observation: RuntimeObservationEnvelope) =>
+        listener(observation);
       ipcRenderer.on(channel, handler);
       return () => ipcRenderer.removeListener(channel, handler);
     },

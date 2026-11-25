@@ -75,9 +75,7 @@ export const runtimeDeviceSchema = z
     }
   });
 
-export const runtimeDevicesSchema = z
-  .object({ devices: z.array(runtimeDeviceSchema).max(1_000) })
-  .strict();
+export const runtimeDevicesSchema = z.object({ devices: z.array(runtimeDeviceSchema) }).strict();
 
 export const runtimeErrorEnvelopeSchema = z
   .object({
@@ -85,10 +83,19 @@ export const runtimeErrorEnvelopeSchema = z
   })
   .strict();
 
+export const runtimeUnavailableDeviceSchema = z
+  .object({
+    index: z.number().int().nonnegative().max(Number.MAX_SAFE_INTEGER),
+    adbSerial: z.string().trim().min(1).max(512),
+    reason: runtimeApiErrorSchema,
+  })
+  .strict();
+
 export const runtimeAdmissionErrorSchema = z
   .object({
     error: runtimeApiErrorSchema,
     validation: workflowValidationOutputSchema.optional(),
+    unavailableDevices: z.array(runtimeUnavailableDeviceSchema).optional(),
   })
   .strict();
 
@@ -113,14 +120,14 @@ export const runtimeDeviceExecutionStatusSchema = z.enum([
 
 export const runtimeRunSummarySchema = z
   .object({
-    total: z.number().int().min(1).max(32),
-    queued: z.number().int().min(0).max(32),
-    running: z.number().int().min(0).max(32),
-    paused: z.number().int().min(0).max(32),
-    succeeded: z.number().int().min(0).max(32),
-    failed: z.number().int().min(0).max(32),
-    cancelled: z.number().int().min(0).max(32),
-    interrupted: z.number().int().min(0).max(32),
+    total: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER),
+    queued: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    running: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    paused: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    succeeded: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    failed: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    cancelled: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    interrupted: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   })
   .strict()
   .superRefine((summary, context) => {
@@ -171,7 +178,7 @@ export const runtimeRunSnapshotSchema = z
   .object({
     cursor: z.string().regex(/^(0|[1-9][0-9]{0,19})$/),
     runGroup: runtimeRunGroupSchema,
-    deviceExecutions: z.array(runtimeDeviceExecutionSchema).min(1).max(32),
+    deviceExecutions: z.array(runtimeDeviceExecutionSchema).min(1),
   })
   .strict()
   .superRefine((snapshot, context) => {
@@ -182,6 +189,26 @@ export const runtimeRunSnapshotSchema = z
         path: ['deviceExecutions'],
       });
     }
+    const ids = new Set<string>();
+    const serials = new Set<string>();
+    snapshot.deviceExecutions.forEach((execution, index) => {
+      if (ids.has(execution.id)) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Runtime device execution IDs must be unique.',
+          path: ['deviceExecutions', index, 'id'],
+        });
+      }
+      if (serials.has(execution.adbSerial)) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Runtime device execution serials must be unique.',
+          path: ['deviceExecutions', index, 'adbSerial'],
+        });
+      }
+      ids.add(execution.id);
+      serials.add(execution.adbSerial);
+    });
   });
 
 export const runtimeNodeAttemptStatusSchema = z.enum([
@@ -213,7 +240,32 @@ export const runtimeNodeAttemptPageSchema = z
     attempts: z.array(runtimeNodeAttemptSchema).max(100),
     nextAfterSequence: z.number().int().min(1).max(Number.MAX_SAFE_INTEGER).nullable(),
   })
-  .strict();
+  .strict()
+  .superRefine((page, context) => {
+    const ids = new Set<string>();
+    let previous = 0;
+    page.attempts.forEach((attempt, index) => {
+      if (ids.has(attempt.id) || attempt.sequence <= previous) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Runtime attempts must have unique IDs and increasing sequences.',
+          path: ['attempts', index],
+        });
+      }
+      ids.add(attempt.id);
+      previous = attempt.sequence;
+    });
+    if (
+      page.nextAfterSequence !== null &&
+      page.nextAfterSequence !== page.attempts.at(-1)?.sequence
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Runtime attempt continuation must equal the last returned sequence.',
+        path: ['nextAfterSequence'],
+      });
+    }
+  });
 
 export const runtimeNodeAttemptsInputSchema = z
   .object({
@@ -223,6 +275,134 @@ export const runtimeNodeAttemptsInputSchema = z
   })
   .strict();
 
+const runtimeEventBaseSchema = z.object({
+  cursor: z.string().regex(/^[1-9][0-9]*$/),
+  occurredAt: runtimeTimestampSchema,
+  runGroupId: runtimeUuidV4Schema,
+});
+
+export const runtimeExecutionEventSchema = z
+  .discriminatedUnion('type', [
+    runtimeEventBaseSchema
+      .extend({
+        type: z.literal('RUN_GROUP_STATE_CHANGED'),
+        payload: z.object({ status: runtimeRunGroupStatusSchema }).strict(),
+      })
+      .strict(),
+    runtimeEventBaseSchema
+      .extend({
+        type: z.literal('DEVICE_EXECUTION_STATE_CHANGED'),
+        deviceExecutionId: runtimeUuidV4Schema,
+        payload: z
+          .object({
+            status: runtimeDeviceExecutionStatusSchema,
+            nextNodeId: z
+              .string()
+              .regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/)
+              .nullable(),
+            error: runtimeApiErrorSchema.optional(),
+          })
+          .strict(),
+      })
+      .strict(),
+    runtimeEventBaseSchema
+      .extend({
+        type: z.literal('NODE_ATTEMPT_STATE_CHANGED'),
+        deviceExecutionId: runtimeUuidV4Schema,
+        nodeAttemptId: runtimeUuidV4Schema,
+        nodeId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+        payload: z
+          .object({
+            status: runtimeNodeAttemptStatusSchema,
+            attemptNumber: z.number().int().min(1).max(3),
+            output: jsonObjectSchema.optional(),
+            error: runtimeApiErrorSchema.optional(),
+          })
+          .strict(),
+      })
+      .strict(),
+    runtimeEventBaseSchema
+      .extend({
+        type: z.literal('NODE_RETRY_SCHEDULED'),
+        deviceExecutionId: runtimeUuidV4Schema,
+        nodeAttemptId: runtimeUuidV4Schema,
+        nodeId: z.string().regex(/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/),
+        payload: z
+          .object({
+            nextAttemptNumber: z.number().int().min(2).max(3),
+            delayMs: z.number().int().min(0).max(60_000),
+          })
+          .strict(),
+      })
+      .strict(),
+  ])
+  .superRefine((event, context) => {
+    if (BigInt(event.cursor) > 9_223_372_036_854_775_807n) {
+      context.addIssue({ code: 'custom', message: 'Runtime event cursor exceeds int64.' });
+    }
+    if (event.type === 'DEVICE_EXECUTION_STATE_CHANGED') {
+      if (event.payload.error && !['FAILED', 'INTERRUPTED'].includes(event.payload.status)) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Runtime device errors are only valid for failed terminal states.',
+          path: ['payload', 'error'],
+        });
+      }
+      return;
+    }
+    if (event.type !== 'NODE_ATTEMPT_STATE_CHANGED') return;
+    const { status, output, error } = event.payload;
+    const invalid =
+      (status === 'RUNNING' && (output !== undefined || error !== undefined)) ||
+      (status === 'SUCCEEDED' && (output === undefined || error !== undefined)) ||
+      (['FAILED', 'TIMED_OUT', 'INTERRUPTED'].includes(status) &&
+        (error === undefined || output !== undefined)) ||
+      (status === 'CANCELLED' && (output !== undefined || error !== undefined));
+    if (invalid) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Runtime attempt event payload does not match its status.',
+        path: ['payload'],
+      });
+    }
+  });
+
+export const runtimeObserveRunInputSchema = z.object({ runGroupId: runtimeUuidV4Schema }).strict();
+
+export const runtimeRunActionSchema = z.enum(['PAUSE', 'RESUME', 'CANCEL']);
+
+export const runtimeRunActionInputSchema = z
+  .object({ runGroupId: runtimeUuidV4Schema, action: runtimeRunActionSchema })
+  .strict();
+
+export const runtimeCheckRunControlInputSchema = z
+  .object({ runGroupId: runtimeUuidV4Schema })
+  .strict();
+
+export const runtimeRunActionConflictSchema = z
+  .object({ error: runtimeApiErrorSchema, snapshot: runtimeRunSnapshotSchema })
+  .strict();
+
+export const runtimeObservationControlInputSchema = z
+  .object({ observationId: runtimeUuidV4Schema })
+  .strict();
+
+export const runtimeObservationAckInputSchema = runtimeObservationControlInputSchema
+  .extend({ version: z.number().int().positive().max(Number.MAX_SAFE_INTEGER) })
+  .strict();
+
+export const runtimeObservationDeviceInputSchema = runtimeObservationControlInputSchema
+  .extend({ deviceExecutionId: runtimeUuidV4Schema })
+  .strict();
+
+export const runtimeArtifactPreviewInputSchema = z
+  .object({ requestId: runtimeUuidV4Schema, artifactId: runtimeUuidV4Schema })
+  .strict();
+
+export const runtimeArtifactPreviewCancelInputSchema = z
+  .object({ requestId: runtimeUuidV4Schema })
+  .strict();
+
 export const runtimeStartDeviceInputSchema = z
   .object({
     adbSerial: z.string().trim().min(1).max(512),
@@ -230,19 +410,35 @@ export const runtimeStartDeviceInputSchema = z
   })
   .strict();
 
+export const runtimeStartDevicesSchema = z
+  .array(runtimeStartDeviceInputSchema)
+  .min(1)
+  .superRefine((devices, context) => {
+    const serials = new Set<string>();
+    devices.forEach((device, index) => {
+      if (serials.has(device.adbSerial)) {
+        context.addIssue({
+          code: 'custom',
+          message: 'Runtime device serials must be unique.',
+          path: [index, 'adbSerial'],
+        });
+      }
+      serials.add(device.adbSerial);
+    });
+  });
+
 export const runtimeStartRequestSchema = z
   .object({
     requestId: runtimeUuidV4Schema,
     runtimeIr: jsonObjectSchema,
-    devices: z.tuple([runtimeStartDeviceInputSchema]),
+    devices: runtimeStartDevicesSchema,
   })
   .strict();
 
 export const runtimeStartRunInputSchema = runtimeCompilationInputSchema
   .extend({
-    adbSerial: z.string().trim().min(1).max(512),
     clientIntentId: runtimeUuidV4Schema.optional(),
-    inputs: jsonObjectSchema,
+    devices: runtimeStartDevicesSchema,
   })
   .strict();
 

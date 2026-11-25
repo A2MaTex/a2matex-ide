@@ -82,7 +82,7 @@ export function NodeConfigDrawer({
       aria-label="Node configuration drawer"
       inert={!open}
       className={cn(
-        'absolute inset-y-0 right-0 z-30 w-[460px] max-w-[calc(100%-1rem)] border-l border-border bg-panel shadow-[-18px_0_50px_-30px_rgba(0,0,0,0.8)] transition-transform duration-200 ease-out',
+        'absolute inset-y-0 right-0 z-30 w-108 max-w-[calc(100%-1rem)] border-l border-border bg-panel shadow-[-18px_0_50px_-30px_rgba(0,0,0,0.8)] transition-transform duration-200 ease-out',
         open ? 'translate-x-0' : 'pointer-events-none translate-x-full',
       )}
     >

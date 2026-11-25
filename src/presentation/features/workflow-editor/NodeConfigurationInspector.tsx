@@ -300,7 +300,7 @@ function ConfiguredInspector(props: {
           <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
             {definition.description}
           </p>
-          <div className="mt-3 grid grid-cols-3 gap-2 text-sm">
+          <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
             <Button
               size="sm"
               variant="ghost"
@@ -573,7 +573,6 @@ function ConfiguredInspector(props: {
 
             <details className="group rounded-lg bg-background/35">
               <summary className="flex cursor-pointer list-none items-center gap-2 px-3 py-2.5 text-xs font-medium [&::-webkit-details-marker]:hidden">
-                <Zap className="size-3.5 text-muted-foreground" />
                 Execution overrides
                 <span className="ml-auto text-[9px] font-normal text-muted-foreground">
                   Optional
@@ -643,7 +642,7 @@ function ConfiguredInspector(props: {
         </div>
       </div>
 
-      <div className="flex shrink-0 items-center gap-3 border-t border-border/80 bg-panel/95 px-3.5 py-3 backdrop-blur text-sm">
+      <div className="flex shrink-0 items-center gap-3 border-t border-border/80 bg-panel/95 px-3.5 py-3 backdrop-blur text-xs">
         <div className="min-w-0 flex-1">
           {stale ? (
             <p className="truncate text-[10px] font-medium text-destructive">
@@ -661,10 +660,10 @@ function ConfiguredInspector(props: {
           )}
         </div>
         <Button size="sm" variant="ghost" disabled={!dirty} onClick={cancel}>
-          Discard changes
+          Discard
         </Button>
         <Button size="sm" disabled={!dirty || stale || draftIssues.length > 0} onClick={save}>
-          <Save /> Save changes
+          <Save /> Save
         </Button>
       </div>
     </section>

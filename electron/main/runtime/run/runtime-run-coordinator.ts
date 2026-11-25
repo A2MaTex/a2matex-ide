@@ -16,16 +16,19 @@ import type {
   RuntimeRunSnapshot,
   RuntimeStartRequest,
   RuntimeStartRunInput,
+  RuntimeUnavailableDevice,
 } from '@application/runtime/runtime.types';
 import { toRuntimeEditorGraph } from '@application/runtime/to-runtime-editor-graph';
 import type { WorkflowValidationOutput } from '@application/workflow-validation/workflow-validation.types';
 
 const TERMINAL_RUN_STATES = new Set(['SUCCEEDED', 'FAILED', 'CANCELLED', 'INTERRUPTED']);
+const MAX_RUNTIME_IR_BYTES = 1024 * 1024;
 
 export interface RuntimeRunCoordinatorErrorOptions extends ErrorOptions {
   httpStatus?: number;
   projectSnapshot?: LocalProjectSnapshot;
   runtimeCode?: string;
+  unavailableDevices?: RuntimeUnavailableDevice[];
   validation?: WorkflowValidationOutput;
 }
 
@@ -35,6 +38,7 @@ export class RuntimeRunCoordinatorError extends Error {
   readonly projectSnapshot?: LocalProjectSnapshot;
   readonly retryable: boolean;
   readonly runtimeCode?: string;
+  readonly unavailableDevices?: RuntimeUnavailableDevice[];
   readonly validation?: WorkflowValidationOutput;
 
   constructor(
@@ -50,6 +54,7 @@ export class RuntimeRunCoordinatorError extends Error {
     this.projectSnapshot = options?.projectSnapshot;
     this.retryable = retryable;
     this.runtimeCode = options?.runtimeCode;
+    this.unavailableDevices = options?.unavailableDevices;
     this.validation = options?.validation;
   }
 }
@@ -57,6 +62,8 @@ export class RuntimeRunCoordinatorError extends Error {
 export interface RuntimeRunController {
   activeRun(): Promise<RuntimeRunLookupResult>;
   hasUnresolvedRun(): boolean;
+  ownsRunGroup(runGroupId: string): boolean;
+  acceptObservation(snapshot: RuntimeRunSnapshot, processedCursor: string): void;
   onPreparationChanged(listener: (event: RuntimeRunPreparationEvent) => void): () => void;
   runById(runGroupId: string): Promise<RuntimeRunLookupResult>;
   runtimeStopped(): void;
@@ -101,6 +108,7 @@ function mapCoordinatorError(
       httpStatus: error.httpStatus,
       projectSnapshot,
       runtimeCode: error.runtimeCode,
+      unavailableDevices: error.unavailableDevices,
       validation: error.validation,
     });
   }
@@ -110,6 +118,7 @@ function mapCoordinatorError(
       httpStatus: error.httpStatus,
       projectSnapshot,
       runtimeCode: error.runtimeCode,
+      unavailableDevices: error.unavailableDevices,
       validation: error.validation,
     });
   }
@@ -148,6 +157,7 @@ function uncertainAdmission(error: unknown) {
 
 export class RuntimeRunCoordinator implements RuntimeRunController {
   private activeSnapshot: RuntimeRunSnapshot | null = null;
+  private activeObservationCursor: string | null = null;
   private pendingAdmission: PendingAdmission | null = null;
   private preparing = false;
   private readonly preparationListeners = new Set<(event: RuntimeRunPreparationEvent) => void>();
@@ -203,6 +213,13 @@ export class RuntimeRunCoordinator implements RuntimeRunController {
       if (compilation.runtimeIr === null || compilation.validation.status === 'INVALID') {
         return { outcome: 'COMPILE_INVALID', validation: compilation.validation };
       }
+      if (Buffer.byteLength(JSON.stringify(compilation.runtimeIr), 'utf8') > MAX_RUNTIME_IR_BYTES) {
+        throw new RuntimeRunCoordinatorError(
+          'RUNTIME_PAYLOAD_TOO_LARGE',
+          'The compiled Runtime IR exceeds the local Runtime payload limit.',
+          false,
+        );
+      }
 
       let projectSnapshot: LocalProjectSnapshot;
       try {
@@ -215,14 +232,30 @@ export class RuntimeRunCoordinator implements RuntimeRunController {
       try {
         this.emitPreparation(immutableInput.clientIntentId, 'REFRESHING_DEVICE');
         const devices = await this.runtime.refreshDevices();
-        const selected = devices.find((device) => device.adbSerial === immutableInput.adbSerial);
-        if (!selected || selected.status !== 'READY') {
+        const inventory = new Map(devices.map((device) => [device.adbSerial, device]));
+        const unavailableDevices = immutableInput.devices.flatMap((requested, index) => {
+          const selected = inventory.get(requested.adbSerial);
+          if (selected?.status === 'READY') return [];
+          return [
+            {
+              index,
+              adbSerial: requested.adbSerial,
+              reason: selected?.error ?? {
+                code: 'DEVICE_NOT_FOUND',
+                message: 'The selected Android device is no longer available to the local Runtime.',
+                retryable: true,
+              },
+            },
+          ];
+        });
+        if (unavailableDevices.length > 0) {
           throw new RuntimeRunCoordinatorError(
             'RUN_DEVICE_UNAVAILABLE',
-            selected?.error?.message ??
-              'The selected Android device is no longer available to the local Runtime.',
+            unavailableDevices.length === 1
+              ? unavailableDevices[0].reason.message
+              : `${unavailableDevices.length} selected Android devices are no longer available to the local Runtime.`,
             true,
-            { projectSnapshot },
+            { projectSnapshot, unavailableDevices },
           );
         }
 
@@ -230,7 +263,7 @@ export class RuntimeRunCoordinator implements RuntimeRunController {
           body: {
             requestId: this.createRequestId(),
             runtimeIr: compilation.runtimeIr,
-            devices: [{ adbSerial: immutableInput.adbSerial, inputs: immutableInput.inputs }],
+            devices: structuredClone(immutableInput.devices),
           },
           clientIntentId: immutableInput.clientIntentId,
           intentFingerprint,
@@ -251,6 +284,7 @@ export class RuntimeRunCoordinator implements RuntimeRunController {
     const result = await this.runtime.activeRun();
     if (!result.found) {
       this.activeSnapshot = null;
+      this.activeObservationCursor = null;
       return result;
     }
     this.acceptReadSnapshot(result.snapshot);
@@ -263,6 +297,10 @@ export class RuntimeRunCoordinator implements RuntimeRunController {
     );
   }
 
+  ownsRunGroup(runGroupId: string) {
+    return this.activeSnapshot?.runGroup.id === runGroupId && !terminal(this.activeSnapshot);
+  }
+
   onPreparationChanged(listener: (event: RuntimeRunPreparationEvent) => void) {
     this.preparationListeners.add(listener);
     return () => this.preparationListeners.delete(listener);
@@ -270,13 +308,32 @@ export class RuntimeRunCoordinator implements RuntimeRunController {
 
   runtimeStopped() {
     this.activeSnapshot = null;
+    this.activeObservationCursor = null;
     this.pendingAdmission = null;
   }
 
   async runById(runGroupId: string): Promise<RuntimeRunLookupResult> {
     const result = await this.runtime.runById(runGroupId);
-    if (result.found) this.acceptReadSnapshot(result.snapshot);
+    if (
+      result.found &&
+      (this.activeSnapshot?.runGroup.id === result.snapshot.runGroup.id ||
+        this.pendingAdmission?.body.requestId === result.snapshot.runGroup.requestId)
+    ) {
+      this.acceptReadSnapshot(result.snapshot);
+    }
     return result;
+  }
+
+  acceptObservation(snapshot: RuntimeRunSnapshot, processedCursor: string) {
+    if (this.activeSnapshot?.runGroup.id !== snapshot.runGroup.id) return;
+    if (
+      this.activeObservationCursor &&
+      BigInt(processedCursor) < BigInt(this.activeObservationCursor)
+    ) {
+      return;
+    }
+    this.activeObservationCursor = processedCursor;
+    this.activeSnapshot = terminal(snapshot) ? null : snapshot;
   }
 
   private assertCurrentSource(
@@ -333,11 +390,15 @@ export class RuntimeRunCoordinator implements RuntimeRunController {
     try {
       this.emitPreparation(pending.clientIntentId, 'STARTING');
       const result = await this.runtime.startRun(pending.body);
-      const execution = result.snapshot.deviceExecutions[0];
+      const responseDevices = result.snapshot.deviceExecutions;
+      const responseMatchesRequest =
+        responseDevices.length === pending.body.devices.length &&
+        responseDevices.every(
+          (execution, index) => execution.adbSerial === pending.body.devices[index]?.adbSerial,
+        );
       if (
         result.snapshot.runGroup.requestId !== pending.body.requestId ||
-        !execution ||
-        execution.adbSerial !== pending.body.devices[0].adbSerial
+        !responseMatchesRequest
       ) {
         throw new RuntimeError(
           'RUNTIME_INVALID_RESPONSE',
@@ -347,6 +408,7 @@ export class RuntimeRunCoordinator implements RuntimeRunController {
       }
       this.pendingAdmission = null;
       this.activeSnapshot = terminal(result.snapshot) ? null : result.snapshot;
+      this.activeObservationCursor = result.snapshot.cursor;
       return {
         outcome: 'STARTED',
         disposition: result.disposition,
@@ -364,6 +426,7 @@ export class RuntimeRunCoordinator implements RuntimeRunController {
       this.pendingAdmission = null;
     }
     this.activeSnapshot = terminal(snapshot) ? null : snapshot;
+    this.activeObservationCursor = snapshot.cursor;
   }
 
   private emitPreparation(
