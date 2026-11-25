@@ -52,6 +52,9 @@ export function validateWorkflowBinding(
   if (!kind || !input.bindingKinds[kind]) {
     return [`${input.name} uses an unsupported binding source`];
   }
+  if (kind === 'LITERAL' && !Object.hasOwn(binding, 'value')) {
+    return [`${input.name} is required`];
+  }
 
   const contract = input.bindingKinds[kind]!;
   const expected = new Set(['kind', ...contract.fields]);
@@ -95,15 +98,17 @@ export function defaultBindingFor(
 ): WorkflowBinding {
   if (kind === 'LITERAL') {
     const allowed = input.bindingKinds.LITERAL?.literalTypes;
-    const value =
-      input.valueSchema?.default ??
-      (input.valueSchema?.type === 'boolean' || allowed?.[0] === 'boolean'
-        ? false
-        : input.valueSchema?.type === 'integer' ||
-            input.valueSchema?.type === 'number' ||
-            allowed?.[0] === 'number'
-          ? 0
-          : '');
+    if (input.valueSchema?.default !== undefined) {
+      return literalBinding(input.valueSchema.default);
+    }
+    if (
+      input.valueSchema?.type === 'integer' ||
+      input.valueSchema?.type === 'number' ||
+      allowed?.[0] === 'number'
+    ) {
+      return { kind };
+    }
+    const value = input.valueSchema?.type === 'boolean' || allowed?.[0] === 'boolean' ? false : '';
     return literalBinding(value);
   }
   if (kind === 'WORKFLOW_INPUT') return { kind, inputName: '' };

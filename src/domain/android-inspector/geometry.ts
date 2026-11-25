@@ -84,6 +84,13 @@ export function isValidBounds(bounds: InspectorBounds) {
   );
 }
 
+export function boundsCenter(bounds: InspectorBounds) {
+  return {
+    x: (bounds.left + bounds.right) / 2,
+    y: (bounds.top + bounds.bottom) / 2,
+  };
+}
+
 function boundsArea(bounds: InspectorBounds) {
   return (bounds.right - bounds.left) * (bounds.bottom - bounds.top);
 }

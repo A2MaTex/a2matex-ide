@@ -8,7 +8,6 @@ import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import { cn } from '@shared/utils/cn';
 
 import { NodeConfigurationInspector } from '@presentation/features/workflow-editor/NodeConfigurationInspector';
-import { useEditorStore } from '@presentation/stores/editor-store';
 
 interface NodeConfigDrawerProps {
   open: boolean;
@@ -54,8 +53,6 @@ export function NodeConfigDrawer({
   onClose,
   onPendingChange,
 }: NodeConfigDrawerProps) {
-  const helpTarget = useEditorStore((state) => state.helpTarget);
-  const drawerRef = useRef<HTMLElement>(null);
   const dirtyNodeIdRef = useRef<string | null>(null);
   const nodeId = node?.id;
   const close = useCallback(() => {
@@ -77,40 +74,10 @@ export function NodeConfigDrawer({
     [onPendingChange],
   );
 
-  useEffect(() => {
-    if (!open) return;
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (helpTarget) return;
-      const target = event.target;
-      if (drawerRef.current?.contains(target as globalThis.Node)) return;
-      if (target instanceof Element && target.closest('[data-android-inspector-panel]')) return;
-      if (!close()) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-      }
-    };
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (helpTarget) return;
-      if (event.key !== 'Escape') return;
-      event.preventDefault();
-      event.stopPropagation();
-      close();
-    };
-
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    document.addEventListener('keydown', handleKeyDown, true);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown, true);
-      document.removeEventListener('keydown', handleKeyDown, true);
-    };
-  }, [close, helpTarget, open]);
-
   useEffect(() => () => onPendingChange(null), [onPendingChange]);
 
   return (
     <aside
-      ref={drawerRef}
       aria-hidden={!open}
       aria-label="Node configuration drawer"
       inert={!open}

@@ -93,7 +93,8 @@ export function BindingSourceField({
       ? 'boolean'
       : typeof selectedBinding?.value === 'number'
         ? 'number'
-        : 'string';
+        : (literalTypes[0] ?? 'string');
+  const emptyLiteralBinding = input.required ? { kind: 'LITERAL' } : undefined;
 
   return (
     <div
@@ -143,7 +144,9 @@ export function BindingSourceField({
             schema={input.valueSchema}
             value={selectedBinding?.value}
             errors={[]}
-            onChange={(value) => onChange(value === undefined ? undefined : { kind, value })}
+            onChange={(value) =>
+              onChange(value === undefined ? emptyLiteralBinding : { kind, value })
+            }
           />
         </div>
       ) : kind === 'LITERAL' ? (
@@ -187,12 +190,16 @@ export function BindingSourceField({
                   ? String(selectedBinding.value)
                   : ''
               }
-              onChange={(event) =>
+              onChange={(event) => {
+                if (literalType === 'number' && event.target.value === '') {
+                  onChange(emptyLiteralBinding);
+                  return;
+                }
                 onChange({
                   kind,
                   value: literalType === 'number' ? Number(event.target.value) : event.target.value,
-                })
-              }
+                });
+              }}
               className={inputClass}
             />
           )}

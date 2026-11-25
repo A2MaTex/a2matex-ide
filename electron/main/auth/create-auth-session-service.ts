@@ -63,6 +63,12 @@ class E2EAuthClient implements MainAuthClient {
     return this.getValidAccessToken();
   }
 
+  invalidateSession(): Promise<void> {
+    this.session = { status: 'signed-out' };
+    this.notify();
+    return Promise.resolve();
+  }
+
   subscribe(listener: (session: SessionState) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);

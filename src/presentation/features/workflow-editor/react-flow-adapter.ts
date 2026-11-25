@@ -1,6 +1,6 @@
 import type { Edge, Node } from '@xyflow/react';
 
-import type { WorkflowDocument, WorkflowNode } from '@domain/project/project';
+import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
 import {
   connectionInputsFor,
   connectionOutputsFor,
@@ -11,6 +11,7 @@ import {
   type PortDefinition,
 } from '@domain/workflow/node-definition';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
+import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 
 export interface AutomationNodeData extends Record<string, unknown> {
   displayName: string;
@@ -24,6 +25,47 @@ export interface AutomationNodeData extends Record<string, unknown> {
 }
 
 export type AutomationFlowNode = Node<AutomationNodeData, 'automation'>;
+
+export function selectedEdgeFromOutput(
+  workflow: WorkflowDocument,
+  selectedEdgeId: string | null,
+  sourceNodeId: string,
+  sourcePort: string,
+): WorkflowEdge | undefined {
+  if (!selectedEdgeId) return undefined;
+  return workflow.edges.find(
+    (edge) =>
+      edge.id === selectedEdgeId &&
+      edge.sourceNodeId === sourceNodeId &&
+      edge.sourcePort === sourcePort,
+  );
+}
+
+type ConnectionCommand = Extract<WorkflowCommand, { type: 'edge.connect' | 'edge.reconnect' }>;
+
+export function connectionCommandFor(
+  workflow: WorkflowDocument,
+  selectedEdgeId: string | null,
+  newEdgeId: string,
+  source: { nodeId: string; port: string },
+  target: { nodeId: string; port: string },
+): ConnectionCommand {
+  const selectedSourceEdge = selectedEdgeFromOutput(
+    workflow,
+    selectedEdgeId,
+    source.nodeId,
+    source.port,
+  );
+  return selectedSourceEdge
+    ? {
+        type: 'edge.reconnect',
+        payload: { edgeId: selectedSourceEdge.id, source, target },
+      }
+    : {
+        type: 'edge.connect',
+        payload: { edgeId: newEdgeId, source, target },
+      };
+}
 
 export function connectionOutputHandlesFor(
   definition: NodeDefinition,
@@ -89,6 +131,7 @@ export function toReactFlowEdges(
   workflow: WorkflowDocument,
   catalog: readonly NodeDefinition[],
   selectedEdgeId?: string | null,
+  reconnectingEdgeId?: string | null,
 ): Edge[] {
   const nodes = new Map(workflow.nodes.map((node) => [node.id, node]));
   return workflow.edges.map((edge) => {
@@ -112,9 +155,14 @@ export function toReactFlowEdges(
       targetHandle: 'in',
       selected: edge.id === selectedEdgeId,
       reconnectable: true,
+      interactionWidth: 24,
       type: 'smoothstep',
       animated: false,
-      style: { stroke, strokeWidth: 1.5 },
+      style: {
+        stroke,
+        strokeWidth: edge.id === selectedEdgeId ? 2.5 : 1.5,
+        opacity: edge.id === reconnectingEdgeId ? 0 : 1,
+      },
     };
   });
 }

@@ -1,27 +1,13 @@
 import { HelpCircle, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 
-import {
-  connectionInputsFor,
-  type NodeDefinition,
-  type PropertyDefinition,
-} from '@domain/workflow/node-definition';
+import { type NodeDefinition } from '@domain/workflow/node-definition';
 import { Button } from '@presentation/components/ui/button';
-import { connectionOutputHandlesFor } from '@presentation/features/workflow-editor/react-flow-adapter';
 
 interface NodeHelpDialogProps {
   target: { type: string; version: number } | null;
   definition: NodeDefinition | null;
   onClose(): void;
-}
-
-function propertyDetails(property: PropertyDefinition, required: boolean) {
-  const details = [property.type, required ? 'required' : 'optional'];
-  if (property.default !== undefined) details.push('default: ' + JSON.stringify(property.default));
-  if (property.minimum !== undefined) details.push('min: ' + property.minimum);
-  if (property.maximum !== undefined) details.push('max: ' + property.maximum);
-  if (property.pattern) details.push('pattern: ' + property.pattern);
-  return details.join(' · ');
 }
 
 export function NodeHelpDialog({ target, definition, onClose }: NodeHelpDialogProps) {
@@ -41,14 +27,11 @@ export function NodeHelpDialog({ target, definition, onClose }: NodeHelpDialogPr
   }, [onClose, target]);
 
   if (!target) return null;
-  const required = new Set(definition?.properties.required ?? []);
   const properties = Object.entries(definition?.properties.properties ?? {});
-  const connectionPorts = definition
-    ? [...connectionInputsFor(definition), ...connectionOutputHandlesFor(definition)]
-    : [];
   const inputVariables = Object.entries(definition?.inputVariables?.properties ?? {});
   const outputVariables = Object.entries(definition?.outputVariables?.properties ?? {});
 
+  console.log(definition);
   return (
     <div className="fixed inset-0 z-60 grid place-items-center bg-black/65 p-6" role="presentation">
       <section
@@ -84,24 +67,14 @@ export function NodeHelpDialog({ target, definition, onClose }: NodeHelpDialogPr
             <p className="leading-5 text-muted-foreground">{definition.description || ''}</p>
 
             <section>
-              <h3 className="mb-2 font-semibold">Connection handles</h3>
-              {connectionPorts.length > 0 ? (
-                <div className="space-y-2">
-                  {connectionPorts.map((port) => (
-                    <div
-                      key={port.direction + ':' + port.name}
-                      className="rounded-md bg-background p-3"
-                    >
-                      <div className="font-medium">{port.label}</div>
-                      <div className="mt-1 font-mono text-[10px] text-muted-foreground">
-                        {port.direction} · {port.kind} · {JSON.stringify(port.valueType)}
-                      </div>
-                    </div>
-                  ))}
+              <h3 className="mb-2 font-semibold">Default timeout</h3>
+              <div className="rounded-md bg-background p-3">
+                <div className="mt-1 font-mono text-[10px] text-muted-foreground">
+                  {definition.defaultTimeoutMs
+                    ? definition.defaultTimeoutMs + ' Ms'
+                    : 'No data variables declared.'}
                 </div>
-              ) : (
-                <p className="text-muted-foreground">No ports declared.</p>
-              )}
+              </div>
             </section>
 
             <section>
@@ -114,8 +87,14 @@ export function NodeHelpDialog({ target, definition, onClose }: NodeHelpDialogPr
                   ].map(([direction, key, property]) => (
                     <div key={`${direction}:${key}`} className="rounded-md bg-background p-3">
                       <div className="font-medium">{property.title}</div>
+                      <div className="mt-2 font-mono text-[10px] text-muted-foreground">
+                        Type: {property.type}
+                      </div>
                       <div className="mt-1 font-mono text-[10px] text-muted-foreground">
-                        {direction} variable · {key} · {property.type}
+                        Max length:{' '}
+                        {typeof property.jsonSchema?.maxLength === 'number'
+                          ? property.jsonSchema.maxLength
+                          : 'Not specified'}
                       </div>
                     </div>
                   ))}
@@ -133,7 +112,7 @@ export function NodeHelpDialog({ target, definition, onClose }: NodeHelpDialogPr
                     <div key={key} className="rounded-md bg-background p-3">
                       <div className="font-medium">{property.title}</div>
                       <div className="mt-1 font-mono text-[10px] text-muted-foreground">
-                        {key} · {propertyDetails(property, required.has(key))}
+                        {property.type}
                       </div>
                       <p className="mt-1 text-[10px] leading-4 text-muted-foreground">
                         {property.description || ''}

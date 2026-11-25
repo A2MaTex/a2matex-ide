@@ -308,7 +308,7 @@ export class AuthSessionService implements MainAuthSession {
     }, this.refreshRetryMs);
   }
 
-  private async invalidateSession() {
+  async invalidateSession() {
     this.clearMemorySession();
     try {
       await this.vault.clear();

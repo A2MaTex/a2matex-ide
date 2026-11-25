@@ -240,7 +240,6 @@ function ConfiguredInspector(props: {
     setDraft(committedDraft);
     setDirty(false);
     onDirtyChange(null);
-    onClose();
   };
   const save = () => {
     if (!dirty || stale || draftIssues.length > 0) return;
@@ -363,7 +362,7 @@ function ConfiguredInspector(props: {
                   id={`property-${name}`}
                   name={name}
                   schema={schema}
-                  value={draft.config[name] ?? schema.default}
+                  value={draft.config[name]}
                   errors={schemaIssues('config', name)}
                   onChange={(value) =>
                     name === 'targetMode' && typeof value === 'string' && definition.targeting
@@ -662,7 +661,7 @@ function ConfiguredInspector(props: {
           )}
         </div>
         <Button size="sm" variant="ghost" disabled={!dirty} onClick={cancel}>
-          Cancel
+          Discard changes
         </Button>
         <Button size="sm" disabled={!dirty || stale || draftIssues.length > 0} onClick={save}>
           <Save /> Save changes

@@ -213,7 +213,15 @@ export class NodeCatalogService implements NodeCatalogClient {
           false,
         );
       }
-      return this.remote.fetch({ ...input, accessToken: refreshedToken });
+      try {
+        return await this.remote.fetch({ ...input, accessToken: refreshedToken });
+      } catch (retryError) {
+        const retryMapped = asCatalogError(retryError);
+        if (retryMapped.code === 'CATALOG_SESSION_EXPIRED') {
+          await this.auth.invalidateSession().catch(() => undefined);
+        }
+        throw retryMapped;
+      }
     }
   }
 }

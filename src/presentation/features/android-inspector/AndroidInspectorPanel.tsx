@@ -21,7 +21,7 @@ import {
   type AndroidSelectorTarget,
   type AndroidSelectorV1,
 } from '@domain/android-inspector/android-selector';
-import { getInspectorCandidates } from '@domain/android-inspector/geometry';
+import { boundsCenter, getInspectorCandidates } from '@domain/android-inspector/geometry';
 import { Button } from '@presentation/components/ui/button';
 import { toast } from '@presentation/components/ui/toast-store';
 import { ScreenshotViewport } from '@presentation/features/android-inspector/ScreenshotViewport';
@@ -52,6 +52,36 @@ function shortClassName(className: string) {
 function formatBounds(node: InspectorNode) {
   const { left, top, right, bottom } = node.bounds;
   return `[${left},${top}][${right},${bottom}]`;
+}
+
+function formatBoundsCenter(node: InspectorNode) {
+  const center = boundsCenter(node.bounds);
+  return `[${center.x},${center.y}]`;
+}
+
+type DetailFeedback = 'package' | 'resourceId' | 'class' | 'text';
+
+function DetailCopyButton({
+  copied,
+  label,
+  onClick,
+}: {
+  copied: boolean;
+  label: string;
+  onClick(): void;
+}) {
+  const actionLabel = copied ? `Copied ${label}` : `Copy ${label}`;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={actionLabel}
+      title={actionLabel}
+      className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
+    >
+      {copied ? <Check className="size-3" /> : <Copy className="size-3" />}
+    </button>
+  );
 }
 
 function DetailRow({ label, value, action }: { label: string; value: string; action?: ReactNode }) {
@@ -85,7 +115,9 @@ export function AndroidInspectorPanel({
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [selectorTargetKey, setSelectorTargetKey] = useState('');
-  const [feedback, setFeedback] = useState<'none' | 'resourceId' | 'selector' | 'applied'>('none');
+  const [feedback, setFeedback] = useState<'none' | DetailFeedback | 'selector' | 'applied'>(
+    'none',
+  );
   const selectedDeviceIdRef = useRef('');
   const captureRequestRef = useRef(0);
 
@@ -229,16 +261,16 @@ export function AndroidInspectorPanel({
     setFeedback('none');
   };
 
-  const copyResourceId = async () => {
-    if (!selectedNode?.resourceId) return;
-    if (await copyText(selectedNode.resourceId)) {
-      setFeedback('resourceId');
+  const copyDetail = async (kind: DetailFeedback, label: string, value?: string) => {
+    if (!value) return;
+    if (await copyText(value)) {
+      setFeedback(kind);
       setError(null);
-      toast.success('Resource ID copied');
+      toast.success(`${label} copied`);
     } else {
       setFeedback('none');
-      setError('Unable to copy the resource ID to the clipboard.');
-      toast.error('Unable to copy resource ID');
+      setError(`Unable to copy the ${label.toLowerCase()} to the clipboard.`);
+      toast.error(`Unable to copy ${label.toLowerCase()}`);
     }
   };
 
@@ -475,36 +507,65 @@ export function AndroidInspectorPanel({
             {selectedNode ? (
               <div className="space-y-2 border-t border-border pt-3 text-xs">
                 <dl className="space-y-1.5">
-                  <DetailRow label="Package" value={selectedNode.packageName ?? ''} />
+                  <DetailRow
+                    label="Package"
+                    value={selectedNode.packageName ?? ''}
+                    action={
+                      selectedNode.packageName ? (
+                        <DetailCopyButton
+                          copied={feedback === 'package'}
+                          label="package"
+                          onClick={() =>
+                            void copyDetail('package', 'Package', selectedNode.packageName)
+                          }
+                        />
+                      ) : null
+                    }
+                  />
                   <DetailRow
                     label="Resource ID"
                     value={selectedNode.resourceId ?? ''}
                     action={
                       selectedNode.resourceId ? (
-                        <button
-                          type="button"
-                          onClick={() => void copyResourceId()}
-                          aria-label={
-                            feedback === 'resourceId' ? 'Copied resource ID' : 'Copy resource ID'
+                        <DetailCopyButton
+                          copied={feedback === 'resourceId'}
+                          label="resource ID"
+                          onClick={() =>
+                            void copyDetail('resourceId', 'Resource ID', selectedNode.resourceId)
                           }
-                          title={
-                            feedback === 'resourceId' ? 'Copied resource ID' : 'Copy resource ID'
-                          }
-                          className="grid size-5 shrink-0 place-items-center rounded text-muted-foreground transition-colors hover:bg-accent hover:text-foreground"
-                        >
-                          {feedback === 'resourceId' ? (
-                            <Check className="size-3" />
-                          ) : (
-                            <Copy className="size-3" />
-                          )}
-                        </button>
+                        />
                       ) : null
                     }
                   />
-                  <DetailRow label="Class" value={selectedNode.className} />
-                  <DetailRow label="Text" value={selectedNode.text ?? ''} />
+                  <DetailRow
+                    label="Class"
+                    value={selectedNode.className}
+                    action={
+                      selectedNode.className ? (
+                        <DetailCopyButton
+                          copied={feedback === 'class'}
+                          label="class"
+                          onClick={() => void copyDetail('class', 'Class', selectedNode.className)}
+                        />
+                      ) : null
+                    }
+                  />
+                  <DetailRow
+                    label="Text"
+                    value={selectedNode.text ?? ''}
+                    action={
+                      selectedNode.text ? (
+                        <DetailCopyButton
+                          copied={feedback === 'text'}
+                          label="text"
+                          onClick={() => void copyDetail('text', 'Text', selectedNode.text)}
+                        />
+                      ) : null
+                    }
+                  />
                   <DetailRow label="Content desc" value={selectedNode.contentDescription ?? ''} />
                   <DetailRow label="Bounds" value={formatBounds(selectedNode)} />
+                  <DetailRow label="[x, y]" value={formatBoundsCenter(selectedNode)} />
                   <DetailRow label="Clickable" value={String(selectedNode.clickable)} />
                   <DetailRow label="Enabled" value={String(selectedNode.enabled)} />
                   <DetailRow label="Depth" value={String(selectedNode.depth)} />

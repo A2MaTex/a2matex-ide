@@ -50,5 +50,6 @@ export interface AuthClient {
 export interface MainAuthSession extends AuthClient {
   getValidAccessToken(): Promise<string | null>;
   refreshAccessToken(): Promise<string | null>;
+  invalidateSession(): Promise<void>;
   subscribe(listener: (session: SessionState) => void): () => void;
 }

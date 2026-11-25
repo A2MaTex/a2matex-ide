@@ -10,7 +10,6 @@ import {
   ListChecks,
   Network,
   Plus,
-  Power,
   Redo2,
   Save,
   SaveAll,
@@ -125,11 +124,13 @@ export function MainWorkflowPage() {
   const redo = useProjectStore((state) => state.redo);
   const selectedNodeId = useEditorStore((state) => state.selectedNodeId);
   const nodeConfigDrawerOpen = useEditorStore((state) => state.nodeConfigDrawerOpen);
+  const nodeConfigNodeId = useEditorStore((state) => state.nodeConfigNodeId);
   const nodeDetailNodeId = useEditorStore((state) => state.nodeDetailNodeId);
   const helpTarget = useEditorStore((state) => state.helpTarget);
   const selectedEdgeId = useEditorStore((state) => state.selectedEdgeId);
   const copiedNodeId = useEditorStore((state) => state.copiedNodeId);
   const selectNode = useEditorStore((state) => state.selectNode);
+  const openNodeConfigDrawer = useEditorStore((state) => state.openNodeConfigDrawer);
   const closeNodeConfigDrawer = useEditorStore((state) => state.closeNodeConfigDrawer);
   const closeNodeDetail = useEditorStore((state) => state.closeNodeDetail);
   const openHelp = useEditorStore((state) => state.openHelp);
@@ -167,23 +168,25 @@ export function MainWorkflowPage() {
   );
   useProjectCloseGuard(dirty || Boolean(pendingNodeConfigurationId), flushBeforeClose);
 
-  const activateAndroidInspector = useCallback(() => {
-    if (!nodeConfigDrawerOpen) return true;
-    if (
-      pendingNodeConfigurationId &&
-      !window.confirm('Discard unsaved node configuration changes?')
-    ) {
-      return false;
-    }
-    setPendingNodeConfiguration(null);
-    closeNodeConfigDrawer();
-    return true;
-  }, [
-    closeNodeConfigDrawer,
-    nodeConfigDrawerOpen,
-    pendingNodeConfigurationId,
-    setPendingNodeConfiguration,
-  ]);
+  const configureNode = useCallback(
+    (nodeId: string) => {
+      if (
+        nodeConfigNodeId !== nodeId &&
+        pendingNodeConfigurationId &&
+        !window.confirm('Discard unsaved node configuration changes?')
+      ) {
+        return;
+      }
+      if (nodeConfigNodeId !== nodeId) setPendingNodeConfiguration(null);
+      openNodeConfigDrawer(nodeId);
+    },
+    [
+      nodeConfigNodeId,
+      openNodeConfigDrawer,
+      pendingNodeConfigurationId,
+      setPendingNodeConfiguration,
+    ],
+  );
 
   useEffect(() => {
     if (!session && projectId && status === 'idle' && attemptedProjectId.current !== projectId) {
@@ -295,36 +298,6 @@ export function MainWorkflowPage() {
     busy: workflowValidationBusy,
   } = useWorkflowValidation(workflowPath);
 
-  const shutdownRuntime = useCallback(async () => {
-    if (!window.studioHost) {
-      toast.error('Runtime shutdown failed', { description: 'Desktop host is unavailable.' });
-      return;
-    }
-    if (
-      testRun.unresolved &&
-      !window.confirm(
-        'Stop the local Runtime? Any active or uncertain Test Run will be interrupted.',
-      )
-    ) {
-      return;
-    }
-    setRuntimeOperationError(null);
-    try {
-      const result = await window.studioHost.runtime.shutdown();
-      if (!result.ok) {
-        setRuntimeOperationError(result.error.message);
-        toast.error('Runtime shutdown failed', { description: result.error.message });
-        return;
-      }
-      testRun.runtimeStopped();
-      toast.success('Runtime stopped');
-    } catch {
-      const message = 'The desktop Runtime bridge failed unexpectedly.';
-      setRuntimeOperationError(message);
-      toast.error('Runtime shutdown failed', { description: message });
-    }
-  }, [testRun]);
-
   useEffect(() => {
     const previous = previousRuntimeStateRef.current;
     previousRuntimeStateRef.current = runtimeStatus.state;
@@ -427,6 +400,10 @@ export function MainWorkflowPage() {
       const removed = execute({ type: 'node.remove', payload: { nodeId } });
       if (removed) {
         selectNode(null);
+        if (nodeConfigNodeId === nodeId) {
+          setPendingNodeConfiguration(null);
+          closeNodeConfigDrawer();
+        }
         closeNodeDetail();
         toast.success('Node deleted');
       } else {
@@ -434,7 +411,15 @@ export function MainWorkflowPage() {
       }
       return removed;
     },
-    [closeNodeDetail, execute, selectNode, workflow],
+    [
+      closeNodeConfigDrawer,
+      closeNodeDetail,
+      execute,
+      nodeConfigNodeId,
+      selectNode,
+      setPendingNodeConfiguration,
+      workflow,
+    ],
   );
 
   useEffect(() => {
@@ -548,6 +533,7 @@ export function MainWorkflowPage() {
   const exporting = status === 'exporting';
   const syncing = cloudStatus === 'syncing';
   const selectedNode = workflow.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const configuredNode = workflow.nodes.find((node) => node.id === nodeConfigNodeId) ?? null;
   const selectedNodeDefinition = selectedNode
     ? nodeCatalog.find((definition) => definition.type === selectedNode.type)
     : undefined;
@@ -559,8 +545,8 @@ export function MainWorkflowPage() {
   const localSaveLabel = {
     dirty: 'Unsaved changes',
     'local-save-error': 'Local save failed',
-    'saved-local': 'Saved locally',
-    'saving-local': 'Saving locally…',
+    'saved-local': 'Saved',
+    'saving-local': 'Saving…',
   }[localSaveStatus];
   const localSaveTone =
     localSaveStatus === 'local-save-error'
@@ -893,17 +879,6 @@ export function MainWorkflowPage() {
           >
             <CirclePlay /> {testRun.runButtonLabel}
           </Button>
-          <Button
-            size="icon"
-            className="size-8"
-            variant="ghost"
-            onClick={() => void shutdownRuntime()}
-            disabled={!['READY', 'STARTING', 'FAILED'].includes(runtimeStatus.state)}
-            title="Shut down local Runtime"
-            aria-label="Shut down local Runtime"
-          >
-            <Power />
-          </Button>
         </div>
       </div>
 
@@ -1083,6 +1058,7 @@ export function MainWorkflowPage() {
                         issues={issues}
                         execute={execute}
                         onDeleteNode={deleteNode}
+                        onConfigureNode={configureNode}
                         onOpenContextMenu={(position) =>
                           setActionList({ mode: 'context', position })
                         }
@@ -1091,19 +1067,19 @@ export function MainWorkflowPage() {
                   </div>
                 </section>
                 <NodeConfigDrawer
-                  open={nodeConfigDrawerOpen && Boolean(selectedNode)}
+                  open={nodeConfigDrawerOpen && Boolean(configuredNode)}
                   catalog={nodeCatalog}
                   workflow={workflow}
                   workflowInputSchema={session.snapshot.draftState.inputSchema}
-                  node={selectedNode}
+                  node={configuredNode}
                   revision={session.workingRevision}
                   issues={issues}
                   execute={execute}
                   onPendingChange={setPendingNodeConfiguration}
-                  onDuplicate={() => selectedNode && duplicateNode(selectedNode.id)}
+                  onDuplicate={() => configuredNode && duplicateNode(configuredNode.id)}
                   onDelete={() => {
-                    if (!selectedNode) return;
-                    deleteNode(selectedNode.id);
+                    if (!configuredNode) return;
+                    deleteNode(configuredNode.id);
                   }}
                   onClose={closeNodeConfigDrawer}
                 />
@@ -1123,7 +1099,6 @@ export function MainWorkflowPage() {
               <AndroidInspectorPanel
                 collapsed={androidInspectorCollapsed}
                 selectorTargets={androidSelectorTargets}
-                onActivate={activateAndroidInspector}
                 onCollapse={() => androidInspectorPanelRef.current?.collapse()}
                 onExpand={() => androidInspectorPanelRef.current?.expand()}
                 onUseSelector={(target, selector) =>

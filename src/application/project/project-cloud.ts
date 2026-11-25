@@ -629,7 +629,17 @@ export class ProjectCloudService implements ProjectCloudClient {
       }
       const refreshed = await this.auth.refreshAccessToken();
       if (!refreshed) throw error;
-      return operation(refreshed);
+      try {
+        return await operation(refreshed);
+      } catch (retryError) {
+        if (
+          retryError instanceof CloudProjectError &&
+          retryError.code === 'CLOUD_SESSION_EXPIRED'
+        ) {
+          await this.auth.invalidateSession().catch(() => undefined);
+        }
+        throw retryError;
+      }
     }
   }
 

@@ -38,6 +38,8 @@ import {
 } from '@presentation/features/workflow-editor/AddConnectedNodePanel';
 import { NODE_DRAG_MIME } from '@presentation/features/workflow-editor/NodePalette';
 import {
+  connectionCommandFor,
+  selectedEdgeFromOutput,
   toReactFlowEdges,
   toReactFlowNodes,
   type AutomationFlowNode,
@@ -49,6 +51,7 @@ interface WorkflowCanvasProps {
   issues: WorkflowIssue[];
   execute(command: WorkflowCommand): boolean;
   onDeleteNode(nodeId: string): void;
+  onConfigureNode(nodeId: string): void;
   onOpenContextMenu(
     position: { x: number; y: number },
     target: { kind: 'canvas' } | { kind: 'node'; id: string } | { kind: 'edge'; id: string },
@@ -83,6 +86,7 @@ export function WorkflowCanvas({
   issues,
   execute,
   onDeleteNode,
+  onConfigureNode,
   onOpenContextMenu,
 }: WorkflowCanvasProps) {
   const selectedNodeId = useEditorStore((state) => state.selectedNodeId);
@@ -90,17 +94,18 @@ export function WorkflowCanvas({
   const selectNode = useEditorStore((state) => state.selectNode);
   const selectEdge = useEditorStore((state) => state.selectEdge);
   const openNodeDetail = useEditorStore((state) => state.openNodeDetail);
-  const closeNodeConfigDrawer = useEditorStore((state) => state.closeNodeConfigDrawer);
   const { fitView, screenToFlowPosition } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
+  const reconnectingEdgeIdRef = useRef<string | null>(null);
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | null>(null);
+  const [reconnectingEdgeId, setReconnectingEdgeId] = useState<string | null>(null);
   const nodes = useMemo(
     () => toReactFlowNodes(workflow, selectedNodeId, issues, catalog),
     [catalog, issues, selectedNodeId, workflow],
   );
   const edges = useMemo(
-    () => toReactFlowEdges(workflow, catalog, selectedEdgeId),
-    [catalog, selectedEdgeId, workflow],
+    () => toReactFlowEdges(workflow, catalog, selectedEdgeId, reconnectingEdgeId),
+    [catalog, reconnectingEdgeId, selectedEdgeId, workflow],
   );
 
   const logicalSourcePort = (sourceNodeId: string, sourceHandle: string) => {
@@ -143,14 +148,15 @@ export function WorkflowCanvas({
     }
     const sourcePort = logicalSourcePort(connection.source, connection.sourceHandle);
     if (!sourcePort) return;
-    execute({
-      type: 'edge.connect',
-      payload: {
-        edgeId: 'edge-' + crypto.randomUUID().slice(0, 8),
-        source: { nodeId: connection.source, port: sourcePort },
-        target: { nodeId: connection.target, port: connection.targetHandle },
-      },
-    });
+    const command = connectionCommandFor(
+      workflow,
+      reconnectingEdgeIdRef.current ?? selectedEdgeId,
+      'edge-' + crypto.randomUUID().slice(0, 8),
+      { nodeId: connection.source, port: sourcePort },
+      { nodeId: connection.target, port: connection.targetHandle },
+    );
+    const applied = execute(command);
+    if (applied && command.type === 'edge.reconnect') selectEdge(command.payload.edgeId);
   };
 
   const reconnect = (edge: Edge, connection: Connection) => {
@@ -168,7 +174,7 @@ export function WorkflowCanvas({
         ? persistedEdge.sourcePort
         : logicalSourcePort(connection.source, connection.sourceHandle);
     if (!sourcePort) return;
-    execute({
+    const applied = execute({
       type: 'edge.reconnect',
       payload: {
         edgeId: edge.id,
@@ -176,6 +182,7 @@ export function WorkflowCanvas({
         target: { nodeId: connection.target, port: connection.targetHandle },
       },
     });
+    if (applied) selectEdge(edge.id);
   };
 
   const isValidConnection = (connection: Edge | Connection) => {
@@ -189,9 +196,22 @@ export function WorkflowCanvas({
     }
     const sourcePort = logicalSourcePort(connection.source, connection.sourceHandle);
     if (!sourcePort) return false;
+    const selectedSourceEdge = selectedEdgeFromOutput(
+      workflow,
+      reconnectingEdgeIdRef.current ?? selectedEdgeId,
+      connection.source,
+      sourcePort,
+    );
+    const connectionId = 'id' in connection ? connection.id : selectedSourceEdge?.id;
+    const validationWorkflow = connectionId
+      ? {
+          ...workflow,
+          edges: workflow.edges.filter((edge) => edge.id !== connectionId),
+        }
+      : workflow;
     try {
       assertValidConnection(
-        workflow,
+        validationWorkflow,
         {
           id: 'connection-preview',
           sourcePort,
@@ -229,6 +249,16 @@ export function WorkflowCanvas({
     if (!point || !bounds || !state.fromHandle.id) return;
     const sourcePort = logicalSourcePort(state.fromHandle.nodeId, state.fromHandle.id);
     if (!sourcePort) return;
+    if (
+      selectedEdgeFromOutput(
+        workflow,
+        reconnectingEdgeIdRef.current ?? selectedEdgeId,
+        state.fromHandle.nodeId,
+        sourcePort,
+      )
+    ) {
+      return;
+    }
     setPendingConnection({
       sourceNodeId: state.fromHandle.nodeId,
       sourcePort,
@@ -309,7 +339,7 @@ export function WorkflowCanvas({
         fitViewOptions={{ padding: 0.28 }}
         minZoom={0.25}
         maxZoom={1.8}
-        onNodeClick={(_, node) => selectNode(node.id)}
+        onNodeClick={(_, node) => onConfigureNode(node.id)}
         onNodeDoubleClick={(_, node) => openNodeDetail(node.id)}
         onEdgeClick={(_, edge) => selectEdge(edge.id)}
         onNodeContextMenu={(event, node) => openContextMenu(event, { kind: 'node', id: node.id })}
@@ -317,8 +347,8 @@ export function WorkflowCanvas({
         onPaneContextMenu={(event) => openContextMenu(event, { kind: 'canvas' })}
         onPaneClick={() => {
           setPendingConnection(null);
+          selectNode(null);
           selectEdge(null);
-          closeNodeConfigDrawer();
         }}
         onNodeDragStop={(_, node: Node) =>
           execute({
@@ -327,7 +357,16 @@ export function WorkflowCanvas({
           })
         }
         onConnect={connect}
+        onReconnectStart={(_, edge) => {
+          reconnectingEdgeIdRef.current = edge.id;
+          setReconnectingEdgeId(edge.id);
+          selectEdge(edge.id);
+        }}
         onReconnect={reconnect}
+        onReconnectEnd={() => {
+          reconnectingEdgeIdRef.current = null;
+          setReconnectingEdgeId(null);
+        }}
         isValidConnection={isValidConnection}
         onConnectEnd={beginNodeSuggestion}
         onNodesDelete={(deleted) => {
