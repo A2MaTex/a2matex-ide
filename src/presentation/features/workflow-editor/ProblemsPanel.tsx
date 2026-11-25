@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -31,6 +32,8 @@ interface ProblemsPanelProps {
   onSelectRunAttempt(attemptId: string): void;
   onSelectRunDevice(deviceExecutionId: string): void;
   run: TestRunExecutionState;
+  /** Device × node matrix shown at the top of the Run tab. */
+  runMatrix?: ReactNode;
 }
 
 const tabs: { id: BottomPanelTab; label: string }[] = [
@@ -214,6 +217,7 @@ export function ProblemsPanel({
   onSelectRunAttempt,
   onSelectRunDevice,
   run,
+  runMatrix,
 }: ProblemsPanelProps) {
   const activeTab = useEditorStore((state) => state.activeBottomTab);
   const setActiveTab = useEditorStore((state) => state.setActiveBottomTab);
@@ -308,18 +312,21 @@ export function ProblemsPanel({
             />
           </>
         ) : (
-          <RunStatusPanel
-            state={run}
-            onCheckControl={onCheckRunControl}
-            onControl={onRunControl}
-            onNextAttemptsPage={onNextRunAttemptsPage}
-            onPreviousAttemptsPage={onPreviousRunAttemptsPage}
-            onRecover={onRecoverRun}
-            onRefreshAttempts={onRefreshRunAttempts}
-            onRetryAdmission={onRetryRunAdmission}
-            onSelectAttempt={onSelectRunAttempt}
-            onSelectDevice={onSelectRunDevice}
-          />
+          <>
+            {runMatrix}
+            <RunStatusPanel
+              state={run}
+              onCheckControl={onCheckRunControl}
+              onControl={onRunControl}
+              onNextAttemptsPage={onNextRunAttemptsPage}
+              onPreviousAttemptsPage={onPreviousRunAttemptsPage}
+              onRecover={onRecoverRun}
+              onRefreshAttempts={onRefreshRunAttempts}
+              onRetryAdmission={onRetryRunAdmission}
+              onSelectAttempt={onSelectRunAttempt}
+              onSelectDevice={onSelectRunDevice}
+            />
+          </>
         )}
       </div>
       <div className="sr-only">Saved revision {savedRevision}</div>
