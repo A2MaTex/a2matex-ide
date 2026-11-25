@@ -29,6 +29,10 @@ import {
   validateNodeConfigurationDraft,
   type NodeConfigurationDraft,
 } from '@domain/workflow/node-configuration-draft';
+import {
+  coordinateTargetSpec,
+  selectorTargetSpec,
+} from '@domain/android-inspector/coordinate-targets';
 import { switchRules, type NodeDefinition } from '@domain/workflow/node-definition';
 import { defaultBindingFor } from '@domain/workflow/workflow-binding';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
@@ -38,6 +42,10 @@ import { Button } from '@presentation/components/ui/button';
 import { toast } from '@presentation/components/ui/toast-store';
 import { LegacyPropertyField } from '@presentation/features/workflow-editor/LegacyPropertyField';
 import { BindingSourceField } from '@presentation/features/workflow-editor/BindingSourceField';
+import {
+  CoordinateTargetCard,
+  SelectorTargetCard,
+} from '@presentation/features/android-inspector/CoordinatePicker';
 import { NodeIcon } from '@presentation/features/workflow-editor/node-icons';
 import { SchemaValueField } from '@presentation/features/workflow-editor/SchemaValueField';
 import { useEditorStore } from '@presentation/stores/editor-store';
@@ -74,37 +82,19 @@ function InspectorHeader({ onClose }: { onClose(): void }) {
 }
 
 function InspectorSection({
-  icon: Icon,
   title,
-  description,
-  badge,
   children,
 }: {
-  icon: LucideIcon;
+  icon?: LucideIcon;
   title: string;
   description?: string;
   badge?: string | number;
   children: ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-xl bg-accent/[0.12] shadow-[0_10px_30px_-24px_rgba(0,0,0,0.9)]">
-      <div className="flex items-start gap-3 bg-accent/20 px-3.5 py-3">
-        <span className="mt-0.5 grid size-7 shrink-0 place-items-center rounded-lg bg-primary/10 text-primary">
-          <Icon className="size-3.5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <h3 className="text-xs font-semibold text-foreground">{title}</h3>
-          {description ? (
-            <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">{description}</p>
-          ) : null}
-        </div>
-        {badge !== undefined ? (
-          <span className="rounded-full bg-background/60 px-2 py-0.5 font-mono text-[9px] text-muted-foreground">
-            {badge}
-          </span>
-        ) : null}
-      </div>
-      <div className="space-y-4 p-3.5">{children}</div>
+    <section className="border-t border-border pt-4 first:border-t-0">
+      <h3 className="mb-3 text-[13px] font-semibold text-foreground">{title}</h3>
+      <div className="space-y-4 pb-4">{children}</div>
     </section>
   );
 }
@@ -266,69 +256,86 @@ function ConfiguredInspector(props: {
       )
     : [];
   const bindingFields = Object.entries(draft.bindingInputs);
+  const coordinateSpec = coordinateTargetSpec(draft.config.targetMode, draft.bindingInputs);
+  const selectorSpec = selectorTargetSpec(draft.config.targetMode, draft.bindingInputs);
   const hasErrorPolicy = definition.outputPortKeys?.includes('error') ?? false;
 
   return (
     <section className="flex h-full min-h-0 flex-col bg-panel" aria-label="Node configuration">
-      <InspectorHeader onClose={onClose} />
-
-      <div className="min-h-0 flex-1 overflow-y-auto bg-background/25">
-        <div className="border-b border-border/80 bg-[radial-gradient(circle_at_top_right,var(--primary-glow),transparent_48%)] px-4 py-4">
-          <div className="flex items-start gap-3">
-            <span className="grid size-11 shrink-0 place-items-center rounded-xl bg-primary/10 text-cyan-400 shadow-[0_10px_28px_-18px_var(--primary-glow)]">
-              <NodeIcon icon={definition.icon} className="size-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2">
-                <h2 className="truncate text-sm font-semibold text-foreground">
-                  {node.editor.name?.trim() || definition.displayName}
-                </h2>
-                {nodeCommittedIssues.length > 0 ? (
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-destructive/10 px-2 py-0.5 text-[9px] font-medium text-destructive">
-                    <CircleAlert className="size-3" /> {nodeCommittedIssues.length}
-                  </span>
-                ) : null}
-              </div>
-              <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[9px] text-muted-foreground">
-                <span className="rounded bg-secondary px-1.5 py-0.5 font-medium uppercase tracking-wider">
-                  {definition.category}
-                </span>
-                <span className="font-mono">{definition.type}</span>
-              </div>
-            </div>
+      <header className="flex shrink-0 items-center gap-2.5 border-b border-border px-4 py-3">
+        <span
+          data-category={definition.type.split('.')[0]}
+          className="node-icon grid size-8 shrink-0 place-items-center rounded-lg"
+        >
+          <NodeIcon icon={definition.icon} className="size-4" />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <h2 className="truncate text-[15px] font-semibold text-foreground">
+              {node.editor.name?.trim() || definition.displayName}
+            </h2>
+            {nodeCommittedIssues.length > 0 ? (
+              <span
+                className="inline-flex shrink-0 items-center gap-0.5 rounded-full bg-destructive/10 px-1.5 py-0.5 text-[11px] font-medium text-destructive"
+                title={`${nodeCommittedIssues.length} validation issue(s)`}
+              >
+                <CircleAlert className="size-3" /> {nodeCommittedIssues.length}
+              </span>
+            ) : null}
           </div>
-          <p className="mt-3 text-[11px] leading-4 text-muted-foreground">
-            {definition.description}
-          </p>
-          <div className="mt-3 grid grid-cols-3 gap-2 text-xs">
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={() => openHelp({ type: definition.type, version: definition.version })}
-              className="h-8 bg-background/25"
-            >
-              <HelpCircle /> Help
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={onDuplicate}
-              className="h-8 bg-background/25"
-            >
-              <Copy /> Duplicate
-            </Button>
-            <Button
-              size="sm"
-              variant="ghost"
-              onClick={onDelete}
-              className="h-8 bg-background/25 text-destructive hover:bg-destructive/10 hover:text-destructive"
-            >
-              <Trash2 /> Delete
-            </Button>
+          <div
+            className="truncate font-mono text-[11px] text-muted-foreground"
+            title={definition.description}
+          >
+            {definition.type}
           </div>
         </div>
+        <div className="flex shrink-0 items-center">
+          <button
+            type="button"
+            onClick={() => openHelp({ type: definition.type, version: definition.version })}
+            title="Help"
+            aria-label="Help"
+            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            <HelpCircle className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onDuplicate}
+            title="Duplicate"
+            aria-label="Duplicate node"
+            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            <Copy className="size-4" />
+          </button>
+          <button
+            type="button"
+            onClick={onDelete}
+            title="Delete"
+            aria-label="Delete node"
+            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+          >
+            <Trash2 className="size-4" />
+          </button>
+          <span className="mx-1 h-5 w-px bg-border" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close node configuration"
+            title="Close"
+            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+      </header>
 
-        <div className="space-y-3 p-3.5">
+      <div className="node-config-body min-h-0 flex-1 overflow-y-auto">
+        <p className="px-4 pt-3 text-xs leading-5 text-muted-foreground">
+          {definition.description}
+        </p>
+        <div className="space-y-1 px-4 pb-4 pt-1">
           {stale ? (
             <div className="flex gap-2 rounded-lg bg-destructive/10 p-3 text-[10px] leading-4 text-destructive">
               <CircleAlert className="mt-0.5 size-3.5 shrink-0" />
@@ -397,20 +404,63 @@ function ConfiguredInspector(props: {
               description="Choose where each value comes from. Required inputs must be complete before saving."
               badge={bindingFields.length}
             >
-              {bindingFields.map(([name, input]) => (
-                <BindingSourceField
-                  key={`binding-${name}`}
-                  id={`property-${name}`}
-                  input={input}
-                  binding={draft.bindings[name]}
-                  workflow={workflow}
-                  workflowInputSchema={workflowInputSchema}
-                  consumerNodeId={node.id}
-                  catalog={catalog}
-                  errors={schemaIssues('binding', name)}
-                  onChange={(binding) => update(setDraftBinding(draft, name, binding))}
+              {coordinateSpec ? (
+                <CoordinateTargetCard
+                  nodeLabel={node.editor.name?.trim() || definition.displayName}
+                  spec={coordinateSpec}
+                  bindings={draft.bindings}
+                  bindingInputs={draft.bindingInputs}
+                  onApply={(values) => {
+                    let next = draft;
+                    for (const slot of coordinateSpec.slots) {
+                      const value = values[slot.key];
+                      if (!value) continue;
+                      next = setDraftBindingValue(next, slot.xField, value.x);
+                      next = setDraftBindingValue(next, slot.yField, value.y);
+                    }
+                    update(next);
+                  }}
                 />
-              ))}
+              ) : null}
+              {selectorSpec ? (
+                <SelectorTargetCard
+                  nodeLabel={node.editor.name?.trim() || definition.displayName}
+                  spec={selectorSpec}
+                  bindings={draft.bindings}
+                  bindingInputs={draft.bindingInputs}
+                  onApply={(resourceId) =>
+                    update(setDraftBindingValue(draft, selectorSpec.field, resourceId))
+                  }
+                />
+              ) : null}
+              {bindingFields.map(([name, input]) => {
+                const pair = coordinateSpec?.slots.find(
+                  (slot) => slot.xField === name || slot.yField === name,
+                );
+                if (pair && pair.yField === name) return null;
+                const field = (fieldName: string, fieldInput: typeof input) => (
+                  <BindingSourceField
+                    key={`binding-${fieldName}`}
+                    id={`property-${fieldName}`}
+                    input={fieldInput}
+                    binding={draft.bindings[fieldName]}
+                    workflow={workflow}
+                    workflowInputSchema={workflowInputSchema}
+                    consumerNodeId={node.id}
+                    catalog={catalog}
+                    errors={schemaIssues('binding', fieldName)}
+                    onChange={(binding) => update(setDraftBinding(draft, fieldName, binding))}
+                  />
+                );
+                return pair ? (
+                  <div key={`pair-${pair.key}`} className="grid grid-cols-2 gap-3">
+                    {field(pair.xField, draft.bindingInputs[pair.xField])}
+                    {field(pair.yField, draft.bindingInputs[pair.yField])}
+                  </div>
+                ) : (
+                  field(name, input)
+                );
+              })}
             </InspectorSection>
           ) : null}
 

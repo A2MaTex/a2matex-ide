@@ -8,6 +8,8 @@ interface SchemaValueFieldProps {
   value: JsonValue | undefined;
   errors: readonly string[];
   onChange(value: JsonValue | undefined): void;
+  /** The caller already shows the field name (binding fields). */
+  hideLabel?: boolean;
 }
 
 function titleFromName(name: string) {
@@ -31,16 +33,18 @@ export function SchemaValueField({
   value,
   errors,
   onChange,
+  hideLabel = false,
 }: SchemaValueFieldProps) {
   const inputClass =
-    'mt-2 h-9 w-full rounded-md border bg-background px-2.5 text-xs outline-none focus:border-primary ' +
+    (hideLabel ? '' : 'mt-1.5 ') +
+    'h-9 w-full rounded-md border bg-background px-2.5 text-xs outline-none focus:border-primary ' +
     (errors.length > 0 ? 'border-destructive' : 'border-border');
   return (
     <div className="text-sm">
-      <label htmlFor={id} className="text-xs font-medium">
+      <label htmlFor={id} className={hideLabel ? 'sr-only' : 'text-xs font-medium'}>
         {schema.title ?? titleFromName(name)}
       </label>
-      {schema.description ? (
+      {schema.description && !hideLabel ? (
         <p className="mt-1 text-[10px] leading-4 text-muted-foreground">{schema.description}</p>
       ) : null}
       {schema.type === 'string' && schema.enum ? (

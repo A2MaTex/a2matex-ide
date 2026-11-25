@@ -25,6 +25,7 @@ import { boundsCenter, getInspectorCandidates } from '@domain/android-inspector/
 import { Button } from '@presentation/components/ui/button';
 import { toast } from '@presentation/components/ui/toast-store';
 import { ScreenshotViewport } from '@presentation/features/android-inspector/ScreenshotViewport';
+import { useAndroidCaptureStore } from '@presentation/features/android-inspector/android-capture-store';
 import { copyText } from '@infrastructure/clipboard/copy-text';
 
 type DeviceListState = 'idle' | 'loading' | 'ready' | 'error';
@@ -238,6 +239,8 @@ export function AndroidInspectorPanel({
         return;
       }
       setSnapshot(result.value);
+      // Share the screen with the coordinate picker in node forms.
+      useAndroidCaptureStore.getState().adoptSnapshot(result.value);
       setCaptureState('ready');
       clearInspection();
       toast.success('Android snapshot captured');

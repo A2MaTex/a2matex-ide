@@ -97,37 +97,28 @@ export function BindingSourceField({
   const emptyLiteralBinding = input.required ? { kind: 'LITERAL' } : undefined;
 
   return (
-    <div
-      className={`space-y-2.5 rounded-lg p-3 text-sm ${
-        errors.length > 0 ? 'bg-destructive/8' : 'bg-background/35'
-      }`}
-    >
+    <div className="binding-field min-w-0 space-y-1.5 text-sm" data-invalid={errors.length > 0}>
       <div className="flex items-center gap-2">
-        <label htmlFor={`${id}-kind`} className="min-w-0 flex-1 truncate text-xs font-medium">
+        <label htmlFor={`${id}-literal`} className="min-w-0 flex-1 truncate text-xs font-medium">
           {titleFromName(input.name)}
+          {input.required ? (
+            <span className="ml-0.5 text-destructive" aria-label="required">
+              *
+            </span>
+          ) : null}
         </label>
-        {input.required ? (
-          <span className="rounded-full bg-primary/10 px-2 py-0.5 text-[8px] font-semibold uppercase tracking-wider text-primary">
-            Required
-          </span>
-        ) : (
-          <span className="text-[9px] text-muted-foreground">Optional</span>
-        )}
-      </div>
-      <div>
-        <span className="mb-1.5 block text-[9px] font-medium tracking-wider text-muted-foreground">
-          Value source
-        </span>
         <select
           id={`${id}-kind`}
+          aria-label={`${titleFromName(input.name)} value source`}
+          title="Value source"
           value={kind ?? ''}
           onChange={(event) => {
             const next = event.target.value as WorkflowBindingKind;
             onChange(next ? defaultBindingFor(input, next) : undefined);
           }}
-          className={inputClass}
+          className="binding-source-select h-6 max-w-[55%] shrink-0 cursor-pointer rounded-md border-0 bg-transparent pr-1 text-right text-[11px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
         >
-          {!input.required ? <option value="">Select source…</option> : null}
+          {!input.required ? <option value="">Not set</option> : null}
           {kinds.map((entry) => (
             <option key={entry} value={entry}>
               {labels[entry]}
@@ -137,10 +128,11 @@ export function BindingSourceField({
       </div>
 
       {kind === 'LITERAL' && input.valueSchema ? (
-        <div className="pt-2.5">
+        <div>
           <SchemaValueField
+            hideLabel
             id={`${id}-literal`}
-            name="Value"
+            name={input.name}
             schema={input.valueSchema}
             value={selectedBinding?.value}
             errors={[]}
@@ -150,7 +142,7 @@ export function BindingSourceField({
           />
         </div>
       ) : kind === 'LITERAL' ? (
-        <div className="flex gap-2 pt-2.5">
+        <div className="flex gap-2">
           {literalTypes.length > 1 ? (
             <select
               aria-label={`${input.name} literal type`}
@@ -205,7 +197,7 @@ export function BindingSourceField({
           )}
         </div>
       ) : kind === 'WORKFLOW_INPUT' ? (
-        <div className="pt-2.5">
+        <div>
           <select
             aria-label={`${input.name} workflow input`}
             value={typeof selectedBinding?.inputName === 'string' ? selectedBinding.inputName : ''}
@@ -221,7 +213,7 @@ export function BindingSourceField({
           </select>
         </div>
       ) : kind === 'NODE_OUTPUT' ? (
-        <div className="pt-2.5">
+        <div>
           <select
             aria-label={`${input.name} node output`}
             value={selectedOutput}
@@ -243,7 +235,7 @@ export function BindingSourceField({
           </select>
         </div>
       ) : kind === 'FLOW_VARIABLE' || kind === 'GLOBAL_VARIABLE' ? (
-        <div className="pt-2.5">
+        <div>
           <input
             aria-label={`${input.name} variable name`}
             list={`${id}-variables`}
@@ -259,10 +251,7 @@ export function BindingSourceField({
         </div>
       ) : null}
       {errors.map((message) => (
-        <p
-          key={message}
-          className="rounded bg-destructive/10 px-2 py-1.5 text-[10px] text-destructive"
-        >
+        <p key={message} className="text-[11px] leading-4 text-destructive">
           {message}
         </p>
       ))}
