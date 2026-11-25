@@ -1,13 +1,14 @@
 import {
   Background,
   BackgroundVariant,
+  ConnectionLineType,
   Controls,
   MiniMap,
   ReactFlow,
   type Connection,
   type Edge,
   type FinalConnectionState,
-  type Node,
+  useNodesState,
   useReactFlow,
 } from '@xyflow/react';
 import {
@@ -97,16 +98,29 @@ export function WorkflowCanvas({
   const { fitView, screenToFlowPosition } = useReactFlow();
   const containerRef = useRef<HTMLDivElement>(null);
   const reconnectingEdgeIdRef = useRef<string | null>(null);
+  const draggingNodeIdsRef = useRef(new Set<string>());
   const [pendingConnection, setPendingConnection] = useState<PendingConnection | null>(null);
   const [reconnectingEdgeId, setReconnectingEdgeId] = useState<string | null>(null);
-  const nodes = useMemo(
+  const mappedNodes = useMemo(
     () => toReactFlowNodes(workflow, selectedNodeId, issues, catalog),
     [catalog, issues, selectedNodeId, workflow],
   );
+  const [nodes, setNodes, onNodesChange] = useNodesState<AutomationFlowNode>(mappedNodes);
   const edges = useMemo(
     () => toReactFlowEdges(workflow, catalog, selectedEdgeId, reconnectingEdgeId),
     [catalog, reconnectingEdgeId, selectedEdgeId, workflow],
   );
+
+  useEffect(() => {
+    setNodes((currentNodes) => {
+      const currentById = new Map(currentNodes.map((node) => [node.id, node]));
+      return mappedNodes.map((node) => {
+        if (!draggingNodeIdsRef.current.has(node.id)) return node;
+        const current = currentById.get(node.id);
+        return current ? { ...node, position: current.position, dragging: current.dragging } : node;
+      });
+    });
+  }, [mappedNodes, setNodes]);
 
   const logicalSourcePort = (sourceNodeId: string, sourceHandle: string) => {
     if (sourceHandle !== 'out') return sourceHandle;
@@ -339,6 +353,8 @@ export function WorkflowCanvas({
         fitViewOptions={{ padding: 0.28 }}
         minZoom={0.25}
         maxZoom={1.8}
+        nodeDragThreshold={1}
+        onNodesChange={onNodesChange}
         onNodeClick={(_, node) => onConfigureNode(node.id)}
         onNodeDoubleClick={(_, node) => openNodeDetail(node.id)}
         onEdgeClick={(_, edge) => selectEdge(edge.id)}
@@ -350,12 +366,17 @@ export function WorkflowCanvas({
           selectNode(null);
           selectEdge(null);
         }}
-        onNodeDragStop={(_, node: Node) =>
-          execute({
+        onNodeDragStart={(_, node) => {
+          draggingNodeIdsRef.current.add(node.id);
+        }}
+        onNodeDragStop={(_, node) => {
+          draggingNodeIdsRef.current.delete(node.id);
+          const applied = execute({
             type: 'node.move',
             payload: { nodeId: node.id, position: node.position },
-          })
-        }
+          });
+          if (!applied) setNodes(mappedNodes);
+        }}
         onConnect={connect}
         onReconnectStart={(_, edge) => {
           reconnectingEdgeIdRef.current = edge.id;
@@ -368,6 +389,13 @@ export function WorkflowCanvas({
           setReconnectingEdgeId(null);
         }}
         isValidConnection={isValidConnection}
+        connectionLineType={ConnectionLineType.Bezier}
+        connectionLineStyle={{
+          stroke: 'var(--primary)',
+          strokeWidth: 2,
+          strokeDasharray: '6 6',
+          strokeLinecap: 'round',
+        }}
         onConnectEnd={beginNodeSuggestion}
         onNodesDelete={(deleted) => {
           deleted.forEach((node) => onDeleteNode(node.id));
@@ -377,7 +405,7 @@ export function WorkflowCanvas({
         }
         deleteKeyCode={null}
         proOptions={{ hideAttribution: true }}
-        className="bg-editor-canvas"
+        className="workflow-canvas bg-editor-canvas"
       >
         <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1b4770" />
         <MiniMap

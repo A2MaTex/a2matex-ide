@@ -10,7 +10,6 @@ import {
   ListChecks,
   Network,
   Plus,
-  Power,
   Redo2,
   Save,
   SaveAll,
@@ -335,27 +334,6 @@ export function MainWorkflowPage() {
     },
     [setActiveBottomTab, testRun],
   );
-
-  const shutdownRuntime = useCallback(async () => {
-    const host = window.studioHost;
-    if (!host || runtimeStatus.state === 'STOPPING' || runtimeStatus.state === 'STOPPED') return;
-    if (
-      testRun.unresolved &&
-      !window.confirm(
-        'Stop the managed Runtime? The current Test Run or pending control will be interrupted.',
-      )
-    ) {
-      return;
-    }
-    setRuntimeOperationError(null);
-    const result = await host.runtime.shutdown();
-    if (!result.ok) {
-      setRuntimeOperationError(result.error.message);
-      return;
-    }
-    testRun.runtimeStopped();
-    toast.success('Managed Runtime stopped');
-  }, [runtimeStatus.state, testRun]);
 
   const saveLocalWithToast = useCallback(async () => {
     const saved = await flushLocalSave();
@@ -818,18 +796,6 @@ export function MainWorkflowPage() {
           >
             Runtime {runtimeStatus.state.toLowerCase()}
           </span>
-          {runtimeStatus.state !== 'STOPPED' ? (
-            <button
-              type="button"
-              className="ml-1 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-              disabled={runtimeStatus.state === 'STOPPING'}
-              onClick={() => void shutdownRuntime()}
-              title="Stop managed Runtime"
-              aria-label="Stop managed Runtime"
-            >
-              <Power className="size-3.5" />
-            </button>
-          ) : null}
         </div>
         <div className="flex items-center gap-1 text-sm">
           <Button size="sm" variant="ghost" onClick={undo} disabled={undoStack.length === 0}>

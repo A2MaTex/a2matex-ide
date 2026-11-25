@@ -1,4 +1,4 @@
-import type { Edge, Node } from '@xyflow/react';
+import { MarkerType, type Edge, type Node } from '@xyflow/react';
 
 import type { WorkflowDocument, WorkflowEdge, WorkflowNode } from '@domain/project/project';
 import {
@@ -145,7 +145,7 @@ export function toReactFlowEdges(
       edge.sourcePort === 'error'
         ? '#ef4444'
         : edge.sourcePort === 'success'
-          ? '#22c55e'
+          ? '#8ca6c4'
           : 'var(--primary)';
     return {
       id: edge.id,
@@ -156,12 +156,24 @@ export function toReactFlowEdges(
       selected: edge.id === selectedEdgeId,
       reconnectable: true,
       interactionWidth: 24,
-      type: 'smoothstep',
-      animated: false,
+      type: 'default',
+      pathOptions: { curvature: 0.8 },
+      animated: edge.id !== reconnectingEdgeId,
+      className: 'workflow-edge',
+      ariaLabel: `Connection from ${edge.sourceNodeId} to ${edge.targetNodeId}`,
+      markerEnd: {
+        type: MarkerType.ArrowClosed,
+        color: stroke,
+        width: 18,
+        height: 18,
+      },
+      zIndex: edge.id === selectedEdgeId ? 1 : 0,
       style: {
         stroke,
         strokeWidth: edge.id === selectedEdgeId ? 2.5 : 1.5,
         opacity: edge.id === reconnectingEdgeId ? 0 : 1,
+        strokeLinecap: 'round',
+        strokeLinejoin: 'round',
       },
     };
   });

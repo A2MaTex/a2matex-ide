@@ -190,11 +190,6 @@ export function RunStatusPanel({
             >
               {snapshot.runGroup.status}
             </span>
-            {state.observationHealth ? (
-              <span className="rounded border border-border px-2 py-0.5 text-[10px] text-muted-foreground">
-                Live: {state.observationHealth}
-              </span>
-            ) : null}
           </div>
           <div className="mt-3 grid gap-2 text-[11px] text-muted-foreground sm:grid-cols-2 lg:grid-cols-4">
             <span>
