@@ -21,6 +21,8 @@ export interface AutomationNodeData extends Record<string, unknown> {
   nodeVersion: number;
   connectionInputs: readonly PortDefinition[];
   connectionOutputs: readonly PortDefinition[];
+  /** Output handle ids that already have an outgoing edge (no + stub is shown for them). */
+  connectedOutputs: readonly string[];
   issueCount: number;
 }
 
@@ -108,6 +110,11 @@ export function toReactFlowNodes(
 ): AutomationFlowNode[] {
   return workflow.nodes.map((node) => {
     const definition = catalog.find((candidate) => candidate.type === node.type);
+    const usesStructuralOutput =
+      definition?.type === 'flow.start' || definition?.type === 'trigger.start';
+    const connectedOutputs = workflow.edges
+      .filter((edge) => edge.sourceNodeId === node.id)
+      .map((edge) => (usesStructuralOutput ? 'out' : edge.sourcePort));
     return {
       id: node.id,
       type: 'automation',
@@ -121,6 +128,7 @@ export function toReactFlowNodes(
         nodeVersion: definition?.version ?? 1,
         connectionInputs: definition ? connectionInputsFor(definition) : [],
         connectionOutputs: definition ? connectionOutputHandlesFor(definition, node) : [],
+        connectedOutputs,
         issueCount: issues.filter((entry) => entry.nodeId === node.id).length,
       },
     };
@@ -143,9 +151,9 @@ export function toReactFlowEdges(
       definition?.type === 'flow.start' || definition?.type === 'trigger.start';
     const stroke =
       edge.sourcePort === 'error'
-        ? '#ef4444'
+        ? 'var(--edge-error, #ef4444)'
         : edge.sourcePort === 'success'
-          ? '#8ca6c4'
+          ? 'var(--edge-default, #8ca6c4)'
           : 'var(--primary)';
     return {
       id: edge.id,
@@ -156,8 +164,7 @@ export function toReactFlowEdges(
       selected: edge.id === selectedEdgeId,
       reconnectable: true,
       interactionWidth: 24,
-      type: 'default',
-      pathOptions: { curvature: 0.8 },
+      type: 'workflow',
       animated: edge.id !== reconnectingEdgeId,
       className: 'workflow-edge',
       ariaLabel: `Connection from ${edge.sourceNodeId} to ${edge.targetNodeId}`,

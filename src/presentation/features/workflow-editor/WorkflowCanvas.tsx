@@ -32,7 +32,9 @@ import { assertValidConnection, type WorkflowCommand } from '@domain/workflow/wo
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import { useEditorStore } from '@presentation/stores/editor-store';
 
+import { WorkflowEdge } from '@presentation/features/workflow-editor/WorkflowEdge';
 import { AutomationNode } from '@presentation/features/workflow-editor/AutomationNode';
+import { AddAfterContext } from '@presentation/features/workflow-editor/add-after-context';
 import {
   AddConnectedNodePanel,
   type ConnectedNodeChoice,
@@ -60,6 +62,7 @@ interface WorkflowCanvasProps {
 }
 
 const nodeTypes = { automation: AutomationNode };
+const edgeTypes = { workflow: WorkflowEdge };
 
 function nextNodeId(type: string) {
   void type;
@@ -284,6 +287,27 @@ export function WorkflowCanvas({
     });
   };
 
+  // + stub after an output: same menu as dropping a dragged connection, new node placed to the right.
+  const beginAddAfter = (nodeId: string, handleId: string, anchor: DOMRect) => {
+    const sourcePort = logicalSourcePort(nodeId, handleId);
+    const bounds = containerRef.current?.getBoundingClientRect();
+    if (!sourcePort || !bounds) return;
+    const anchorFlow = screenToFlowPosition({
+      x: anchor.right,
+      y: anchor.top + anchor.height / 2,
+    });
+    setPendingConnection({
+      sourceNodeId: nodeId,
+      sourcePort,
+      panelPosition: {
+        x: Math.min(Math.max(8, anchor.right - bounds.left + 8), Math.max(8, bounds.width - 296)),
+        y: Math.min(Math.max(8, anchor.top - bounds.top - 12), Math.max(8, bounds.height - 360)),
+      },
+      // addConnectedNode places the node at (x - 90, y - 36): left edge 60 after the +, centred on it.
+      nodePosition: { x: anchorFlow.x + 150, y: anchorFlow.y - 12 },
+    });
+  };
+
   const openContextMenu = (
     event: ReactMouseEvent | MouseEvent,
     target: { kind: 'canvas' } | { kind: 'node'; id: string } | { kind: 'edge'; id: string },
@@ -332,103 +356,110 @@ export function WorkflowCanvas({
     : undefined;
   const suggestionSourcePort =
     pendingConnection && suggestionSourceDefinition
-      ? connectionOutputsFor(suggestionSourceDefinition)[0]
+      ? (connectionOutputsFor(suggestionSourceDefinition).find(
+          (port) => port.name === pendingConnection.sourcePort,
+        ) ?? connectionOutputsFor(suggestionSourceDefinition)[0])
       : undefined;
 
   return (
-    <div
-      ref={containerRef}
-      className="relative h-full w-full"
-      onDrop={handleDrop}
-      onDragOver={(event) => {
-        event.preventDefault();
-        event.dataTransfer.dropEffect = 'copy';
-      }}
-    >
-      <ReactFlow<AutomationFlowNode, Edge>
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={nodeTypes}
-        fitView
-        fitViewOptions={{ padding: 0.28 }}
-        minZoom={0.25}
-        maxZoom={1.8}
-        nodeDragThreshold={1}
-        onNodesChange={onNodesChange}
-        onNodeClick={(_, node) => onConfigureNode(node.id)}
-        onNodeDoubleClick={(_, node) => openNodeDetail(node.id)}
-        onEdgeClick={(_, edge) => selectEdge(edge.id)}
-        onNodeContextMenu={(event, node) => openContextMenu(event, { kind: 'node', id: node.id })}
-        onEdgeContextMenu={(event, edge) => openContextMenu(event, { kind: 'edge', id: edge.id })}
-        onPaneContextMenu={(event) => openContextMenu(event, { kind: 'canvas' })}
-        onPaneClick={() => {
-          setPendingConnection(null);
-          selectNode(null);
-          selectEdge(null);
+    <AddAfterContext.Provider value={beginAddAfter}>
+      <div
+        ref={containerRef}
+        className="relative h-full w-full"
+        onDrop={handleDrop}
+        onDragOver={(event) => {
+          event.preventDefault();
+          event.dataTransfer.dropEffect = 'copy';
         }}
-        onNodeDragStart={(_, node) => {
-          draggingNodeIdsRef.current.add(node.id);
-        }}
-        onNodeDragStop={(_, node) => {
-          draggingNodeIdsRef.current.delete(node.id);
-          const applied = execute({
-            type: 'node.move',
-            payload: { nodeId: node.id, position: node.position },
-          });
-          if (!applied) setNodes(mappedNodes);
-        }}
-        onConnect={connect}
-        onReconnectStart={(_, edge) => {
-          reconnectingEdgeIdRef.current = edge.id;
-          setReconnectingEdgeId(edge.id);
-          selectEdge(edge.id);
-        }}
-        onReconnect={reconnect}
-        onReconnectEnd={() => {
-          reconnectingEdgeIdRef.current = null;
-          setReconnectingEdgeId(null);
-        }}
-        isValidConnection={isValidConnection}
-        connectionLineType={ConnectionLineType.Bezier}
-        connectionLineStyle={{
-          stroke: 'var(--primary)',
-          strokeWidth: 2,
-          strokeDasharray: '6 6',
-          strokeLinecap: 'round',
-        }}
-        onConnectEnd={beginNodeSuggestion}
-        onNodesDelete={(deleted) => {
-          deleted.forEach((node) => onDeleteNode(node.id));
-        }}
-        onEdgesDelete={(deleted) =>
-          deleted.forEach((edge) => execute({ type: 'edge.remove', payload: { edgeId: edge.id } }))
-        }
-        deleteKeyCode={null}
-        proOptions={{ hideAttribution: true }}
-        className="workflow-canvas bg-editor-canvas"
       >
-        <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="#1b4770" />
-        <MiniMap
-          pannable
-          zoomable
-          className="border! border-border! bg-panel!"
-          nodeColor="var(--primary)"
-          maskColor="rgb(2 6 13 / 72%)"
-        />
-        <Controls
-          showInteractive={false}
-          className="border-border! bg-panel! [&>button]:border-border! [&>button]:bg-panel! [&>button]:fill-foreground!"
-        />
-      </ReactFlow>
-      {pendingConnection && suggestionSourcePort ? (
-        <AddConnectedNodePanel
-          sourcePort={suggestionSourcePort}
-          catalog={catalog}
-          position={pendingConnection.panelPosition}
-          onChoose={addConnectedNode}
-          onClose={() => setPendingConnection(null)}
-        />
-      ) : null}
-    </div>
+        <ReactFlow<AutomationFlowNode, Edge>
+          nodes={nodes}
+          edges={edges}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          fitView
+          fitViewOptions={{ padding: 0.28 }}
+          minZoom={0.25}
+          maxZoom={1.8}
+          nodeDragThreshold={1}
+          onNodesChange={onNodesChange}
+          onNodeClick={(_, node) => onConfigureNode(node.id)}
+          onNodeDoubleClick={(_, node) => openNodeDetail(node.id)}
+          onEdgeClick={(_, edge) => selectEdge(edge.id)}
+          onNodeContextMenu={(event, node) => openContextMenu(event, { kind: 'node', id: node.id })}
+          onEdgeContextMenu={(event, edge) => openContextMenu(event, { kind: 'edge', id: edge.id })}
+          onPaneContextMenu={(event) => openContextMenu(event, { kind: 'canvas' })}
+          onPaneClick={() => {
+            setPendingConnection(null);
+            selectNode(null);
+            selectEdge(null);
+          }}
+          onNodeDragStart={(_, node) => {
+            draggingNodeIdsRef.current.add(node.id);
+          }}
+          onNodeDragStop={(_, node) => {
+            draggingNodeIdsRef.current.delete(node.id);
+            const applied = execute({
+              type: 'node.move',
+              payload: { nodeId: node.id, position: node.position },
+            });
+            if (!applied) setNodes(mappedNodes);
+          }}
+          onConnect={connect}
+          onReconnectStart={(_, edge) => {
+            reconnectingEdgeIdRef.current = edge.id;
+            setReconnectingEdgeId(edge.id);
+            selectEdge(edge.id);
+          }}
+          onReconnect={reconnect}
+          onReconnectEnd={() => {
+            reconnectingEdgeIdRef.current = null;
+            setReconnectingEdgeId(null);
+          }}
+          isValidConnection={isValidConnection}
+          connectionLineType={ConnectionLineType.Bezier}
+          connectionLineStyle={{
+            stroke: 'var(--primary)',
+            strokeWidth: 2,
+            strokeDasharray: '6 6',
+            strokeLinecap: 'round',
+          }}
+          onConnectEnd={beginNodeSuggestion}
+          onNodesDelete={(deleted) => {
+            deleted.forEach((node) => onDeleteNode(node.id));
+          }}
+          onEdgesDelete={(deleted) =>
+            deleted.forEach((edge) =>
+              execute({ type: 'edge.remove', payload: { edgeId: edge.id } }),
+            )
+          }
+          deleteKeyCode={null}
+          proOptions={{ hideAttribution: true }}
+          className="workflow-canvas bg-editor-canvas"
+        >
+          <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#1b4770" />
+          <MiniMap
+            pannable
+            zoomable
+            className="border! border-border! bg-panel!"
+            nodeColor="var(--primary)"
+            maskColor="rgb(2 6 13 / 72%)"
+          />
+          <Controls
+            showInteractive={false}
+            className="border-border! bg-panel! [&>button]:border-border! [&>button]:bg-panel! [&>button]:fill-foreground!"
+          />
+        </ReactFlow>
+        {pendingConnection && suggestionSourcePort ? (
+          <AddConnectedNodePanel
+            sourcePort={suggestionSourcePort}
+            catalog={catalog}
+            position={pendingConnection.panelPosition}
+            onChoose={addConnectedNode}
+            onClose={() => setPendingConnection(null)}
+          />
+        ) : null}
+      </div>
+    </AddAfterContext.Provider>
   );
 }

@@ -1,6 +1,6 @@
 import { FolderKanban, LogOut, Settings, UserRound, Workflow } from 'lucide-react';
 import type { MouseEvent } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '@presentation/features/auth/use-auth';
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
@@ -15,6 +15,8 @@ export function AppShell() {
   const flushLocalSave = useProjectStore((state) => state.flushLocalSave);
   const discardProject = useProjectStore((state) => state.discard);
   const navigate = useNavigate();
+  // The workflow editor gets the full height: no app header there (account actions move to the rail).
+  const inEditor = useLocation().pathname.startsWith('/workspace');
 
   const navItems = [
     { to: URL.ProjectHome, label: 'Projects', icon: FolderKanban },
@@ -87,38 +89,57 @@ export function AppShell() {
           ))}
         </nav>
 
-        <div className="relative mt-auto h-8 w-full shrink-0" aria-label="Host connected">
+        {inEditor ? (
+          <button
+            type="button"
+            title={
+              session.status === 'authenticated' ? `Sign out (${session.account})` : 'Sign out'
+            }
+            aria-label="Sign out"
+            onClick={() => void handleLogout()}
+            disabled={status === 'submitting'}
+            className="mx-auto mt-auto grid size-9 place-items-center rounded-lg text-muted-foreground hover:bg-accent/40 hover:text-foreground disabled:opacity-50"
+          >
+            <LogOut className="size-4" aria-hidden="true" />
+          </button>
+        ) : null}
+        <div
+          className={cn('relative h-8 w-full shrink-0', inEditor ? undefined : 'mt-auto')}
+          aria-label="Host connected"
+        >
           <span className="absolute left-7.5 top-3 size-2 rounded-full bg-success shadow-[0_0_10px_var(--success)]" />
         </div>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-panel/90 px-4 backdrop-blur">
-          <div className="flex items-center">
-            <img src={fullLogoUrl} alt="" aria-hidden="true" className="object-contain w-32" />
-            <div className="truncate text-xl mt-1.5 font-medium tracking-tight text-white/60">
-              Studio
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            {session.status === 'authenticated' ? (
-              <div className="hidden items-center gap-2 rounded-full border border-border/70 bg-secondary/60 px-2.5 py-1 text-[11px] text-muted-foreground sm:flex">
-                <UserRound className="size-3.5 text-primary" aria-hidden="true" />
-                <span className="max-w-40 truncate">{session.account}</span>
+        {inEditor ? null : (
+          <header className="flex h-14 shrink-0 items-center justify-between border-b border-border bg-panel/90 px-4 backdrop-blur">
+            <div className="flex items-center">
+              <img src={fullLogoUrl} alt="" aria-hidden="true" className="object-contain w-32" />
+              <div className="truncate text-xl mt-1.5 font-medium tracking-tight text-white/60">
+                Studio
               </div>
-            ) : null}
-            <button
-              type="button"
-              title="Sign out"
-              aria-label="Sign out"
-              onClick={() => void handleLogout()}
-              disabled={status === 'submitting'}
-              className="grid size-7 place-items-center rounded-full border border-border/70 bg-secondary/60 text-muted-foreground transition hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-            >
-              <LogOut className="size-3.5" aria-hidden="true" />
-            </button>
-          </div>
-        </header>
+            </div>
+            <div className="flex items-center gap-2">
+              {session.status === 'authenticated' ? (
+                <div className="hidden items-center gap-2 rounded-full border border-border/70 bg-secondary/60 px-2.5 py-1 text-[11px] text-muted-foreground sm:flex">
+                  <UserRound className="size-3.5 text-primary" aria-hidden="true" />
+                  <span className="max-w-40 truncate">{session.account}</span>
+                </div>
+              ) : null}
+              <button
+                type="button"
+                title="Sign out"
+                aria-label="Sign out"
+                onClick={() => void handleLogout()}
+                disabled={status === 'submitting'}
+                className="grid size-7 place-items-center rounded-full border border-border/70 bg-secondary/60 text-muted-foreground transition hover:border-primary/40 hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+              >
+                <LogOut className="size-3.5" aria-hidden="true" />
+              </button>
+            </div>
+          </header>
+        )}
 
         <main className="min-h-0 flex-1 overflow-auto">
           <Outlet />

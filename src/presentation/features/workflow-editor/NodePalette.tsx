@@ -242,7 +242,10 @@ export function NodePalette({
                             className="flex min-w-0 flex-1 items-center gap-2 px-2 py-1.5 text-left"
                             aria-describedby={`node-tip-${node.type}-${node.version}`}
                           >
-                            <span className="grid size-7 shrink-0 place-items-center rounded-md bg-secondary text-cyan-400 group-hover:bg-primary/10">
+                            <span
+                              data-category={node.type.split('.')[0]}
+                              className="node-icon grid size-7 shrink-0 place-items-center rounded-md bg-secondary text-cyan-400 group-hover:bg-primary/10"
+                            >
                               <NodeIcon icon={node.icon} className="size-3.5" />
                             </span>
                             <span className="truncate text-xs font-medium">{node.displayName}</span>

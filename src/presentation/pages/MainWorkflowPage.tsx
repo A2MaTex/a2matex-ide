@@ -1,6 +1,7 @@
 import {
   ChevronDown,
   ChevronRight,
+  ChevronUp,
   CirclePlay,
   CloudDownload,
   CloudUpload,
@@ -9,6 +10,8 @@ import {
   List,
   ListChecks,
   Network,
+  PanelBottom,
+  PanelLeft,
   Plus,
   Redo2,
   Save,
@@ -25,17 +28,12 @@ import { ReactFlowProvider } from '@xyflow/react';
 
 import { toWorkflowNodeCatalog } from '@application/node-catalog/to-workflow-node-catalog';
 import type { RuntimeStartDeviceInput, RuntimeStatus } from '@application/runtime/runtime.types';
-import {
-  androidSelectorToJsonValue,
-  getAndroidSelectorTargets,
-} from '@domain/android-inspector/android-selector';
 import { DEFAULT_NODE_CATALOG_RUNTIME_VERSION } from '@domain/node-catalog/node-catalog';
 import type { NodeDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import { validateWorkflow } from '@domain/workflow/workflow-validator';
 import { Button } from '@presentation/components/ui/button';
 import { toast } from '@presentation/components/ui/toast-store';
-import { AndroidInspectorPanel } from '@presentation/features/android-inspector/AndroidInspectorPanel';
 import { useProjectCloseGuard } from '@presentation/features/project-session/use-project-close-guard';
 import { TestRunDialog } from '@presentation/features/test-run/TestRunDialog';
 import { useTestRunExecution } from '@presentation/features/test-run/useTestRunExecution';
@@ -48,6 +46,9 @@ import { NodeDetailDialog } from '@presentation/features/workflow-editor/NodeDet
 import { NodeHelpDialog } from '@presentation/features/workflow-editor/NodeHelpDialog';
 import { NodePalette } from '@presentation/features/workflow-editor/NodePalette';
 import { ProblemsPanel } from '@presentation/features/workflow-editor/ProblemsPanel';
+import { RunDeviceChips } from '@presentation/features/test-run/RunDeviceChips';
+import { RunMatrix } from '@presentation/features/test-run/RunMatrix';
+import { RunOverlayContext, useRunOverlay } from '@presentation/features/test-run/run-overlay';
 import { WorkflowCanvas } from '@presentation/features/workflow-editor/WorkflowCanvas';
 import {
   WorkflowActionList,
@@ -141,7 +142,8 @@ export function MainWorkflowPage() {
   const setActiveBottomTab = useEditorStore((state) => state.setActiveBottomTab);
   const [explorerExpanded, setExplorerExpanded] = useState(true);
   const [nodePaletteExpanded, setNodePaletteExpanded] = useState(true);
-  const [androidInspectorCollapsed, setAndroidInspectorCollapsed] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [bottomCollapsed, setBottomCollapsed] = useState(true);
   const [nodeCatalog, setNodeCatalog] = useState<NodeDefinition[]>([]);
   const [nodeCatalogStatus, setNodeCatalogStatus] = useState<'loading' | 'ready' | 'error'>(
     'loading',
@@ -158,7 +160,24 @@ export function MainWorkflowPage() {
   } | null>(null);
   const explorerPanelRef = usePanelRef();
   const nodePalettePanelRef = usePanelRef();
-  const androidInspectorPanelRef = usePanelRef();
+  const sidebarPanelRef = usePanelRef();
+  const bottomPanelRef = usePanelRef();
+  const togglePanel = (ref: typeof sidebarPanelRef) => {
+    const panel = ref.current;
+    if (!panel) return;
+    if (panel.isCollapsed()) panel.expand();
+    else panel.collapse();
+    // Keep the toolbar's pressed state in sync even when the panel shrinks to 0px.
+    window.setTimeout(() => {
+      setSidebarCollapsed(sidebarPanelRef.current?.isCollapsed() ?? false);
+      setBottomCollapsed(bottomPanelRef.current?.isCollapsed() ?? false);
+    }, 0);
+  };
+  const openNodePalette = () => {
+    sidebarPanelRef.current?.expand();
+    nodePalettePanelRef.current?.expand();
+    window.setTimeout(() => window.document.getElementById('node-palette-search')?.focus(), 50);
+  };
   const attemptedProjectId = useRef<string | null>(null);
   const previousRuntimeStateRef = useRef(runtimeStatus.state);
 
@@ -257,6 +276,43 @@ export function MainWorkflowPage() {
 
   const activeProjectLocalId = session?.snapshot.localId;
   const testRun = useTestRunExecution(activeProjectLocalId ?? null);
+  // Run status on the canvas: tier 1 (selected device) and tier 2 (per-node device summary).
+  const runOverlayAll = useRunOverlay(
+    testRun.state.snapshot,
+    testRun.state.attemptsRevision,
+    testRun.state.selectedDeviceExecutionId,
+  );
+  const [hiddenRunGroupId, setHiddenRunGroupId] = useState<string | null>(null);
+  const runOverlay =
+    runOverlayAll && testRun.state.snapshot?.runGroup.id !== hiddenRunGroupId
+      ? runOverlayAll
+      : null;
+  const autoFocusedRunRef = useRef<string | null>(null);
+  useEffect(() => {
+    const snapshot = testRun.state.snapshot;
+    if (!snapshot || autoFocusedRunRef.current === snapshot.runGroup.id) return;
+    const finished = !['RUNNING', 'PAUSED'].includes(snapshot.runGroup.status);
+    if (!finished) return;
+    autoFocusedRunRef.current = snapshot.runGroup.id;
+    // When a run ends with a failure, show the first failed device: that's what needs a look.
+    const failed = snapshot.deviceExecutions.find((device) => device.status === 'FAILED');
+    if (failed && failed.id !== testRun.state.selectedDeviceExecutionId) {
+      testRun.selectDeviceExecution(failed.id);
+    }
+  }, [testRun, testRun.state.snapshot, testRun.state.selectedDeviceExecutionId]);
+  // Start with the bottom panel collapsed to its tab bar so the canvas gets the height.
+  useEffect(() => {
+    // The panel group registers its panels after the first paint, so collapse on the next tick.
+    const timer = window.setTimeout(() => {
+      bottomPanelRef.current?.collapse();
+      setBottomCollapsed(true);
+    }, 60);
+    return () => window.clearTimeout(timer);
+  }, [bottomPanelRef]);
+  // Open the bottom panel when a run is in progress so its output is visible.
+  useEffect(() => {
+    if (testRun.unresolved) bottomPanelRef.current?.expand();
+  }, [testRun.unresolved, bottomPanelRef]);
 
   useEffect(() => {
     if (nodeCatalogStatus !== 'ready' || !activeProjectLocalId) return;
@@ -532,16 +588,34 @@ export function MainWorkflowPage() {
   const saving = localSaveStatus === 'saving-local';
   const exporting = status === 'exporting';
   const syncing = cloudStatus === 'syncing';
-  const selectedNode = workflow.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const configuredNode = workflow.nodes.find((node) => node.id === nodeConfigNodeId) ?? null;
-  const selectedNodeDefinition = selectedNode
-    ? nodeCatalog.find((definition) => definition.type === selectedNode.type)
-    : undefined;
+  // Matrix columns: nodes in flow order (breadth-first from the entry node), then any others.
+  const runMatrixColumns = (() => {
+    const order: string[] = [];
+    const seen = new Set<string>();
+    const queue = [workflow.entryNodeId];
+    while (queue.length > 0) {
+      const id = queue.shift()!;
+      if (seen.has(id) || !workflow.nodes.some((node) => node.id === id)) continue;
+      seen.add(id);
+      order.push(id);
+      for (const edge of workflow.edges)
+        if (edge.sourceNodeId === id) queue.push(edge.targetNodeId);
+    }
+    for (const node of workflow.nodes) if (!seen.has(node.id)) order.push(node.id);
+    return order.map((id) => {
+      const node = workflow.nodes.find((entry) => entry.id === id)!;
+      const definition = nodeCatalog.find((entry) => entry.type === node.type);
+      return {
+        nodeId: id,
+        label: node.editor.name?.trim() || definition?.displayName || node.type,
+      };
+    });
+  })();
   const detailNode = workflow.nodes.find((node) => node.id === nodeDetailNodeId) ?? null;
   const detailNodeDefinition = detailNode
     ? nodeCatalog.find((definition) => definition.type === detailNode.type)
     : null;
-  const androidSelectorTargets = getAndroidSelectorTargets(selectedNode, selectedNodeDefinition);
   const localSaveLabel = {
     dirty: 'Unsaved changes',
     'local-save-error': 'Local save failed',
@@ -908,9 +982,18 @@ export function MainWorkflowPage() {
       ) : null}
 
       <Group className="min-h-0 flex-1" orientation="vertical">
-        <Panel defaultSize="72%" minSize="42%">
+        <Panel minSize="30%">
           <Group className="h-full" orientation="horizontal">
-            <Panel defaultSize="21%" minSize="16%" maxSize="32%">
+            <Panel
+              id="editor-sidebar-panel"
+              panelRef={sidebarPanelRef}
+              defaultSize="264px"
+              minSize="220px"
+              maxSize="440px"
+              collapsible
+              collapsedSize="0px"
+              onResize={(size) => setSidebarCollapsed(size.inPixels <= 4)}
+            >
               <aside
                 className="h-full min-h-0 overflow-hidden bg-panel"
                 aria-label="Project explorer and node palette"
@@ -1009,8 +1092,50 @@ export function MainWorkflowPage() {
               </aside>
             </Panel>
             <ResizeHandle orientation="horizontal" />
-            <Panel defaultSize="57%" minSize="34%">
+            <Panel minSize="34%">
               <div className="relative h-full overflow-hidden">
+                <div
+                  className="canvas-floating-toolbar absolute right-3 top-12 z-20 flex flex-col gap-1 rounded-xl border border-border bg-card p-1 shadow-sm"
+                  aria-label="Editor layout"
+                >
+                  <button
+                    type="button"
+                    title="Add node"
+                    aria-label="Add node"
+                    onClick={openNodePalette}
+                    className="grid size-9 place-items-center rounded-lg text-foreground hover:bg-secondary"
+                  >
+                    <Plus className="size-4.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title={
+                      sidebarCollapsed
+                        ? 'Show explorer and node palette'
+                        : 'Hide explorer and node palette'
+                    }
+                    aria-label="Toggle explorer and node palette"
+                    aria-pressed={!sidebarCollapsed}
+                    onClick={() => togglePanel(sidebarPanelRef)}
+                    className="grid size-9 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground aria-pressed:text-primary"
+                  >
+                    <PanelLeft className="size-4.5" />
+                  </button>
+                  <button
+                    type="button"
+                    title={
+                      bottomCollapsed
+                        ? 'Show problems, diagnostics and run'
+                        : 'Hide problems, diagnostics and run'
+                    }
+                    aria-label="Toggle problems, diagnostics and run panel"
+                    aria-pressed={!bottomCollapsed}
+                    onClick={() => togglePanel(bottomPanelRef)}
+                    className="grid size-9 place-items-center rounded-lg text-muted-foreground hover:bg-secondary hover:text-foreground aria-pressed:text-primary"
+                  >
+                    <PanelBottom className="size-4.5" />
+                  </button>
+                </div>
                 <section
                   className="flex h-full flex-col bg-editor-canvas"
                   aria-label="Workflow canvas"
@@ -1050,20 +1175,32 @@ export function MainWorkflowPage() {
                       <Plus className="size-3.5" />
                     </button>
                   </div>
-                  <div className="min-h-0 flex-1">
-                    <ReactFlowProvider key={workflowPath}>
-                      <WorkflowCanvas
-                        catalog={nodeCatalog}
-                        workflow={workflow}
-                        issues={issues}
-                        execute={execute}
-                        onDeleteNode={deleteNode}
-                        onConfigureNode={configureNode}
-                        onOpenContextMenu={(position) =>
-                          setActionList({ mode: 'context', position })
+                  <div className="relative min-h-0 flex-1">
+                    {runOverlay ? (
+                      <RunDeviceChips
+                        devices={runOverlay.devices}
+                        selectedId={runOverlay.selectedDeviceExecutionId}
+                        onSelect={testRun.selectDeviceExecution}
+                        onDismiss={() =>
+                          setHiddenRunGroupId(testRun.state.snapshot?.runGroup.id ?? null)
                         }
                       />
-                    </ReactFlowProvider>
+                    ) : null}
+                    <RunOverlayContext.Provider value={runOverlay}>
+                      <ReactFlowProvider key={workflowPath}>
+                        <WorkflowCanvas
+                          catalog={nodeCatalog}
+                          workflow={workflow}
+                          issues={issues}
+                          execute={execute}
+                          onDeleteNode={deleteNode}
+                          onConfigureNode={configureNode}
+                          onOpenContextMenu={(position) =>
+                            setActionList({ mode: 'context', position })
+                          }
+                        />
+                      </ReactFlowProvider>
+                    </RunOverlayContext.Provider>
                   </div>
                 </section>
                 <NodeConfigDrawer
@@ -1085,61 +1222,73 @@ export function MainWorkflowPage() {
                 />
               </div>
             </Panel>
-            <ResizeHandle orientation="horizontal" />
-            <Panel
-              id="android-inspector-panel"
-              panelRef={androidInspectorPanelRef}
-              defaultSize="22%"
-              minSize="18%"
-              maxSize="36%"
-              collapsedSize="38px"
-              collapsible
-              onResize={(size) => setAndroidInspectorCollapsed(size.inPixels <= 48)}
-            >
-              <AndroidInspectorPanel
-                collapsed={androidInspectorCollapsed}
-                selectorTargets={androidSelectorTargets}
-                onCollapse={() => androidInspectorPanelRef.current?.collapse()}
-                onExpand={() => androidInspectorPanelRef.current?.expand()}
-                onUseSelector={(target, selector) =>
-                  androidSelectorTargets.some(
-                    (candidate) =>
-                      candidate.nodeId === target.nodeId &&
-                      candidate.propertyName === target.propertyName,
-                  ) &&
-                  execute({
-                    type: 'node.updateParams',
-                    payload: {
-                      nodeId: target.nodeId,
-                      changes: {
-                        [target.propertyName]: androidSelectorToJsonValue(selector),
-                      },
-                    },
-                  })
-                }
-              />
-            </Panel>
           </Group>
         </Panel>
         <ResizeHandle orientation="vertical" />
-        <Panel defaultSize="28%" minSize="16%" maxSize="48%">
-          <ProblemsPanel
-            issues={issues}
-            revision={session.workingRevision}
-            savedRevision={session.savedRevision}
-            validation={workflowValidation}
-            onValidate={() => void validateActiveWorkflow()}
-            onCheckRunControl={() => void testRun.checkControl()}
-            onRunControl={(action) => void testRun.submitControl(action)}
-            run={testRun.state}
-            onRecoverRun={() => void testRun.recover()}
-            onNextRunAttemptsPage={testRun.nextAttemptsPage}
-            onPreviousRunAttemptsPage={testRun.previousAttemptsPage}
-            onRefreshRunAttempts={testRun.refreshAttempts}
-            onRetryRunAdmission={() => void testRun.retryAdmission()}
-            onSelectRunAttempt={testRun.selectAttempt}
-            onSelectRunDevice={testRun.selectDeviceExecution}
-          />
+        <Panel
+          id="editor-bottom-panel"
+          panelRef={bottomPanelRef}
+          defaultSize="48px"
+          minSize="180px"
+          maxSize="60%"
+          collapsible
+          collapsedSize="48px"
+          onResize={(size) => setBottomCollapsed(size.inPixels <= 56)}
+        >
+          <div
+            className="relative h-full"
+            onClickCapture={(event) => {
+              if (!bottomCollapsed) return;
+              const target = event.target as HTMLElement;
+              if (target.closest('section > div:first-child button'))
+                bottomPanelRef.current?.expand();
+            }}
+          >
+            <button
+              type="button"
+              onClick={() => togglePanel(bottomPanelRef)}
+              aria-label={bottomCollapsed ? 'Expand bottom panel' : 'Collapse bottom panel'}
+              title={bottomCollapsed ? 'Expand' : 'Collapse'}
+              className="absolute right-3 top-2.5 z-10 grid size-7 place-items-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+            >
+              {bottomCollapsed ? (
+                <ChevronUp className="size-4" />
+              ) : (
+                <ChevronDown className="size-4" />
+              )}
+            </button>
+            <ProblemsPanel
+              issues={issues}
+              revision={session.workingRevision}
+              savedRevision={session.savedRevision}
+              validation={workflowValidation}
+              onValidate={() => void validateActiveWorkflow()}
+              onCheckRunControl={() => void testRun.checkControl()}
+              onRunControl={(action) => void testRun.submitControl(action)}
+              run={testRun.state}
+              onRecoverRun={() => void testRun.recover()}
+              onNextRunAttemptsPage={testRun.nextAttemptsPage}
+              onPreviousRunAttemptsPage={testRun.previousAttemptsPage}
+              onRefreshRunAttempts={testRun.refreshAttempts}
+              onRetryRunAdmission={() => void testRun.retryAdmission()}
+              onSelectRunAttempt={testRun.selectAttempt}
+              onSelectRunDevice={testRun.selectDeviceExecution}
+              runMatrix={
+                runOverlayAll ? (
+                  <RunMatrix
+                    overlay={runOverlayAll}
+                    columns={runMatrixColumns}
+                    selectedNodeId={selectedNodeId}
+                    onSelect={(deviceExecutionId, nodeId) => {
+                      setHiddenRunGroupId(null);
+                      testRun.selectDeviceExecution(deviceExecutionId);
+                      if (nodeId) useEditorStore.getState().selectNode(nodeId);
+                    }}
+                  />
+                ) : null
+              }
+            />
+          </div>
         </Panel>
       </Group>
       <NodeDetailDialog
