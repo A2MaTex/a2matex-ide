@@ -25,7 +25,12 @@ export function LegacyPropertyField({ draft, name, property, onChange }: LegacyP
         <label htmlFor={`property-${name}`} className="text-xs font-medium">
           {property.title}
         </label>
-        <AndroidSelectorControl id={`property-${name}`} value={value ?? null} onCommit={onChange} />
+        <AndroidSelectorControl
+          id={`property-${name}`}
+          label={property.title}
+          value={value ?? null}
+          onCommit={onChange}
+        />
       </div>
     );
   }

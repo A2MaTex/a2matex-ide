@@ -36,14 +36,12 @@ import {
   snapshotImageUrl,
   useAndroidCaptureStore,
 } from '@presentation/features/android-inspector/android-capture-store';
+import { ElementInspector } from '@presentation/features/android-inspector/ElementInspector';
+import { shortClassName } from '@presentation/features/android-inspector/inspector-format';
 
 type SlotValues = Record<string, InspectorPoint | null>;
 
 const SLOT_COLORS = ['var(--g-blue, #1a73e8)', 'var(--g-red, #d93025)', 'var(--g-green, #1e8e3e)'];
-
-function shortClassName(className: string) {
-  return className.split('.').at(-1) ?? className;
-}
 
 function elementLabel(node: InspectorNode) {
   const name = node.text || node.contentDescription || node.resourceId?.split('/').at(-1);
@@ -270,7 +268,7 @@ interface CoordinatePickerDialogProps {
   selector?: SelectorTargetSpec;
   selectorValue?: string | null;
   onApply(values: SlotValues): void;
-  onApplySelector?(resourceId: string): void;
+  onApplySelector?(resourceId: string, element: InspectorNode): void;
   onClose(): void;
 }
 
@@ -299,7 +297,10 @@ export function CoordinatePickerDialog({
   );
   const [chosen, setChosen] = useState<InspectorNode | null>(null);
   const [snap, setSnap] = useState(false);
-  const [lastElement, setLastElement] = useState<InspectorNode | null>(null);
+  // Clicked point and the element inspected there (details, copy, selector).
+  const [inspectPoint, setInspectPoint] = useState<InspectorPoint | null>(null);
+  const [inspectedId, setInspectedId] = useState<string | null>(null);
+  const inspected = snapshot?.nodes.find((node) => node.nodeId === inspectedId) ?? null;
   const autoCaptured = useRef(false);
   const imageUrl = snapshotImageUrl(snapshot);
 
@@ -319,7 +320,7 @@ export function CoordinatePickerDialog({
   const complete = selector ? selectorOk : spec.slots.every((slot) => values[slot.key]);
   const apply = () => {
     if (!complete) return;
-    if (selector && chosen?.resourceId) onApplySelector?.(chosen.resourceId);
+    if (selector && chosen?.resourceId) onApplySelector?.(chosen.resourceId, chosen);
     else onApply(values);
   };
 
@@ -331,7 +332,7 @@ export function CoordinatePickerDialog({
         onClose();
       } else if (event.key === 'Enter' && complete) {
         event.preventDefault();
-        if (selector && chosen?.resourceId) onApplySelector?.(chosen.resourceId);
+        if (selector && chosen?.resourceId) onApplySelector?.(chosen.resourceId, chosen);
         else onApply(values);
       }
     };
@@ -341,6 +342,8 @@ export function CoordinatePickerDialog({
 
   const pick = (imagePoint: InspectorPoint, element: InspectorNode | null) => {
     if (!snapshot) return;
+    setInspectPoint(imagePoint);
+    setInspectedId(element?.nodeId ?? null);
     if (selector) {
       setChosen(element);
       return;
@@ -348,7 +351,6 @@ export function CoordinatePickerDialog({
     const slot = spec.slots.find((entry) => entry.key === activeKey) ?? spec.slots[0];
     const value = toSlotValue(imagePoint, snapshot, spec.unit, slot, bindingInputs);
     setValues((current) => ({ ...current, [slot.key]: value }));
-    setLastElement(element);
     // Swipe: after the start point, move straight on to the end point.
     const index = spec.slots.indexOf(slot);
     const next = spec.slots[index + 1];
@@ -407,7 +409,7 @@ export function CoordinatePickerDialog({
                 activeKey={activeKey}
                 snap={snap}
                 elementMode={Boolean(selector)}
-                chosen={selector ? chosen : null}
+                chosen={selector ? chosen : inspected}
                 onPick={pick}
               />
             ) : (
@@ -437,7 +439,7 @@ export function CoordinatePickerDialog({
             )}
           </div>
 
-          <aside className="flex w-80 shrink-0 flex-col border-l border-border">
+          <aside className="flex w-[400px] shrink-0 flex-col border-l border-border">
             <div className="space-y-2 border-b border-border p-4">
               <label htmlFor="coordinate-picker-device" className="text-xs font-medium">
                 Device
@@ -588,15 +590,17 @@ export function CoordinatePickerDialog({
                 </span>
               </label>
 
-              {lastElement && !selector ? (
-                <div className="rounded-lg bg-secondary px-3 py-2.5 text-[11px] leading-4">
-                  <div className="font-medium">Picked element</div>
-                  <div className="truncate text-muted-foreground">{elementLabel(lastElement)}</div>
-                  {lastElement.resourceId ? (
-                    <div className="truncate font-mono text-muted-foreground">
-                      {lastElement.resourceId}
-                    </div>
-                  ) : null}
+              {snapshot ? (
+                <div className="border-t border-border pt-3">
+                  <ElementInspector
+                    snapshot={snapshot}
+                    point={inspectPoint}
+                    selectedId={inspectedId}
+                    onSelect={(node) => {
+                      setInspectedId(node.nodeId);
+                      if (selector) setChosen(node);
+                    }}
+                  />
                 </div>
               ) : null}
             </div>
