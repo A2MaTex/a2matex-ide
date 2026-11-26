@@ -5,6 +5,7 @@ import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@presentation/features/auth/use-auth';
 import { useProjectStore } from '@presentation/features/project-session/use-project-store';
 import { toast } from '@presentation/components/ui/toast-store';
+import { ThemeToggle } from '@presentation/features/theme/ThemeToggle';
 import { cn } from '@shared/utils/cn';
 import URL from '@/app/constants/url';
 import fullLogoUrl from '@/assets/full-logo.webp';
@@ -89,6 +90,7 @@ export function AppShell() {
           ))}
         </nav>
 
+        <ThemeToggle className={cn('ml-4', inEditor ? 'mt-auto' : 'mt-auto mb-1')} />
         {inEditor ? (
           <button
             type="button"
@@ -98,15 +100,12 @@ export function AppShell() {
             aria-label="Sign out"
             onClick={() => void handleLogout()}
             disabled={status === 'submitting'}
-            className="mx-auto mt-auto grid size-9 place-items-center rounded-lg text-muted-foreground hover:bg-accent/40 hover:text-foreground disabled:opacity-50"
+            className="ml-4 mt-1 grid size-9 place-items-center rounded-lg text-muted-foreground hover:bg-accent/40 hover:text-foreground disabled:opacity-50"
           >
             <LogOut className="size-4" aria-hidden="true" />
           </button>
         ) : null}
-        <div
-          className={cn('relative h-8 w-full shrink-0', inEditor ? undefined : 'mt-auto')}
-          aria-label="Host connected"
-        >
+        <div className={'relative h-8 w-full shrink-0'} aria-label="Host connected">
           <span className="absolute left-7.5 top-3 size-2 rounded-full bg-success shadow-[0_0_10px_var(--success)]" />
         </div>
       </aside>

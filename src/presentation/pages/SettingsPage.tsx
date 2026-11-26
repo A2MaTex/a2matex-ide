@@ -1,11 +1,21 @@
 import { MonitorCog, ShieldCheck, TerminalSquare } from 'lucide-react';
+import type { ReactNode } from 'react';
 
-const sections = [
+import { ThemeSelector } from '@presentation/features/theme/ThemeSelector';
+
+const sections: {
+  icon: typeof MonitorCog;
+  title: string;
+  detail: string;
+  status: string;
+  control?: ReactNode;
+}[] = [
   {
     icon: MonitorCog,
     title: 'Appearance',
-    detail: 'Dark-first semantic token system',
-    status: 'Configured',
+    detail: 'Light, dark, or follow the operating system',
+    status: '',
+    control: <ThemeSelector />,
   },
   {
     icon: TerminalSquare,
@@ -31,7 +41,7 @@ export function SettingsPage() {
       </p>
 
       <div className="mt-8 overflow-hidden">
-        {sections.map(({ detail, icon: Icon, status, title }) => (
+        {sections.map(({ control, detail, icon: Icon, status, title }) => (
           <div
             key={title}
             className="flex items-center gap-4 border-b border-border py-4 last:border-b-0"
@@ -43,9 +53,11 @@ export function SettingsPage() {
               <h2 className="text-sm font-medium">{title}</h2>
               <p className="mt-0.5 text-xs text-muted-foreground">{detail}</p>
             </div>
-            <span className="rounded-full border border-border px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
-              {status}
-            </span>
+            {control ?? (
+              <span className="rounded-full border border-border px-2.5 py-1 text-[10px] font-medium text-muted-foreground">
+                {status}
+              </span>
+            )}
           </div>
         ))}
       </div>

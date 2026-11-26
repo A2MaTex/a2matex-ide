@@ -397,7 +397,7 @@ export function CoordinatePickerDialog({
         </header>
 
         <div className="flex min-h-0 flex-1">
-          <div className="flex min-w-0 flex-1 items-center justify-center bg-[#f5f5f5] p-5">
+          <div className="flex min-w-0 flex-1 items-center justify-center bg-editor-canvas p-5">
             {snapshot && imageUrl ? (
               <PickerViewport
                 snapshot={snapshot}
