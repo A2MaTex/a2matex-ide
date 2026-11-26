@@ -25,12 +25,7 @@ interface ProblemsPanelProps {
   onCheckRunControl(): void;
   onRunControl(action: 'PAUSE' | 'RESUME' | 'CANCEL'): void;
   onRecoverRun(): void;
-  onNextRunAttemptsPage(): void;
-  onPreviousRunAttemptsPage(): void;
-  onRefreshRunAttempts(): void;
   onRetryRunAdmission(): void;
-  onSelectRunAttempt(attemptId: string): void;
-  onSelectRunDevice(deviceExecutionId: string): void;
   run: TestRunExecutionState;
   /** Device × node matrix shown at the top of the Run tab. */
   runMatrix?: ReactNode;
@@ -210,12 +205,7 @@ export function ProblemsPanel({
   onCheckRunControl,
   onRunControl,
   onRecoverRun,
-  onNextRunAttemptsPage,
-  onPreviousRunAttemptsPage,
-  onRefreshRunAttempts,
   onRetryRunAdmission,
-  onSelectRunAttempt,
-  onSelectRunDevice,
   run,
   runMatrix,
 }: ProblemsPanelProps) {
@@ -223,6 +213,7 @@ export function ProblemsPanel({
   const setActiveTab = useEditorStore((state) => state.setActiveBottomTab);
   const selectNode = useEditorStore((state) => state.selectNode);
   const selectEdge = useEditorStore((state) => state.selectEdge);
+  const selectedNodeId = useEditorStore((state) => state.selectedNodeId);
   const diagnosticCount =
     validation.phase === 'completed'
       ? validation.output.errors.length + validation.output.warnings.length
@@ -318,13 +309,9 @@ export function ProblemsPanel({
               state={run}
               onCheckControl={onCheckRunControl}
               onControl={onRunControl}
-              onNextAttemptsPage={onNextRunAttemptsPage}
-              onPreviousAttemptsPage={onPreviousRunAttemptsPage}
               onRecover={onRecoverRun}
-              onRefreshAttempts={onRefreshRunAttempts}
               onRetryAdmission={onRetryRunAdmission}
-              onSelectAttempt={onSelectRunAttempt}
-              onSelectDevice={onSelectRunDevice}
+              selectedNodeId={selectedNodeId}
             />
           </>
         )}

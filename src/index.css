@@ -725,6 +725,40 @@ body {
   background: var(--selected-soft);
   box-shadow: 0 0 0 2px rgb(26 115 232 / 18%);
 }
+.run-device-chips-controls {
+  display: inline-flex;
+  gap: 4px;
+  margin-left: 2px;
+  padding-left: 8px;
+  border-left: 1px solid var(--border);
+}
+.run-control-button {
+  display: inline-flex;
+  height: 26px;
+  align-items: center;
+  gap: 5px;
+  padding: 0 9px;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  background: var(--surface);
+  color: var(--foreground);
+  font-weight: 500;
+}
+.run-control-button:hover:not(:disabled) {
+  background: var(--surface-hover);
+}
+.run-control-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.run-control-button[data-kind='resume'] {
+  border-color: var(--g-blue);
+  color: var(--g-blue);
+}
+.run-control-button[data-kind='cancel'] {
+  padding: 0 7px;
+  color: var(--g-red);
+}
 .run-device-chips-close {
   display: grid;
   width: 24px;

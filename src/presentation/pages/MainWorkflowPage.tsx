@@ -48,6 +48,7 @@ import { NodePalette } from '@presentation/features/workflow-editor/NodePalette'
 import { ProblemsPanel } from '@presentation/features/workflow-editor/ProblemsPanel';
 import { RunDeviceChips } from '@presentation/features/test-run/RunDeviceChips';
 import { RunMatrix } from '@presentation/features/test-run/RunMatrix';
+import { runControlAvailability } from '@presentation/features/test-run/run-controls';
 import { RunOverlayContext, useRunOverlay } from '@presentation/features/test-run/run-overlay';
 import { WorkflowCanvas } from '@presentation/features/workflow-editor/WorkflowCanvas';
 import {
@@ -1181,6 +1182,8 @@ export function MainWorkflowPage() {
                         devices={runOverlay.devices}
                         selectedId={runOverlay.selectedDeviceExecutionId}
                         onSelect={testRun.selectDeviceExecution}
+                        controls={runControlAvailability(testRun.state)}
+                        onControl={(action) => void testRun.submitControl(action)}
                         onDismiss={() =>
                           setHiddenRunGroupId(testRun.state.snapshot?.runGroup.id ?? null)
                         }
@@ -1267,12 +1270,7 @@ export function MainWorkflowPage() {
               onRunControl={(action) => void testRun.submitControl(action)}
               run={testRun.state}
               onRecoverRun={() => void testRun.recover()}
-              onNextRunAttemptsPage={testRun.nextAttemptsPage}
-              onPreviousRunAttemptsPage={testRun.previousAttemptsPage}
-              onRefreshRunAttempts={testRun.refreshAttempts}
               onRetryRunAdmission={() => void testRun.retryAdmission()}
-              onSelectRunAttempt={testRun.selectAttempt}
-              onSelectRunDevice={testRun.selectDeviceExecution}
               runMatrix={
                 runOverlayAll ? (
                   <RunMatrix
