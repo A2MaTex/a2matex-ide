@@ -1,4 +1,5 @@
 import type { ProjectDocument } from '@domain/project/project';
+import type { JsonValue } from '@shared/types/json-value';
 
 import type { ProjectSnapshot } from '@application/project/project-repository';
 
@@ -49,6 +50,24 @@ export function replaceProjectDocument(
   };
 }
 
+/** Replaces the document and the workflow input schema together (input edits, undo / redo). */
+export function replaceProjectState(
+  session: ProjectSession,
+  document: ProjectDocument,
+  inputSchema: JsonValue,
+  workingRevision: number,
+): ProjectSession {
+  return {
+    ...session,
+    snapshot: {
+      ...session.snapshot,
+      document,
+      draftState: { ...session.snapshot.draftState, inputSchema },
+    },
+    workingRevision,
+  };
+}
+
 export function completeProjectSave(
   session: ProjectSession,
   savedRevision: number,
@@ -59,6 +78,11 @@ export function completeProjectSave(
     snapshot: {
       ...persistedSnapshot,
       document: session.snapshot.document,
+      // Edits made while the save was in flight stay in the working copy.
+      draftState: {
+        ...persistedSnapshot.draftState,
+        inputSchema: session.snapshot.draftState.inputSchema,
+      },
     },
     savedRevision,
   };

@@ -20,6 +20,7 @@ import {
   Trash2,
   Undo2,
   X,
+  SlidersHorizontal,
 } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Group, Panel, Separator, usePanelRef } from 'react-resizable-panels';
@@ -36,6 +37,8 @@ import { Button } from '@presentation/components/ui/button';
 import { toast } from '@presentation/components/ui/toast-store';
 import { useProjectCloseGuard } from '@presentation/features/project-session/use-project-close-guard';
 import { TestRunDialog } from '@presentation/features/test-run/TestRunDialog';
+import { WorkflowInputsDialog } from '@presentation/features/workflow-inputs/WorkflowInputsDialog';
+import { workflowInputFieldsFromSchema } from '@domain/workflow/workflow-inputs';
 import { useTestRunExecution } from '@presentation/features/test-run/useTestRunExecution';
 import {
   useProjectStore,
@@ -153,6 +156,8 @@ export function MainWorkflowPage() {
   const [runtimeStatus, setRuntimeStatus] = useState<RuntimeStatus>({ state: 'STOPPED' });
   const [runtimeOperationError, setRuntimeOperationError] = useState<string | null>(null);
   const [testRunDialogOpen, setTestRunDialogOpen] = useState(false);
+  const [inputsDialogOpen, setInputsDialogOpen] = useState(false);
+  const updateWorkflowInputs = useProjectStore((state) => state.updateWorkflowInputs);
   const [activeWorkflowPath, setActiveWorkflowPath] = useState<string | null>(null);
   const [openWorkflowPaths, setOpenWorkflowPaths] = useState<string[]>([]);
   const [actionList, setActionList] = useState<{
@@ -923,6 +928,17 @@ export function MainWorkflowPage() {
           <Button
             size="sm"
             variant="secondary"
+            onClick={() => setInputsDialogOpen(true)}
+            title="Define the values the person running this workflow enters for each device"
+          >
+            <SlidersHorizontal /> Inputs
+            <span className="rounded bg-background/60 px-1 font-mono text-[10px]">
+              {workflowInputFieldsFromSchema(session.snapshot.draftState.inputSchema).length}
+            </span>
+          </Button>
+          <Button
+            size="sm"
+            variant="secondary"
             onClick={() => void validateActiveWorkflow()}
             disabled={workflowValidationBusy}
             title="Save locally, then validate this workflow with the local Runtime"
@@ -1311,6 +1327,13 @@ export function MainWorkflowPage() {
           ) ?? null
         }
         onClose={closeHelp}
+      />
+      <WorkflowInputsDialog
+        document={session.snapshot.document}
+        inputSchema={session.snapshot.draftState.inputSchema}
+        onOpenChange={setInputsDialogOpen}
+        onSave={(inputSchema, renames) => void updateWorkflowInputs(inputSchema, renames)}
+        open={inputsDialogOpen}
       />
       <TestRunDialog
         key={session.snapshot.localId}

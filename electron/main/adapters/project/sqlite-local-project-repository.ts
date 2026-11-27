@@ -17,6 +17,8 @@ import {
 } from '@application/project/local-project-repository';
 import type { ProjectDocument } from '@domain/project/project';
 import { projectDocumentSchema } from '@domain/project/project-schema';
+import { objectValueSchema } from '@domain/schema/object-value-schema';
+import type { JsonValue } from '@shared/types/json-value';
 import {
   decodeWorkflowDocument,
   encodeWorkflowDocument,
@@ -213,6 +215,11 @@ function readProject(
     .prepare(`${SELECT_PROJECT} WHERE p.account_scope = ? AND p.local_id = ?`)
     .get(accountScope, localId) as ProjectRow | undefined;
   return row ? parseProjectSnapshot(database, row) : null;
+}
+
+/** Rejects input schemas that the editor could not have produced before they reach the draft. */
+function parseWorkflowInputSchema(raw: JsonValue): JsonValue {
+  return objectValueSchema.parse(raw) as JsonValue;
 }
 
 function artifactsOf(snapshot: LocalProjectSnapshot): LocalDraftArtifacts {
@@ -679,7 +686,14 @@ export class SqliteLocalProjectRepository implements LocalProjectRepository {
             serializeJson(current.document.manifest) !== serializeJson(document.manifest);
           const workflowsChanged =
             serializeJson(current.document.workflows) !== serializeJson(document.workflows);
-          const requestedArtifacts = input.artifacts ?? persistedArtifacts;
+          const requestedArtifacts =
+            input.artifacts ??
+            (input.inputSchema === undefined
+              ? persistedArtifacts
+              : {
+                  ...persistedArtifacts,
+                  inputSchema: parseWorkflowInputSchema(input.inputSchema),
+                });
           const inputSchemaChanged =
             serializeJson(requestedArtifacts.inputSchema) !==
             serializeJson(persistedArtifacts.inputSchema);

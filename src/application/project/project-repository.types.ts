@@ -1,3 +1,4 @@
+import type { JsonValue } from '@shared/types/json-value';
 import type { LocalProjectSnapshot } from '@application/project/local-project.types';
 import type { ProjectDocument } from '@domain/project/project';
 
@@ -11,6 +12,8 @@ export interface CreateProjectInput {
 export interface SaveProjectInput {
   document: ProjectDocument;
   expectedLocalRevision: number;
+  /** The draft's workflow input schema; omitted means "keep the stored one". */
+  inputSchema?: JsonValue;
   localId: string;
 }
 

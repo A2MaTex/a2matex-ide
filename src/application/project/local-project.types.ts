@@ -58,6 +58,8 @@ export interface SaveLocalProjectInput {
   artifacts?: LocalDraftArtifacts;
   document: ProjectDocument;
   expectedLocalRevision: number;
+  /** Replaces only the stored input schema; ignored when `artifacts` is given. */
+  inputSchema?: JsonValue;
   localId: string;
 }
 

@@ -103,15 +103,20 @@ export class InMemoryProjectRepository implements ProjectRepository {
       JSON.stringify(current.document.manifest) !== JSON.stringify(document.manifest);
     const workflowsChanged =
       JSON.stringify(current.document.workflows) !== JSON.stringify(document.workflows);
-    if (!metadataChanged && !workflowsChanged) return clone(current);
+    const inputSchemaChanged =
+      input.inputSchema !== undefined &&
+      JSON.stringify(current.draftState.inputSchema) !== JSON.stringify(input.inputSchema);
+    if (!metadataChanged && !workflowsChanged && !inputSchemaChanged) return clone(current);
+    const sourceChanged = workflowsChanged || inputSchemaChanged;
     const snapshot: LocalProjectSnapshot = {
       ...current,
       document,
       draftState: {
         ...current.draftState,
+        ...(inputSchemaChanged ? { inputSchema: structuredClone(input.inputSchema!) } : {}),
         localRevision: current.draftState.localRevision + 1,
         metadataRevision: current.draftState.metadataRevision + (metadataChanged ? 1 : 0),
-        ...(workflowsChanged
+        ...(sourceChanged
           ? {
               runtimeIr: null,
               runtimeIrSourceRevision: null,

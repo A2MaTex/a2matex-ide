@@ -9,6 +9,7 @@ import {
   createProjectSession,
   isProjectDirty,
   replaceProjectDocument,
+  replaceProjectState,
   updateProjectDocument,
   type ProjectSession,
 } from '@application/project/project-session';
@@ -37,6 +38,8 @@ import type { ProjectDocument } from '@domain/project/project';
 import { migrateLegacyWorkflowOutputPorts } from '@domain/project/workflow-output-port-migration';
 import type { NodeDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
+import { renameWorkflowInputBindings } from '@domain/workflow/workflow-inputs';
+import type { JsonValue } from '@shared/types/json-value';
 
 export type ProjectOperationStatus =
   'creating' | 'exporting' | 'idle' | 'importing' | 'loading' | 'opening' | 'ready';
@@ -45,6 +48,7 @@ export type LocalSaveStatus = 'dirty' | 'local-save-error' | 'saved-local' | 'sa
 
 interface ProjectHistoryEntry {
   document: ProjectDocument;
+  inputSchema: JsonValue;
   revision: number;
 }
 
@@ -81,6 +85,8 @@ export interface ProjectStoreState {
     localId?: string,
   ): Promise<CloudProject | null>;
   updateProjectName(name: string): void;
+  /** Replaces the workflow input schema; `renames` repoints node bindings (old name -> new name). */
+  updateWorkflowInputs(inputSchema: JsonValue, renames?: ReadonlyMap<string, string>): boolean;
   createWorkflow(name: string, kind: WorkflowKind): string | null;
   executeWorkflowCommand(
     workflowPath: string,
@@ -136,18 +142,27 @@ function emptyHistory(session: ProjectSession | null) {
   };
 }
 
-function commitDocument(state: ProjectStoreState, document: ProjectDocument) {
+function historyEntry(session: ProjectSession): ProjectHistoryEntry {
+  return {
+    document: session.snapshot.document,
+    inputSchema: session.snapshot.draftState.inputSchema,
+    revision: session.workingRevision,
+  };
+}
+
+function commitDocument(
+  state: ProjectStoreState,
+  document: ProjectDocument,
+  inputSchema?: JsonValue,
+) {
   if (!state.session) return {};
   const revision = state.nextRevision;
   return {
-    session: replaceProjectDocument(state.session, document, revision),
-    undoStack: [
-      ...state.undoStack,
-      {
-        document: state.session.snapshot.document,
-        revision: state.session.workingRevision,
-      },
-    ].slice(-100),
+    session:
+      inputSchema === undefined
+        ? replaceProjectDocument(state.session, document, revision)
+        : replaceProjectState(state.session, document, inputSchema, revision),
+    undoStack: [...state.undoStack, historyEntry(state.session)].slice(-100),
     redoStack: [],
     nextRevision: revision + 1,
   };
@@ -530,6 +545,29 @@ export function createProjectStore(
         });
         if (changed) autosave.schedule();
       },
+      updateWorkflowInputs(inputSchema, renames = new Map()) {
+        let changed = false;
+        set((state) => {
+          if (!state.session) return state;
+          const current = state.session.snapshot;
+          if (
+            JSON.stringify(current.draftState.inputSchema) === JSON.stringify(inputSchema) &&
+            renames.size === 0
+          ) {
+            return state;
+          }
+          changed = true;
+          const document = renameWorkflowInputBindings(current.document, renames);
+          return {
+            ...commitDocument(state, document, structuredClone(inputSchema)),
+            error: null,
+            localSaveError: null,
+            localSaveStatus: 'dirty',
+          };
+        });
+        if (changed) autosave.schedule();
+        return changed;
+      },
       createWorkflow(name, kind) {
         let workflowPath: string | null = null;
         set((state) => {
@@ -644,12 +682,14 @@ export function createProjectStore(
           if (!state.session || state.undoStack.length === 0) return state;
           changed = true;
           const previous = state.undoStack.at(-1)!;
-          const current = {
-            document: state.session.snapshot.document,
-            revision: state.session.workingRevision,
-          };
+          const current = historyEntry(state.session);
           return {
-            session: replaceProjectDocument(state.session, previous.document, previous.revision),
+            session: replaceProjectState(
+              state.session,
+              previous.document,
+              previous.inputSchema,
+              previous.revision,
+            ),
             undoStack: state.undoStack.slice(0, -1),
             redoStack: [...state.redoStack, current].slice(-100),
             error: null,
@@ -665,12 +705,14 @@ export function createProjectStore(
           if (!state.session || state.redoStack.length === 0) return state;
           changed = true;
           const next = state.redoStack.at(-1)!;
-          const current = {
-            document: state.session.snapshot.document,
-            revision: state.session.workingRevision,
-          };
+          const current = historyEntry(state.session);
           return {
-            session: replaceProjectDocument(state.session, next.document, next.revision),
+            session: replaceProjectState(
+              state.session,
+              next.document,
+              next.inputSchema,
+              next.revision,
+            ),
             undoStack: [...state.undoStack, current].slice(-100),
             redoStack: state.redoStack.slice(0, -1),
             error: null,

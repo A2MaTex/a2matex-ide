@@ -42,6 +42,7 @@ export function saveProject(repository: ProjectRepository, snapshot: ProjectSnap
   return repository.save({
     document: snapshot.document,
     expectedLocalRevision: snapshot.draftState.localRevision,
+    inputSchema: snapshot.draftState.inputSchema,
     localId: snapshot.localId,
   });
 }
