@@ -92,6 +92,7 @@ export interface ProjectStoreState {
     workflowPath: string,
     command: WorkflowCommand,
     catalog: readonly NodeDefinition[],
+    inputSchema?: JsonValue,
   ): boolean;
   migrateCatalogGraph(catalog: readonly NodeDefinition[]): {
     unresolvedEdgeIds: string[];
@@ -588,7 +589,7 @@ export function createProjectStore(
         if (workflowPath) autosave.schedule();
         return workflowPath;
       },
-      executeWorkflowCommand(workflowPath, command, catalog) {
+      executeWorkflowCommand(workflowPath, command, catalog, inputSchema) {
         let applied = false;
         set((state) => {
           if (!state.session) return state;
@@ -607,7 +608,11 @@ export function createProjectStore(
             );
             applied = true;
             return {
-              ...commitDocument(state, document),
+              ...commitDocument(
+                state,
+                document,
+                inputSchema === undefined ? undefined : structuredClone(inputSchema),
+              ),
               error: null,
               localSaveError: null,
               localSaveStatus: 'dirty',

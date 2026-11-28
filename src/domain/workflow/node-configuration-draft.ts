@@ -14,9 +14,9 @@ import {
 } from '@domain/workflow/node-definition';
 import {
   defaultBindingFor,
-  firstBindingKind,
   isLiteralBinding,
   literalBinding,
+  preferredBindingKind,
   validateWorkflowBinding,
 } from '@domain/workflow/workflow-binding';
 import type { JsonValue } from '@shared/types/json-value';
@@ -56,13 +56,19 @@ function withBindingDefaults(
 ) {
   const result: Record<string, WorkflowBinding> = structuredClone(bindings);
   for (const [field, input] of Object.entries(inputs)) {
-    if (result[field]) continue;
+    const existing = result[field];
+    const preferred = input.required ? preferredBindingKind(input) : undefined;
+    const unresolvedReference =
+      (existing?.kind === 'WORKFLOW_INPUT' && existing.inputName === '') ||
+      (existing?.kind === 'NODE_OUTPUT' && existing.nodeId === '' && existing.field === '') ||
+      ((existing?.kind === 'FLOW_VARIABLE' || existing?.kind === 'GLOBAL_VARIABLE') &&
+        existing.name === '');
+    if (existing && !(preferred === 'LITERAL' && unresolvedReference)) continue;
     if (input.valueSchema?.default !== undefined && input.bindingKinds.LITERAL) {
       result[field] = literalBinding(input.valueSchema.default);
       continue;
     }
-    const kind = input.required ? firstBindingKind(input) : undefined;
-    if (kind) result[field] = defaultBindingFor(input, kind);
+    if (preferred) result[field] = defaultBindingFor(input, preferred);
   }
   return result;
 }

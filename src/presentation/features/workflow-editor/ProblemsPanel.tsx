@@ -8,7 +8,11 @@ import {
   XCircle,
 } from 'lucide-react';
 
-import type { WorkflowValidationDiagnostic } from '@application/workflow-validation/workflow-validation';
+import {
+  workflowIssueContent,
+  workflowValidationDiagnosticContent,
+  type WorkflowValidationDiagnostic,
+} from '@application/workflow-validation/workflow-validation';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import { Button } from '@presentation/components/ui/button';
 import { RunStatusPanel } from '@presentation/features/test-run/RunStatusPanel';
@@ -70,6 +74,7 @@ function DiagnosticRow({
 }) {
   const selectable = Boolean(diagnostic.nodeId || diagnostic.edgeId);
   const Icon = severity === 'error' ? XCircle : AlertTriangle;
+  const display = workflowValidationDiagnosticContent(diagnostic);
   const content = (
     <>
       <Icon
@@ -78,11 +83,11 @@ function DiagnosticRow({
         }
       />
       <span className="min-w-0">
-        <span className="block text-[11px] text-secondary-foreground">{diagnostic.message}</span>
-        <span className="block break-all font-mono text-[10px] text-muted-foreground">
-          {diagnostic.code} · {diagnosticPath(diagnostic.path)}
-          {diagnostic.nodeId ? ` · node ${diagnostic.nodeId}` : ''}
-          {diagnostic.edgeId ? ` · edge ${diagnostic.edgeId}` : ''}
+        <span className="block text-[11px] font-medium text-secondary-foreground">
+          {display.title}
+        </span>
+        <span className="mt-0.5 block text-[10px] leading-4 text-muted-foreground">
+          {display.message}
         </span>
       </span>
     </>
@@ -146,9 +151,6 @@ function DiagnosticsContent({
               <p className="text-xs font-medium text-destructive">Validation did not run</p>
               <p className="mt-1 text-xs leading-5 text-secondary-foreground">
                 {validation.error.message}
-              </p>
-              <p className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
-                {validation.error.code}
               </p>
             </div>
           </div>
@@ -253,25 +255,27 @@ export function ProblemsPanel({
             </pre>
           ) : (
             <div className="divide-y divide-border">
-              {issues.map((entry) => (
-                <button
-                  key={entry.id}
-                  type="button"
-                  onClick={() => entry.nodeId && selectNode(entry.nodeId)}
-                  className="flex w-full items-start gap-2 px-4 py-2 text-left hover:bg-accent"
-                >
-                  <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
-                  <span className="min-w-0">
-                    <span className="block text-[11px] text-secondary-foreground">
-                      {entry.message}
+              {issues.map((entry) => {
+                const display = workflowIssueContent(entry);
+                return (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    onClick={() => entry.nodeId && selectNode(entry.nodeId)}
+                    className="flex w-full items-start gap-2 px-4 py-2 text-left hover:bg-accent"
+                  >
+                    <AlertCircle className="mt-0.5 size-3.5 shrink-0 text-destructive" />
+                    <span className="min-w-0">
+                      <span className="block text-[11px] font-medium text-secondary-foreground">
+                        {display.title}
+                      </span>
+                      <span className="mt-0.5 block text-[10px] leading-4 text-muted-foreground">
+                        {display.message}
+                      </span>
                     </span>
-                    <span className="block font-mono text-[10px] text-muted-foreground">
-                      {entry.code}
-                      {entry.nodeId ? ` · ${entry.nodeId}` : ''}
-                    </span>
-                  </span>
-                </button>
-              ))}
+                  </button>
+                );
+              })}
             </div>
           )
         ) : activeTab === 'diagnostics' ? (
@@ -284,9 +288,11 @@ export function ProblemsPanel({
                     key={`${diagnostic.code}:${diagnostic.path.join('.')}:${index}`}
                     className="mt-2"
                   >
-                    <p className="text-secondary-foreground">{diagnostic.message}</p>
-                    <p className="break-all font-mono text-[10px] text-muted-foreground">
-                      {diagnostic.code} · {diagnostic.path.length ? diagnostic.path.join('.') : '$'}
+                    <p className="font-medium text-secondary-foreground">
+                      {workflowValidationDiagnosticContent(diagnostic).title}
+                    </p>
+                    <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">
+                      {workflowValidationDiagnosticContent(diagnostic).message}
                     </p>
                   </div>
                 ))}

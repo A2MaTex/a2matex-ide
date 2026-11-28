@@ -20,6 +20,7 @@ interface NodePaletteProps {
   catalog: readonly NodeDefinition[];
   status: 'loading' | 'ready' | 'error';
   error: string | null;
+  startNodeExists: boolean;
   onRetry(): void;
   onAdd(definition: NodeDefinition): void;
   expanded: boolean;
@@ -49,6 +50,7 @@ export function NodePalette({
   catalog,
   status,
   error,
+  startNodeExists,
   onRetry,
   onAdd,
   expanded,
@@ -66,8 +68,12 @@ export function NodePalette({
   const tooltipTimer = useRef<number | null>(null);
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const matchingNodes = useMemo(
-    () => catalog.filter((node) => matchesQuery(node, normalizedQuery)),
-    [catalog, normalizedQuery],
+    () =>
+      catalog.filter(
+        (node) =>
+          !(startNodeExists && node.type === 'flow.start') && matchesQuery(node, normalizedQuery),
+      ),
+    [catalog, normalizedQuery, startNodeExists],
   );
 
   const toggleCategory = (category: string) => {

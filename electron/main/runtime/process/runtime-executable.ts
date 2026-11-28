@@ -32,14 +32,6 @@ function assertExecutable(filePath: string, allowedRoot?: string) {
 }
 
 export function resolveRuntimeExecutable(options: RuntimeExecutableOptions) {
-  if (process.platform === 'win32') {
-    throw new RuntimeError(
-      'RUNTIME_PLATFORM_UNSUPPORTED',
-      'Managed Runtime pipes have not yet been verified for Windows.',
-      false,
-    );
-  }
-
   const override = process.env.A2MATEX_RUNTIME_EXECUTABLE;
   if (override) {
     if (!path.isAbsolute(override)) {
@@ -52,7 +44,7 @@ export function resolveRuntimeExecutable(options: RuntimeExecutableOptions) {
     return assertExecutable(override);
   }
 
-  const executableName = 'a2matex-runtime';
+  const executableName = process.platform === 'win32' ? 'a2matex-runtime.exe' : 'a2matex-runtime';
   if (options.isPackaged) {
     const runtimeRoot = path.join(
       options.resourcesPath,

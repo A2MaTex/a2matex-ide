@@ -33,6 +33,7 @@ import { DEFAULT_NODE_CATALOG_RUNTIME_VERSION } from '@domain/node-catalog/node-
 import type { NodeDefinition } from '@domain/workflow/node-definition';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import { validateWorkflow } from '@domain/workflow/workflow-validator';
+import type { JsonValue } from '@shared/types/json-value';
 import { Button } from '@presentation/components/ui/button';
 import { toast } from '@presentation/components/ui/toast-store';
 import { useProjectCloseGuard } from '@presentation/features/project-session/use-project-close-guard';
@@ -422,13 +423,19 @@ export function MainWorkflowPage() {
       });
   }, [projectStore, syncCloud]);
   const execute = useCallback(
-    (command: WorkflowCommand) =>
-      workflowPath ? executeWorkflowCommand(workflowPath, command, nodeCatalog) : false,
+    (command: WorkflowCommand, inputSchema?: JsonValue) =>
+      workflowPath
+        ? executeWorkflowCommand(workflowPath, command, nodeCatalog, inputSchema)
+        : false,
     [executeWorkflowCommand, nodeCatalog, workflowPath],
   );
 
   const duplicateNode = useCallback(
     (sourceNodeId: string) => {
+      if (workflow?.nodes.find((node) => node.id === sourceNodeId)?.type === 'flow.start') {
+        toast.error('The Start node cannot be duplicated');
+        return;
+      }
       const nodeId = newNodeId('copy');
       if (
         execute({
@@ -442,12 +449,20 @@ export function MainWorkflowPage() {
         toast.error('Unable to duplicate node');
       }
     },
-    [execute, selectNode],
+    [execute, selectNode, workflow],
   );
 
   const deleteNode = useCallback(
     (nodeId: string) => {
       if (!workflow) return false;
+      const node = workflow.nodes.find((candidate) => candidate.id === nodeId);
+      if (
+        node?.type === 'flow.start' &&
+        workflow.nodes.filter((candidate) => candidate.type === 'flow.start').length === 1
+      ) {
+        toast.error('Every workflow must keep one Start node');
+        return false;
+      }
       const connectionCount = workflow.edges.filter(
         (edge) => edge.sourceNodeId === nodeId || edge.targetNodeId === nodeId,
       ).length;
@@ -595,6 +610,9 @@ export function MainWorkflowPage() {
   const exporting = status === 'exporting';
   const syncing = cloudStatus === 'syncing';
   const configuredNode = workflow.nodes.find((node) => node.id === nodeConfigNodeId) ?? null;
+  const selectedNode = workflow.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const copiedNode = workflow.nodes.find((node) => node.id === copiedNodeId) ?? null;
+  const startNodeCount = workflow.nodes.filter((node) => node.type === 'flow.start').length;
   // Matrix columns: nodes in flow order (breadth-first from the entry node), then any others.
   const runMatrixColumns = (() => {
     const order: string[] = [];
@@ -786,7 +804,7 @@ export function MainWorkflowPage() {
       label: 'Cut selected node',
       shortcut: 'Ctrl+X',
       icon: Scissors,
-      disabled: !selectedNodeId,
+      disabled: !selectedNodeId || (selectedNode?.type === 'flow.start' && startNodeCount === 1),
       run: () => {
         if (!selectedNodeId) return;
         copyNode(selectedNodeId);
@@ -806,7 +824,7 @@ export function MainWorkflowPage() {
       label: 'Paste node',
       shortcut: 'Ctrl+V',
       icon: Copy,
-      disabled: !copiedNodeId,
+      disabled: !copiedNodeId || copiedNode?.type === 'flow.start',
       run: () => copiedNodeId && duplicateNode(copiedNodeId),
     },
     {
@@ -822,7 +840,7 @@ export function MainWorkflowPage() {
       label: 'Delete node and connections',
       shortcut: 'Delete',
       icon: Trash2,
-      disabled: !selectedNodeId,
+      disabled: !selectedNodeId || (selectedNode?.type === 'flow.start' && startNodeCount === 1),
       run: () => selectedNodeId && deleteNode(selectedNodeId),
     },
     {
@@ -1085,6 +1103,7 @@ export function MainWorkflowPage() {
                       catalog={nodeCatalog}
                       status={nodeCatalogStatus}
                       error={nodeCatalogError}
+                      startNodeExists={startNodeCount > 0}
                       onRetry={() => void loadNodeCatalog(true)}
                       onAdd={addFromPalette}
                       expanded={nodePaletteExpanded}
@@ -1310,6 +1329,7 @@ export function MainWorkflowPage() {
         node={detailNode}
         definition={detailNodeDefinition ?? null}
         execute={execute}
+        deleteDisabled={detailNode?.type === 'flow.start' && startNodeCount === 1}
         onHelp={() => {
           if (detailNodeDefinition) {
             openHelp({ type: detailNodeDefinition.type, version: detailNodeDefinition.version });

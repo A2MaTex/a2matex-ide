@@ -8,7 +8,9 @@ export type WorkflowCommandErrorCode =
   | 'NODE_DEFINITION_MISSING'
   | 'NODE_NOT_FOUND'
   | 'PORT_INCOMPATIBLE'
-  | 'PORT_NOT_FOUND';
+  | 'PORT_NOT_FOUND'
+  | 'START_NODE_ALREADY_EXISTS'
+  | 'START_NODE_REQUIRED';
 
 export class WorkflowCommandError extends Error {
   readonly code: WorkflowCommandErrorCode;

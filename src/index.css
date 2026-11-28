@@ -92,6 +92,12 @@ select {
   font: inherit;
 }
 
+select option,
+select optgroup {
+  background-color: var(--surface);
+  color: var(--foreground);
+}
+
 button,
 a {
   -webkit-tap-highlight-color: transparent;
@@ -669,6 +675,7 @@ body {
 }
 .binding-source-select {
   appearance: auto;
+  color: var(--secondary-foreground);
 }
 
 /* test run status on the canvas (tier 1: selected device, tier 2: device summary) */

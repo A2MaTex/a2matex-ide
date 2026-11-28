@@ -12,6 +12,7 @@ interface NodeDetailDialogProps {
   node: WorkflowNode | null;
   definition: NodeDefinition | null;
   execute(command: WorkflowCommand): boolean;
+  deleteDisabled?: boolean;
   onHelp(): void;
   onDelete(): void;
   onClose(): void;
@@ -21,6 +22,7 @@ export function NodeDetailDialog({
   node,
   definition,
   execute,
+  deleteDisabled = false,
   onHelp,
   onDelete,
   onClose,
@@ -172,7 +174,7 @@ export function NodeDetailDialog({
         </div>
 
         <footer className="flex items-center gap-2 border-t border-border px-5 py-3 text-sm">
-          <Button variant="ghost" onClick={onDelete}>
+          <Button variant="ghost" onClick={onDelete} disabled={deleteDisabled}>
             <Trash2 /> Delete node and connections
           </Button>
           <span className="flex-1" />

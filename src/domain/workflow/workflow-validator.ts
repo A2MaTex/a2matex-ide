@@ -19,6 +19,7 @@ import {
   validateNodeConfigurationDraft,
 } from '@domain/workflow/node-configuration-draft';
 import { isLiteralBinding } from '@domain/workflow/workflow-binding';
+import { workflowInputIsCompatible } from '@domain/workflow/workflow-inputs';
 import type { JsonValue } from '@shared/types/json-value';
 
 export interface WorkflowIssue {
@@ -215,16 +216,6 @@ function cycleNodeIds(workflow: WorkflowDocument) {
   return cyclic;
 }
 
-function workflowInputProperty(schema: JsonValue, name: string) {
-  if (!schema || Array.isArray(schema) || typeof schema !== 'object') return undefined;
-  const properties = schema.properties;
-  if (!properties || Array.isArray(properties) || typeof properties !== 'object') return undefined;
-  const value = properties[name];
-  if (!value || Array.isArray(value) || typeof value !== 'object') return undefined;
-  const required = Array.isArray(schema.required) && schema.required.includes(name);
-  return { type: typeof value.type === 'string' ? value.type : undefined, required };
-}
-
 function validateBindingReferences(
   workflow: WorkflowDocument,
   node: WorkflowNode,
@@ -245,14 +236,7 @@ function validateBindingReferences(
   for (const [field, input] of Object.entries(inputs)) {
     const binding = node.bindings[field];
     if (binding?.kind === 'WORKFLOW_INPUT' && typeof binding.inputName === 'string') {
-      const property = workflowInputProperty(workflowInputSchema, binding.inputName);
-      const compatible =
-        property &&
-        (!input.required || property.required) &&
-        (input.valueSchema
-          ? property.type === input.valueSchema.type
-          : ['string', 'number', 'integer', 'boolean'].includes(property.type ?? ''));
-      if (!compatible) {
+      if (!workflowInputIsCompatible(workflowInputSchema, input, binding.inputName)) {
         issues.push(
           issue(
             workflow,
@@ -336,6 +320,12 @@ export function validateWorkflow(
   }
 
   const entry = nodes.get(workflow.entryNodeId);
+  const startNodes = workflow.nodes.filter((node) => node.type === 'flow.start');
+  if (startNodes.length !== 1) {
+    issues.push(
+      issue(workflow, 'START_NODE_COUNT_INVALID', 'Workflow must contain exactly one Start node'),
+    );
+  }
   if (!entry || entry.type !== 'flow.start') {
     issues.push(
       issue(workflow, 'ENTRY_NODE_INVALID', 'entryNodeId must reference a flow.start node'),

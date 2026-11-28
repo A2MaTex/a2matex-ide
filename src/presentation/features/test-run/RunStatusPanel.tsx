@@ -9,6 +9,7 @@ import {
   Square,
 } from 'lucide-react';
 
+import { workflowValidationDiagnosticContent } from '@application/workflow-validation/workflow-validation';
 import { Button } from '@presentation/components/ui/button';
 import { ArtifactPreview } from '@presentation/features/test-run/ArtifactPreview';
 import {
@@ -95,9 +96,6 @@ export function RunStatusPanel({
             <div className="min-w-0">
               <p className="font-medium text-destructive">Test Run needs attention</p>
               <p className="mt-1 leading-5 text-secondary-foreground">{state.error.message}</p>
-              <p className="mt-1 break-all font-mono text-[10px] text-muted-foreground">
-                {state.error.runtimeCode ?? state.error.code}
-              </p>
             </div>
           </div>
           {state.error.unavailableDevices?.length ? (
@@ -107,9 +105,7 @@ export function RunStatusPanel({
                   <p className="break-all font-mono text-[10px] text-foreground">
                     Device {device.index + 1}: {device.adbSerial}
                   </p>
-                  <p className="mt-0.5 text-[11px] text-destructive">
-                    {device.reason.message} ({device.reason.code})
-                  </p>
+                  <p className="mt-0.5 text-[11px] text-destructive">{device.reason.message}</p>
                 </div>
               ))}
             </div>
@@ -131,9 +127,11 @@ export function RunStatusPanel({
           <p className="font-medium text-warning">Compilation diagnostics</p>
           {[...state.validation.errors, ...state.validation.warnings].map((diagnostic, index) => (
             <div key={`${diagnostic.code}:${diagnostic.path.join('.')}:${index}`} className="mt-2">
-              <p className="text-secondary-foreground">{diagnostic.message}</p>
-              <p className="break-all font-mono text-[10px] text-muted-foreground">
-                {diagnostic.code} · {diagnostic.path.length ? diagnostic.path.join('.') : '$'}
+              <p className="font-medium text-secondary-foreground">
+                {workflowValidationDiagnosticContent(diagnostic).title}
+              </p>
+              <p className="mt-0.5 text-[10px] leading-4 text-muted-foreground">
+                {workflowValidationDiagnosticContent(diagnostic).message}
               </p>
             </div>
           ))}
@@ -184,9 +182,7 @@ export function RunStatusPanel({
                             : 'Controls apply to every device in this run group.'}
                 </p>
                 {control?.lastError ? (
-                  <p className="mt-1 text-[10px] text-destructive">
-                    {control.lastError.message} ({control.lastError.code})
-                  </p>
+                  <p className="mt-1 text-[10px] text-destructive">{control.lastError.message}</p>
                 ) : null}
               </div>
               <div className="flex flex-wrap gap-2">
@@ -268,20 +264,22 @@ export function RunStatusPanel({
                 </div>
               ) : null}
               {selectedAttempt.error ? (
-                <div className="mt-3 rounded border border-destructive/30 bg-destructive/10 p-2 text-destructive">
-                  {selectedAttempt.error.message}
-                  <span className="ml-1 font-mono text-[10px]">({selectedAttempt.error.code})</span>
+                <div className="mt-3 rounded border border-destructive/30 bg-destructive/10 p-2">
+                  <p className="font-medium text-destructive">Node attempt failed</p>
+                  <p className="mt-0.5 text-[10px] leading-4 text-destructive">
+                    {selectedAttempt.error.message}
+                  </p>
                 </div>
               ) : null}
               <ArtifactPreview key={selectedAttempt.id} attempt={selectedAttempt} />
             </div>
           ) : null}
           {selectedExecution?.terminalError ? (
-            <div className="mt-3 rounded border border-destructive/30 bg-destructive/10 p-2 text-destructive">
-              {selectedExecution.adbSerial}: {selectedExecution.terminalError.message}
-              <span className="ml-1 font-mono text-[10px]">
-                ({selectedExecution.terminalError.code})
-              </span>
+            <div className="mt-3 rounded border border-destructive/30 bg-destructive/10 p-2">
+              <p className="font-medium text-destructive">Device run failed</p>
+              <p className="mt-0.5 text-[10px] leading-4 text-destructive">
+                {selectedExecution.adbSerial}: {selectedExecution.terminalError.message}
+              </p>
             </div>
           ) : null}
           {state.attemptsError ? (

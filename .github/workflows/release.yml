@@ -95,6 +95,8 @@ jobs:
             printf 'VITE_PRIVACY_URL=%s\n' "$VITE_PRIVACY_URL"
           } > .env
       - run: npm run build:desktop
+      - name: Verify managed Runtime lifecycle
+        run: npm run smoke:runtime
       - name: Package ${{ matrix.name }}
         shell: bash
         run: >-

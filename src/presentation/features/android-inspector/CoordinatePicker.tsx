@@ -13,6 +13,8 @@ import { createPortal } from 'react-dom';
 import type { InspectorNode, InspectorSnapshot } from '@domain/android-inspector/android-inspector';
 import {
   formatSlotValue,
+  packageAccepts,
+  readPackageValue,
   readSelectorValue,
   readSlotValue,
   selectorAccepts,
@@ -20,6 +22,7 @@ import {
   toSlotValue,
   type CoordinateSlot,
   type CoordinateTargetSpec,
+  type PackageTargetSpec,
   type SelectorTargetSpec,
 } from '@domain/android-inspector/coordinate-targets';
 import {
@@ -267,8 +270,12 @@ interface CoordinatePickerDialogProps {
   /** Selector mode (SELECTOR_ID): click an element, its resource id is used. */
   selector?: SelectorTargetSpec;
   selectorValue?: string | null;
+  /** Launch App mode: click any element and use the owning app's package name. */
+  packageTarget?: PackageTargetSpec;
+  packageValue?: string | null;
   onApply(values: SlotValues): void;
   onApplySelector?(resourceId: string, element: InspectorNode): void;
+  onApplyPackage?(packageName: string, element: InspectorNode): void;
   onClose(): void;
 }
 
@@ -279,8 +286,11 @@ export function CoordinatePickerDialog({
   bindingInputs,
   selector,
   selectorValue = null,
+  packageTarget,
+  packageValue = null,
   onApply,
   onApplySelector,
+  onApplyPackage,
   onClose,
 }: CoordinatePickerDialogProps) {
   const devices = useAndroidCaptureStore((state) => state.devices);
@@ -317,10 +327,17 @@ export function CoordinatePickerDialog({
   }, [capture, loadDevices]);
 
   const selectorOk = selector ? selectorAccepts(selector, chosen?.resourceId) : false;
-  const complete = selector ? selectorOk : spec.slots.every((slot) => values[slot.key]);
+  const packageOk = packageTarget ? packageAccepts(packageTarget, chosen?.packageName) : false;
+  const elementMode = Boolean(selector || packageTarget);
+  const complete = selector
+    ? selectorOk
+    : packageTarget
+      ? packageOk
+      : spec.slots.every((slot) => values[slot.key]);
   const apply = () => {
     if (!complete) return;
     if (selector && chosen?.resourceId) onApplySelector?.(chosen.resourceId, chosen);
+    else if (packageTarget && chosen?.packageName) onApplyPackage?.(chosen.packageName, chosen);
     else onApply(values);
   };
 
@@ -333,18 +350,29 @@ export function CoordinatePickerDialog({
       } else if (event.key === 'Enter' && complete) {
         event.preventDefault();
         if (selector && chosen?.resourceId) onApplySelector?.(chosen.resourceId, chosen);
+        else if (packageTarget && chosen?.packageName) onApplyPackage?.(chosen.packageName, chosen);
         else onApply(values);
       }
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [chosen, complete, onApply, onApplySelector, onClose, selector, values]);
+  }, [
+    chosen,
+    complete,
+    onApply,
+    onApplyPackage,
+    onApplySelector,
+    onClose,
+    packageTarget,
+    selector,
+    values,
+  ]);
 
   const pick = (imagePoint: InspectorPoint, element: InspectorNode | null) => {
     if (!snapshot) return;
     setInspectPoint(imagePoint);
     setInspectedId(element?.nodeId ?? null);
-    if (selector) {
+    if (elementMode) {
       setChosen(element);
       return;
     }
@@ -380,12 +408,15 @@ export function CoordinatePickerDialog({
           </span>
           <div className="min-w-0 flex-1">
             <h2 id="coordinate-picker-title" className="text-sm font-semibold">
-              {selector ? 'Pick element' : 'Pick coordinates'} · {nodeLabel}
+              {selector ? 'Pick element' : packageTarget ? 'Pick app' : 'Pick coordinates'} ·{' '}
+              {nodeLabel}
             </h2>
             <p className="text-xs text-muted-foreground">
               {selector
                 ? 'Click an element on the device screen. Its resource ID is used as the selector.'
-                : `Click on the device screen. Values are saved in ${unitLabel}.`}
+                : packageTarget
+                  ? 'Click any element in the app you want to launch. Its package name will be used.'
+                  : `Click on the device screen. Values are saved in ${unitLabel}.`}
             </p>
           </div>
           <button
@@ -408,8 +439,8 @@ export function CoordinatePickerDialog({
                 values={values}
                 activeKey={activeKey}
                 snap={snap}
-                elementMode={Boolean(selector)}
-                chosen={selector ? chosen : inspected}
+                elementMode={elementMode}
+                chosen={elementMode ? chosen : inspected}
                 onPick={pick}
               />
             ) : (
@@ -497,41 +528,56 @@ export function CoordinatePickerDialog({
             </div>
 
             <div className="min-h-0 flex-1 space-y-3 overflow-y-auto p-4">
-              {selector ? (
+              {selector || packageTarget ? (
                 <div className="space-y-2">
-                  <div className="text-xs font-medium">Selector</div>
+                  <div className="text-xs font-medium">
+                    {selector ? 'Selector' : 'Application package'}
+                  </div>
                   {chosen ? (
                     <div
                       className={
                         'rounded-lg border px-3 py-2.5 text-[11px] leading-4 ' +
-                        (selectorOk
+                        ((selector ? selectorOk : packageOk)
                           ? 'border-[var(--g-green,#1e8e3e)] bg-[rgb(30_142_62/6%)]'
                           : 'border-destructive/40 bg-destructive/5')
                       }
                     >
                       <div className="truncate font-medium">{elementLabel(chosen)}</div>
                       <div className="mt-1 break-all font-mono">
-                        {chosen.resourceId ?? 'No resource ID'}
+                        {selector
+                          ? (chosen.resourceId ?? 'No resource ID')
+                          : (chosen.packageName ?? 'No package name')}
                       </div>
-                      {!selectorOk ? (
+                      {selector && !selectorOk ? (
                         <p className="mt-1.5 text-destructive">
                           {chosen.resourceId
                             ? 'This resource ID does not match the selector format (package:id/name).'
                             : 'This element has no resource ID. Pick its parent or a nearby element, or switch the node to coordinates.'}
                         </p>
                       ) : null}
+                      {packageTarget && !packageOk ? (
+                        <p className="mt-1.5 text-destructive">
+                          {chosen.packageName
+                            ? 'This package name does not match the Launch App format.'
+                            : 'This element has no package name. Pick another element from the app.'}
+                        </p>
+                      ) : null}
                     </div>
                   ) : (
                     <p className="rounded-lg bg-secondary px-3 py-2.5 text-[11px] leading-4 text-muted-foreground">
-                      {selector.field} ={' '}
-                      <span className="font-mono">{selectorValue ?? 'Not set'}</span>
+                      {(selector ?? packageTarget)!.field} ={' '}
+                      <span className="font-mono">
+                        {(selector ? selectorValue : packageValue) ?? 'Not set'}
+                      </span>
                       <br />
-                      Hover the screen to see each element&apos;s resource ID, then click one.
+                      {selector
+                        ? "Hover the screen to see each element's resource ID, then click one."
+                        : 'Open the target app on the device, then click any element inside it.'}
                     </p>
                   )}
                 </div>
               ) : null}
-              <div className={selector ? 'hidden' : 'space-y-1.5'}>
+              <div className={elementMode ? 'hidden' : 'space-y-1.5'}>
                 {spec.slots.map((slot: CoordinateSlot, index) => (
                   <button
                     key={slot.key}
@@ -569,7 +615,7 @@ export function CoordinatePickerDialog({
 
               <label
                 className={
-                  selector
+                  elementMode
                     ? 'hidden'
                     : 'flex cursor-pointer items-start gap-2.5 rounded-lg border border-border px-3 py-2.5'
                 }
@@ -598,7 +644,7 @@ export function CoordinatePickerDialog({
                     selectedId={inspectedId}
                     onSelect={(node) => {
                       setInspectedId(node.nodeId);
-                      if (selector) setChosen(node);
+                      if (elementMode) setChosen(node);
                     }}
                   />
                 </div>
@@ -612,7 +658,9 @@ export function CoordinatePickerDialog({
               <Button size="sm" onClick={apply} disabled={!complete}>
                 {selector
                   ? 'Use this element'
-                  : `Use ${spec.slots.length === 1 ? 'this point' : 'these points'}`}
+                  : packageTarget
+                    ? 'Use this app'
+                    : `Use ${spec.slots.length === 1 ? 'this point' : 'these points'}`}
               </Button>
             </footer>
           </aside>
@@ -753,6 +801,64 @@ export function SelectorTargetCard({
               onApply={() => undefined}
               onApplySelector={(resourceId) => {
                 onApply(resourceId);
+                setOpen(false);
+              }}
+              onClose={() => setOpen(false)}
+            />,
+            document.body,
+          )
+        : null}
+    </div>
+  );
+}
+
+/** Inline card for Launch App: pick any visible element and use its owning package name. */
+export function PackageTargetCard({
+  nodeLabel,
+  spec,
+  bindings,
+  bindingInputs,
+  onApply,
+}: {
+  nodeLabel: string;
+  spec: PackageTargetSpec;
+  bindings: Record<string, WorkflowBinding>;
+  bindingInputs: Record<string, BindingInputDefinition>;
+  onApply(packageName: string): void;
+}) {
+  const [open, setOpen] = useState(false);
+  const current = readPackageValue(spec, bindings);
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-secondary/40 p-2.5">
+      <span className="grid size-9 shrink-0 place-items-center rounded-md bg-card text-[var(--g-blue,#1a73e8)]">
+        <Smartphone className="size-4" />
+      </span>
+      <div className="min-w-0 flex-1 text-xs">
+        <div className="font-medium">{current ? 'App picked' : 'Pick app on device'}</div>
+        <div className="truncate font-mono text-[11px] text-muted-foreground">
+          {current ?? 'Pick any element to use its package name'}
+        </div>
+      </div>
+      <Button
+        size="sm"
+        variant={current ? 'secondary' : 'default'}
+        className="h-8 shrink-0"
+        onClick={() => setOpen(true)}
+      >
+        <Smartphone /> {current ? 'Re-pick' : 'Pick'}
+      </Button>
+      {open
+        ? createPortal(
+            <CoordinatePickerDialog
+              nodeLabel={nodeLabel}
+              spec={{ unit: 'px', slots: [] }}
+              initial={{}}
+              bindingInputs={bindingInputs}
+              packageTarget={spec}
+              packageValue={current}
+              onApply={() => undefined}
+              onApplyPackage={(packageName) => {
+                onApply(packageName);
                 setOpen(false);
               }}
               onClose={() => setOpen(false)}

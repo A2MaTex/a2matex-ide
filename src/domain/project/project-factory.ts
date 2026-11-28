@@ -3,7 +3,27 @@ import {
   CURRENT_WORKFLOW_SCHEMA_VERSION,
   DEFAULT_WORKFLOW_PATH,
   type ProjectDocument,
+  type WorkflowDocument,
 } from '@domain/project/project';
+
+export function createDefaultWorkflowDocument(): WorkflowDocument {
+  const startNodeId = crypto.randomUUID();
+  return {
+    schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION,
+    entryNodeId: startNodeId,
+    nodes: [
+      {
+        id: startNodeId,
+        type: 'flow.start',
+        config: {},
+        editor: { x: 100, y: 180 },
+        bindings: {},
+        errorPolicy: 'STOP',
+      },
+    ],
+    edges: [],
+  };
+}
 
 export function createEmptyProjectDocument(
   projectId: string,
@@ -19,7 +39,6 @@ export function createEmptyProjectDocument(
     throw new Error('Project description must not exceed 4,000 characters');
   }
 
-  const startNodeId = crypto.randomUUID();
   return {
     manifest: {
       schemaVersion: CURRENT_PROJECT_SCHEMA_VERSION,
@@ -36,21 +55,7 @@ export function createEmptyProjectDocument(
       environment: [],
     },
     workflows: {
-      [DEFAULT_WORKFLOW_PATH]: {
-        schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION,
-        entryNodeId: startNodeId,
-        nodes: [
-          {
-            id: startNodeId,
-            type: 'flow.start',
-            config: {},
-            editor: { x: 100, y: 180 },
-            bindings: {},
-            errorPolicy: 'STOP',
-          },
-        ],
-        edges: [],
-      },
+      [DEFAULT_WORKFLOW_PATH]: createDefaultWorkflowDocument(),
     },
   };
 }

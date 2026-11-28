@@ -17,7 +17,7 @@ interface NodeConfigDrawerProps {
   node: WorkflowNode | null;
   revision: number;
   issues: WorkflowIssue[];
-  execute(command: WorkflowCommand): boolean;
+  execute(command: WorkflowCommand, inputSchema?: JsonValue): boolean;
   onDuplicate(): void;
   onDelete(): void;
   onClose(): void;

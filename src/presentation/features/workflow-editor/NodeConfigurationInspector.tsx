@@ -31,10 +31,12 @@ import {
 } from '@domain/workflow/node-configuration-draft';
 import {
   coordinateTargetSpec,
+  packageTargetSpec,
   selectorTargetSpec,
 } from '@domain/android-inspector/coordinate-targets';
 import { switchRules, type NodeDefinition } from '@domain/workflow/node-definition';
-import { defaultBindingFor } from '@domain/workflow/workflow-binding';
+import { defaultBindingFor, preferredBindingKind } from '@domain/workflow/workflow-binding';
+import { addWorkflowInputField, type WorkflowInputField } from '@domain/workflow/workflow-inputs';
 import type { WorkflowCommand } from '@domain/workflow/workflow-commands';
 import type { WorkflowIssue } from '@domain/workflow/workflow-validator';
 import type { JsonValue } from '@shared/types/json-value';
@@ -44,6 +46,7 @@ import { LegacyPropertyField } from '@presentation/features/workflow-editor/Lega
 import { BindingSourceField } from '@presentation/features/workflow-editor/BindingSourceField';
 import {
   CoordinateTargetCard,
+  PackageTargetCard,
   SelectorTargetCard,
 } from '@presentation/features/android-inspector/CoordinatePicker';
 import { NodeIcon } from '@presentation/features/workflow-editor/node-icons';
@@ -57,7 +60,7 @@ interface NodeConfigurationInspectorProps {
   node: WorkflowNode | null;
   revision: number;
   issues: readonly WorkflowIssue[];
-  execute(command: WorkflowCommand): boolean;
+  execute(command: WorkflowCommand, inputSchema?: JsonValue): boolean;
   onDirtyChange(nodeId: string | null): void;
   onDuplicate(): void;
   onDelete(): void;
@@ -107,7 +110,7 @@ function ConfiguredInspector(props: {
   node: WorkflowNode;
   revision: number;
   issues: readonly WorkflowIssue[];
-  execute(command: WorkflowCommand): boolean;
+  execute(command: WorkflowCommand, inputSchema?: JsonValue): boolean;
   onDirtyChange(nodeId: string | null): void;
   onDuplicate(): void;
   onDelete(): void;
@@ -133,8 +136,10 @@ function ConfiguredInspector(props: {
     [definition, node, revision],
   );
   const [pendingDraft, setDraft] = useState(committedDraft);
+  const [pendingWorkflowInputSchema, setPendingWorkflowInputSchema] = useState(workflowInputSchema);
   const [dirty, setDirty] = useState(false);
   const draft = dirty ? pendingDraft : committedDraft;
+  const draftWorkflowInputSchema = dirty ? pendingWorkflowInputSchema : workflowInputSchema;
   const draftIssues = useMemo(
     () => validateNodeConfigurationDraft(draft, definition),
     [definition, draft],
@@ -185,8 +190,7 @@ function ConfiguredInspector(props: {
     const rules = [...switchRules(draft.config), { id, operator: operator.value }];
     const bindings = { ...draft.bindings };
     if (operator.operandCount === 1) {
-      const kind = Object.keys(switchDefinition.operand.bindingKinds)[0] as
-        keyof typeof switchDefinition.operand.bindingKinds | undefined;
+      const kind = preferredBindingKind(switchDefinition.operand);
       if (kind) bindings[id] = defaultBindingFor(switchDefinition.operand, kind);
     }
     updateSwitchRules(rules, bindings);
@@ -228,15 +232,21 @@ function ConfiguredInspector(props: {
   };
   const cancel = () => {
     setDraft(committedDraft);
+    setPendingWorkflowInputSchema(workflowInputSchema);
     setDirty(false);
     onDirtyChange(null);
   };
   const save = () => {
     if (!dirty || stale || draftIssues.length > 0) return;
-    const applied = execute({
-      type: 'node.commitConfiguration',
-      payload: configurationCommitPayload(draft, definition),
-    });
+    const schemaChanged =
+      JSON.stringify(draftWorkflowInputSchema) !== JSON.stringify(workflowInputSchema);
+    const applied = execute(
+      {
+        type: 'node.commitConfiguration',
+        payload: configurationCommitPayload(draft, definition),
+      },
+      schemaChanged ? draftWorkflowInputSchema : undefined,
+    );
     if (applied) {
       setDirty(false);
       toast.success('Node configuration saved');
@@ -258,6 +268,7 @@ function ConfiguredInspector(props: {
   const bindingFields = Object.entries(draft.bindingInputs);
   const coordinateSpec = coordinateTargetSpec(draft.config.targetMode, draft.bindingInputs);
   const selectorSpec = selectorTargetSpec(draft.config.targetMode, draft.bindingInputs);
+  const packageSpec = packageTargetSpec(definition.type, draft.bindingInputs);
   const hasErrorPolicy = definition.outputPortKeys?.includes('error') ?? false;
 
   return (
@@ -303,18 +314,28 @@ function ConfiguredInspector(props: {
           <button
             type="button"
             onClick={onDuplicate}
-            title="Duplicate"
+            disabled={node.type === 'flow.start'}
+            title={node.type === 'flow.start' ? 'The Start node cannot be duplicated' : 'Duplicate'}
             aria-label="Duplicate node"
-            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground"
+            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-secondary hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent"
           >
             <Copy className="size-4" />
           </button>
           <button
             type="button"
             onClick={onDelete}
-            title="Delete"
+            disabled={
+              node.type === 'flow.start' &&
+              workflow.nodes.filter((candidate) => candidate.type === 'flow.start').length === 1
+            }
+            title={
+              node.type === 'flow.start' &&
+              workflow.nodes.filter((candidate) => candidate.type === 'flow.start').length === 1
+                ? 'Every workflow must keep one Start node'
+                : 'Delete'
+            }
             aria-label="Delete node"
-            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+            className="grid size-8 place-items-center rounded-md text-muted-foreground hover:bg-destructive/10 hover:text-destructive disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-muted-foreground"
           >
             <Trash2 className="size-4" />
           </button>
@@ -400,7 +421,7 @@ function ConfiguredInspector(props: {
           {definition.configSchema && bindingFields.length > 0 ? (
             <InspectorSection
               icon={Zap}
-              title={definition.targeting ? 'Target values' : 'Inputs'}
+              title={definition.targeting || packageSpec ? 'Target values' : 'Inputs'}
               description="Choose where each value comes from. Required inputs must be complete before saving."
               badge={bindingFields.length}
             >
@@ -433,6 +454,17 @@ function ConfiguredInspector(props: {
                   }
                 />
               ) : null}
+              {packageSpec ? (
+                <PackageTargetCard
+                  nodeLabel={node.editor.name?.trim() || definition.displayName}
+                  spec={packageSpec}
+                  bindings={draft.bindings}
+                  bindingInputs={draft.bindingInputs}
+                  onApply={(packageName) =>
+                    update(setDraftBindingValue(draft, packageSpec.field, packageName))
+                  }
+                />
+              ) : null}
               {bindingFields.map(([name, input]) => {
                 const pair = coordinateSpec?.slots.find(
                   (slot) => slot.xField === name || slot.yField === name,
@@ -445,11 +477,22 @@ function ConfiguredInspector(props: {
                     input={fieldInput}
                     binding={draft.bindings[fieldName]}
                     workflow={workflow}
-                    workflowInputSchema={workflowInputSchema}
+                    workflowInputSchema={draftWorkflowInputSchema}
                     consumerNodeId={node.id}
                     catalog={catalog}
                     errors={schemaIssues('binding', fieldName)}
                     onChange={(binding) => update(setDraftBinding(draft, fieldName, binding))}
+                    onCreateWorkflowInput={(workflowInput) => {
+                      setPendingWorkflowInputSchema(
+                        addWorkflowInputField(draftWorkflowInputSchema, workflowInput),
+                      );
+                      update(
+                        setDraftBinding(draft, fieldName, {
+                          kind: 'WORKFLOW_INPUT',
+                          inputName: workflowInput.name,
+                        }),
+                      );
+                    }}
                   />
                 );
                 return pair ? (
@@ -553,11 +596,22 @@ function ConfiguredInspector(props: {
                             input={{ ...definition.switch!.operand, name: 'Operand' }}
                             binding={draft.bindings[rule.id]}
                             workflow={workflow}
-                            workflowInputSchema={workflowInputSchema}
+                            workflowInputSchema={draftWorkflowInputSchema}
                             consumerNodeId={node.id}
                             catalog={catalog}
                             errors={schemaIssues('binding', rule.id)}
                             onChange={(binding) => update(setDraftBinding(draft, rule.id, binding))}
+                            onCreateWorkflowInput={(workflowInput: WorkflowInputField) => {
+                              setPendingWorkflowInputSchema(
+                                addWorkflowInputField(draftWorkflowInputSchema, workflowInput),
+                              );
+                              update(
+                                setDraftBinding(draft, rule.id, {
+                                  kind: 'WORKFLOW_INPUT',
+                                  inputName: workflowInput.name,
+                                }),
+                              );
+                            }}
                           />
                         ) : (
                           <p className="text-[10px] text-muted-foreground">

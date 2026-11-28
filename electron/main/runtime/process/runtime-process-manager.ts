@@ -255,23 +255,43 @@ export class RuntimeProcessManager {
     try {
       const executable = this.options.resolveExecutable();
       const port = await selectLoopbackPort();
-      pipes = createRuntimePipes();
-      child = spawn(
-        executable,
-        [
-          '--owner-command-pipe=3',
-          '--owner-ready-pipe=4',
-          `--listen-address=127.0.0.1:${port}`,
-          '--log-level=warn',
-        ],
-        {
-          shell: false,
-          stdio: ['ignore', 'ignore', 'ignore', pipes.childCommandFd, pipes.childReadyFd],
-          windowsHide: true,
-        },
-      );
-      pipes.closeChildEnds();
-      const { command, ready } = pipes;
+      let command: Writable;
+      let ready: Readable;
+      const commonArguments = [`--listen-address=127.0.0.1:${port}`, '--log-level=warn'];
+      if (process.platform === 'win32') {
+        child = spawn(
+          executable,
+          ['--owner-command-pipe=0', '--owner-ready-pipe=1', ...commonArguments],
+          {
+            shell: false,
+            stdio: ['pipe', 'pipe', 'ignore'],
+            windowsHide: true,
+          },
+        );
+        if (!child.stdin || !child.stdout) {
+          throw new RuntimeError(
+            'RUNTIME_START_FAILED',
+            'The managed Runtime pipes could not be opened.',
+            true,
+          );
+        }
+        command = child.stdin;
+        ready = child.stdout;
+      } else {
+        pipes = createRuntimePipes();
+        child = spawn(
+          executable,
+          ['--owner-command-pipe=3', '--owner-ready-pipe=4', ...commonArguments],
+          {
+            shell: false,
+            stdio: ['ignore', 'ignore', 'ignore', pipes.childCommandFd, pipes.childReadyFd],
+            windowsHide: true,
+          },
+        );
+        pipes.closeChildEnds();
+        command = pipes.command;
+        ready = pipes.ready;
+      }
       const session = parseRuntimeReadyRecord(await readReadyFrame(ready, child));
       ready.destroy();
       const info = await new RuntimeHttpClient(session).runtimeInfo();

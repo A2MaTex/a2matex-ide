@@ -1,8 +1,8 @@
 import { bindingInputsFor, type NodeDefinition } from '@domain/workflow/node-definition';
 import {
   defaultBindingFor,
-  firstBindingKind,
   literalBinding,
+  preferredBindingKind,
 } from '@domain/workflow/workflow-binding';
 import type { WorkflowBinding } from '@domain/project/project';
 import type { JsonValue } from '@shared/types/json-value';
@@ -41,7 +41,7 @@ export function defaultNodeValuesFor(definition: NodeDefinition): {
       bindings[name] = literalBinding(input.valueSchema.default);
       continue;
     }
-    const kind = input.required ? firstBindingKind(input) : undefined;
+    const kind = input.required ? preferredBindingKind(input) : undefined;
     if (kind) bindings[name] = defaultBindingFor(input, kind);
   }
   if (definition.switch && !Array.isArray(config.rules)) {
@@ -49,13 +49,7 @@ export function defaultNodeValuesFor(definition: NodeDefinition): {
     if (operator) {
       const id = globalThis.crypto.randomUUID();
       config.rules = [{ id, operator: operator.value }];
-      const kind = Object.keys(definition.switch.operand.bindingKinds)[0] as
-        | 'LITERAL'
-        | 'WORKFLOW_INPUT'
-        | 'NODE_OUTPUT'
-        | 'FLOW_VARIABLE'
-        | 'GLOBAL_VARIABLE'
-        | undefined;
+      const kind = preferredBindingKind(definition.switch.operand);
       if (operator.operandCount === 1 && kind) {
         bindings[id] = defaultBindingFor(definition.switch.operand, kind);
       }

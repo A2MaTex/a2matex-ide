@@ -173,7 +173,7 @@ app.whenReady().then(() => {
     isPackaged: app.isPackaged,
   });
   registerAuthHandlers(auth);
-  runtimeManager = new RuntimeProcessManager({
+  const manager = new RuntimeProcessManager({
     resolveExecutable: () =>
       resolveRuntimeExecutable({
         appPath,
@@ -181,7 +181,8 @@ app.whenReady().then(() => {
         resourcesPath: process.resourcesPath,
       }),
   });
-  const runtime = createRuntimeServices(runtimeManager);
+  runtimeManager = manager;
+  const runtime = createRuntimeServices(manager);
   runtimeServices = runtime;
   try {
     studioDatabase = openStudioDatabase({
@@ -238,6 +239,11 @@ app.whenReady().then(() => {
   });
   registerProjectHandlers({ auth, projects });
   registerCloudProjectHandlers(createProjectCloudService({ auth, cache: cloudCache, projects }));
+  void manager.ensureReady().catch((error) => {
+    logMain('error', 'runtime_startup_failed', {
+      name: error instanceof Error ? error.name : 'UnknownError',
+    });
+  });
   createWindow();
   logMain('info', 'app_ready', { packaged: app.isPackaged });
 

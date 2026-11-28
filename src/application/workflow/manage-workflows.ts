@@ -1,8 +1,5 @@
-import {
-  CURRENT_WORKFLOW_SCHEMA_VERSION,
-  type ProjectDocument,
-  type WorkflowDocument,
-} from '@domain/project/project';
+import type { ProjectDocument } from '@domain/project/project';
+import { createDefaultWorkflowDocument } from '@domain/project/project-factory';
 
 export type WorkflowKind = 'flow' | 'subflow';
 
@@ -15,25 +12,6 @@ function workflowSlug(name: string) {
     .replace(/[^a-z0-9._-]+/g, '-')
     .replace(/^-+|-+$/g, '')
     .slice(0, 64);
-}
-
-function emptyWorkflow(): WorkflowDocument {
-  const entryNodeId = crypto.randomUUID();
-  return {
-    schemaVersion: CURRENT_WORKFLOW_SCHEMA_VERSION,
-    entryNodeId,
-    nodes: [
-      {
-        id: entryNodeId,
-        type: 'flow.start',
-        config: {},
-        editor: { x: 100, y: 180 },
-        bindings: {},
-        errorPolicy: 'STOP',
-      },
-    ],
-    edges: [],
-  };
 }
 
 export function addProjectWorkflow(
@@ -57,7 +35,7 @@ export function addProjectWorkflow(
         workflows: [...document.manifest.workflows, workflowPath],
         workflowKinds: { ...document.manifest.workflowKinds, [workflowPath]: kind },
       },
-      workflows: { ...document.workflows, [workflowPath]: emptyWorkflow() },
+      workflows: { ...document.workflows, [workflowPath]: createDefaultWorkflowDocument() },
     },
   };
 }

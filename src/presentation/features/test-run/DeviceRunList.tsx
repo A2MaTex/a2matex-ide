@@ -128,7 +128,6 @@ export function DeviceRunList({
                     {device.error ? (
                       <span className="mt-0.5 block text-[11px] leading-4 text-destructive">
                         {device.error.message}
-                        <span className="ml-1 font-mono text-[10px]">({device.error.code})</span>
                       </span>
                     ) : null}
                   </span>

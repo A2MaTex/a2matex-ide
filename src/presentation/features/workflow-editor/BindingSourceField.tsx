@@ -6,10 +6,17 @@ import type {
 } from '@domain/workflow/node-definition';
 import {
   defaultBindingFor,
-  firstBindingKind,
+  preferredBindingKind,
   workflowBindingKind,
 } from '@domain/workflow/workflow-binding';
 import { nodeOutputOptions, variableSuggestions } from '@domain/workflow/binding-options';
+import {
+  compatibleWorkflowInputNames,
+  WORKFLOW_INPUT_NAME_PATTERN,
+  workflowInputFieldsFromSchema,
+  type WorkflowInputField,
+  type WorkflowInputType,
+} from '@domain/workflow/workflow-inputs';
 import type { JsonValue } from '@shared/types/json-value';
 import { SchemaValueField } from '@presentation/features/workflow-editor/SchemaValueField';
 
@@ -23,6 +30,7 @@ interface BindingSourceFieldProps {
   catalog: readonly NodeDefinition[];
   errors: readonly string[];
   onChange(binding: WorkflowBinding | undefined): void;
+  onCreateWorkflowInput(input: WorkflowInputField): void;
 }
 
 const labels: Record<WorkflowBindingKind, string> = {
@@ -40,21 +48,50 @@ function titleFromName(name: string) {
     .replace(/^./, (character) => character.toUpperCase());
 }
 
-function workflowInputNames(schema: JsonValue, input: BindingInputDefinition) {
-  if (!schema || Array.isArray(schema) || typeof schema !== 'object') return [];
-  const properties = schema.properties;
-  if (!properties || Array.isArray(properties) || typeof properties !== 'object') return [];
-  const required = Array.isArray(schema.required)
-    ? schema.required.filter((value): value is string => typeof value === 'string')
-    : [];
-  return Object.entries(properties).flatMap(([name, raw]) => {
-    if (!raw || Array.isArray(raw) || typeof raw !== 'object') return [];
-    if (input.required && !required.includes(name)) return [];
-    const type = raw.type;
-    if (typeof type !== 'string') return [];
-    if (input.valueSchema) return type === input.valueSchema.type ? [name] : [];
-    return ['string', 'number', 'integer', 'boolean'].includes(type) ? [name] : [];
-  });
+function availableWorkflowInputName(schema: JsonValue, label: string) {
+  const properties =
+    schema && typeof schema === 'object' && !Array.isArray(schema) ? schema.properties : undefined;
+  const existing = new Set(
+    properties && typeof properties === 'object' && !Array.isArray(properties)
+      ? Object.keys(properties)
+      : [],
+  );
+  const words = label.match(/[A-Za-z0-9]+/g) ?? [];
+  const joined = words
+    .map((word, index) =>
+      index === 0
+        ? word.charAt(0).toLowerCase() + word.slice(1)
+        : word.charAt(0).toUpperCase() + word.slice(1),
+    )
+    .join('');
+  const base = WORKFLOW_INPUT_NAME_PATTERN.test(joined) ? joined : 'inputValue';
+  if (!existing.has(base)) return base;
+  for (let suffix = 2; suffix < 10_000; suffix += 1) {
+    const candidate = `${base.slice(0, 100 - String(suffix).length)}${suffix}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+  return `input${Date.now()}`.slice(0, 100);
+}
+
+function workflowInputType(input: BindingInputDefinition): WorkflowInputType {
+  if (input.valueSchema) return input.valueSchema.type;
+  const literalType = input.bindingKinds.LITERAL?.literalTypes?.[0];
+  return literalType === 'number' || literalType === 'boolean' ? literalType : 'string';
+}
+
+function newWorkflowInput(schema: JsonValue, input: BindingInputDefinition): WorkflowInputField {
+  const type = workflowInputType(input);
+  const valueSchema = input.valueSchema;
+  const textSchema = valueSchema?.type === 'string' ? valueSchema : undefined;
+  const numberSchema =
+    valueSchema?.type === 'integer' || valueSchema?.type === 'number' ? valueSchema : undefined;
+  return {
+    name: availableWorkflowInputName(schema, input.name),
+    type,
+    required: input.required,
+    min: textSchema?.minLength ?? numberSchema?.minimum ?? null,
+    max: textSchema?.maxLength ?? numberSchema?.maximum ?? null,
+  };
 }
 
 export function BindingSourceField({
@@ -67,14 +104,18 @@ export function BindingSourceField({
   catalog,
   errors,
   onChange,
+  onCreateWorkflowInput,
 }: BindingSourceFieldProps) {
   const kinds = Object.keys(input.bindingKinds) as WorkflowBindingKind[];
   const kind =
-    workflowBindingKind(binding) ?? (input.required ? firstBindingKind(input) : undefined);
+    workflowBindingKind(binding) ?? (input.required ? preferredBindingKind(input) : undefined);
   const selectedBinding = binding ?? (kind ? defaultBindingFor(input, kind) : undefined);
   const inputClass =
     'h-9 w-full rounded-md border border-border bg-background px-2.5 text-xs outline-none focus:border-primary';
   const outputOptions = nodeOutputOptions(workflow, consumerNodeId, input, catalog);
+  const workflowInputs = compatibleWorkflowInputNames(workflowInputSchema, input);
+  const workflowInputCount = workflowInputFieldsFromSchema(workflowInputSchema).length;
+  const suggestedWorkflowInput = newWorkflowInput(workflowInputSchema, input);
   const selectedOutput =
     kind === 'NODE_OUTPUT' &&
     typeof selectedBinding?.nodeId === 'string' &&
@@ -114,6 +155,16 @@ export function BindingSourceField({
           value={kind ?? ''}
           onChange={(event) => {
             const next = event.target.value as WorkflowBindingKind;
+            if (next === 'WORKFLOW_INPUT') {
+              if (workflowInputs.length === 0) {
+                onCreateWorkflowInput(suggestedWorkflowInput);
+                return;
+              }
+              if (workflowInputs.length === 1) {
+                onChange({ kind: next, inputName: workflowInputs[0]! });
+                return;
+              }
+            }
             onChange(next ? defaultBindingFor(input, next) : undefined);
           }}
           className="binding-source-select h-6 max-w-[55%] shrink-0 cursor-pointer rounded-md border-0 bg-transparent pr-1 text-right text-[11px] text-muted-foreground outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
@@ -197,20 +248,41 @@ export function BindingSourceField({
           )}
         </div>
       ) : kind === 'WORKFLOW_INPUT' ? (
-        <div>
-          <select
-            aria-label={`${input.name} workflow input`}
-            value={typeof selectedBinding?.inputName === 'string' ? selectedBinding.inputName : ''}
-            onChange={(event) => onChange({ kind, inputName: event.target.value })}
-            className={inputClass}
-          >
-            <option value="">Select workflow input…</option>
-            {workflowInputNames(workflowInputSchema, input).map((name) => (
-              <option key={name} value={name}>
-                {name}
-              </option>
-            ))}
-          </select>
+        <div className="space-y-1.5">
+          {workflowInputs.length === 0 ? (
+            <button
+              type="button"
+              onClick={() => onCreateWorkflowInput(suggestedWorkflowInput)}
+              className={`${inputClass} text-left text-foreground hover:border-primary`}
+            >
+              Create run input &ldquo;{suggestedWorkflowInput.name}&rdquo;
+            </button>
+          ) : (
+            <select
+              aria-label={`${input.name} workflow input`}
+              value={
+                typeof selectedBinding?.inputName === 'string' ? selectedBinding.inputName : ''
+              }
+              onChange={(event) => onChange({ kind, inputName: event.target.value })}
+              className={inputClass}
+            >
+              <option value="">Select workflow input…</option>
+              {workflowInputs.map((name) => (
+                <option key={name} value={name}>
+                  {name}
+                </option>
+              ))}
+            </select>
+          )}
+          <p className="text-[10px] leading-4 text-muted-foreground">
+            {workflowInputs.length > 0
+              ? 'The user enters this value for each device when starting a Test Run.'
+              : workflowInputCount === 0
+                ? 'No run inputs exist yet. Creating this input adds it to the Test Run form.'
+                : input.valueSchema
+                  ? `No ${input.required ? 'required ' : ''}${input.valueSchema.type} run input exists. Create a compatible one here.`
+                  : 'No compatible run input exists. Create one here.'}
+          </p>
         </div>
       ) : kind === 'NODE_OUTPUT' ? (
         <div>

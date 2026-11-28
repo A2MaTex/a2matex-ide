@@ -19,7 +19,9 @@
     "dev:electron": "wait-on http://127.0.0.1:15173 && cross-env ELECTRON_RUN_AS_NODE= A2MATEX_DEV_SERVER_URL=http://127.0.0.1:15173 electron .",
     "build:web": "tsc -b tsconfig.app.json tsconfig.node.json && vite build",
     "build:electron": "tsc -p tsconfig.electron.json && node scripts/resolve-electron-aliases.mjs",
+    "build:runtime": "node scripts/build-runtime.mjs",
     "build:desktop": "npm run build:web && npm run build:electron",
+    "smoke:runtime": "npm run build:electron && node scripts/smoke-managed-runtime.mjs",
     "typecheck": "tsc -b && tsc -p tsconfig.electron.json --noEmit",
     "test": "vitest run",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"electron/**/*.{ts,cts}\" \"tests/**/*.{ts,tsx}\" \"*.{js,json,ts}\" \".github/**/*.yml\" --no-error-on-unmatched-pattern",
@@ -104,7 +106,28 @@
       ],
       "category": "Development",
       "syncDesktopName": true,
-      "artifactName": "${productName}-${version}-${arch}.${ext}"
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "resources/runtime/linux-${arch}",
+          "to": "runtime/linux-${arch}",
+          "filter": [
+            "**/*"
+          ]
+        }
+      ]
+    },
+    "win": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "extraResources": [
+        {
+          "from": "resources/runtime/win32-${arch}",
+          "to": "runtime/win32-${arch}",
+          "filter": [
+            "**/*"
+          ]
+        }
+      ]
     }
   }
 }

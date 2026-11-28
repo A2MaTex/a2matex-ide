@@ -1,4 +1,5 @@
 import type { ProjectDocument } from '@domain/project/project';
+import type { BindingInputDefinition } from '@domain/workflow/node-definition';
 import type { JsonValue } from '@shared/types/json-value';
 
 type JsonObject = { [key: string]: JsonValue };
@@ -76,6 +77,33 @@ export function workflowInputFieldsFromSchema(schema: JsonValue): WorkflowInputF
   });
 }
 
+/**
+ * Workflow inputs that can safely feed one catalog binding input.
+ *
+ * Ordinary typed node inputs require an exact type match. A required ordinary input also needs a
+ * required workflow input because an optional value may be absent at execution. Generic scalar
+ * inputs (Set Variable and Switch operands) intentionally accept optional workflow inputs: their
+ * resolved type and presence are checked by the Runtime when the node executes.
+ */
+export function compatibleWorkflowInputNames(
+  schema: JsonValue,
+  input: BindingInputDefinition,
+): string[] {
+  return workflowInputFieldsFromSchema(schema).flatMap((field) => {
+    if (!input.valueSchema) return [field.name];
+    if (input.required && !field.required) return [];
+    return field.type === input.valueSchema.type ? [field.name] : [];
+  });
+}
+
+export function workflowInputIsCompatible(
+  schema: JsonValue,
+  input: BindingInputDefinition,
+  name: string,
+): boolean {
+  return compatibleWorkflowInputNames(schema, input).includes(name);
+}
+
 /** Builds a schema that only uses keys the Runtime accepts. */
 export function workflowInputSchemaFromFields(fields: readonly WorkflowInputField[]): JsonObject {
   const properties: JsonObject = {};
@@ -94,6 +122,28 @@ export function workflowInputSchemaFromFields(fields: readonly WorkflowInputFiel
     type: 'object',
     properties,
     required: fields.filter((field) => field.required).map((field) => field.name),
+    additionalProperties: false,
+  };
+}
+
+/** Adds one Runtime-compatible field while retaining the existing declared inputs. */
+export function addWorkflowInputField(schema: JsonValue, field: WorkflowInputField): JsonObject {
+  const properties = isObject(schema) && isObject(schema.properties) ? schema.properties : {};
+  if (Object.hasOwn(properties, field.name) && isObject(schema)) {
+    return structuredClone(schema);
+  }
+  const required =
+    isObject(schema) && Array.isArray(schema.required)
+      ? schema.required.filter((name): name is string => typeof name === 'string')
+      : [];
+  const addedSchema = workflowInputSchemaFromFields([field]);
+  const addedProperties = addedSchema.properties;
+  const added = isObject(addedProperties) ? addedProperties[field.name] : undefined;
+  if (!added) throw new Error(`Unable to create workflow input ${field.name}`);
+  return {
+    type: 'object',
+    properties: { ...structuredClone(properties), [field.name]: added },
+    required: field.required ? [...new Set([...required, field.name])] : required,
     additionalProperties: false,
   };
 }

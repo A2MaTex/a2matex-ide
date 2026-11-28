@@ -165,6 +165,19 @@ function createNode(
   };
 }
 
+function startNodes(workflow: WorkflowDocument) {
+  return workflow.nodes.filter((node) => node.type === 'flow.start');
+}
+
+function assertStartNodeCanBeAdded(workflow: WorkflowDocument) {
+  if (startNodes(workflow).length > 0) {
+    throw new WorkflowCommandError(
+      'START_NODE_ALREADY_EXISTS',
+      'A workflow can contain only one Start node',
+    );
+  }
+}
+
 export function applyWorkflowCommand(
   workflow: WorkflowDocument,
   command: WorkflowCommand,
@@ -183,13 +196,12 @@ export function applyWorkflowCommand(
       if (!definition) {
         throw new WorkflowCommandError('NODE_DEFINITION_MISSING', 'Node definition is unavailable');
       }
+      if (definition.type === 'flow.start') assertStartNodeCanBeAdded(workflow);
       const node = createNode(command.payload.nodeId, definition, command.payload.position);
       return {
         ...workflow,
         entryNodeId:
-          workflow.entryNodeId || definition.type !== 'flow.start'
-            ? workflow.entryNodeId
-            : command.payload.nodeId,
+          definition.type === 'flow.start' ? command.payload.nodeId : workflow.entryNodeId,
         nodes: [...workflow.nodes, node],
       };
     }
@@ -385,10 +397,22 @@ export function applyWorkflowCommand(
       };
     }
     case 'node.remove': {
-      findNode(workflow, command.payload.nodeId);
+      const removedNode = findNode(workflow, command.payload.nodeId);
+      const remainingStartNodes = startNodes(workflow).filter(
+        (node) => node.id !== command.payload.nodeId,
+      );
+      if (removedNode.type === 'flow.start' && remainingStartNodes.length === 0) {
+        throw new WorkflowCommandError(
+          'START_NODE_REQUIRED',
+          'Every workflow must keep one Start node',
+        );
+      }
       return {
         ...workflow,
-        entryNodeId: workflow.entryNodeId === command.payload.nodeId ? '' : workflow.entryNodeId,
+        entryNodeId:
+          workflow.entryNodeId === command.payload.nodeId
+            ? (remainingStartNodes[0]?.id ?? workflow.entryNodeId)
+            : workflow.entryNodeId,
         nodes: workflow.nodes.filter((node) => node.id !== command.payload.nodeId),
         edges: workflow.edges.filter(
           (edge) =>
@@ -399,6 +423,12 @@ export function applyWorkflowCommand(
     }
     case 'node.duplicate': {
       const source = findNode(workflow, command.payload.sourceNodeId);
+      if (source.type === 'flow.start') {
+        throw new WorkflowCommandError(
+          'START_NODE_ALREADY_EXISTS',
+          'The Start node cannot be duplicated',
+        );
+      }
       const definition = definitionFor(source, catalog);
       if (workflow.nodes.some((node) => node.id === command.payload.nodeId)) {
         throw new WorkflowCommandError('DUPLICATE_NODE', 'Node ID already exists');
@@ -458,6 +488,12 @@ export function applyWorkflowCommand(
       );
       if (!definition) {
         throw new WorkflowCommandError('NODE_DEFINITION_MISSING', 'Node definition is unavailable');
+      }
+      if (definition.type === 'flow.start') {
+        throw new WorkflowCommandError(
+          'START_NODE_ALREADY_EXISTS',
+          'A Start node cannot be added after another node',
+        );
       }
       const node = createNode(command.payload.nodeId, definition, command.payload.position);
       const candidate = { ...workflow, nodes: [...workflow.nodes, node] };

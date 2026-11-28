@@ -122,6 +122,11 @@ export interface SelectorTargetSpec {
   pattern?: string;
 }
 
+export interface PackageTargetSpec {
+  field: string;
+  pattern?: string;
+}
+
 /** SELECTOR_ID mode: the string field that takes an element resource id (pkg:id/name). */
 export function selectorTargetSpec(
   targetMode: unknown,
@@ -145,6 +150,27 @@ export function readSelectorValue(
   return typeof value === 'string' && value.trim() ? value : null;
 }
 
+/** Launch App: packageName can be copied from any inspected element in the foreground app. */
+export function packageTargetSpec(
+  nodeType: string,
+  bindingInputs: Record<string, BindingInputDefinition>,
+): PackageTargetSpec | null {
+  if (nodeType !== 'android.launch_app') return null;
+  const input = bindingInputs.packageName;
+  if (!input || (input.valueSchema && input.valueSchema.type !== 'string')) return null;
+  return {
+    field: 'packageName',
+    pattern: input.valueSchema?.type === 'string' ? input.valueSchema.pattern : undefined,
+  };
+}
+
+export function readPackageValue(
+  spec: PackageTargetSpec,
+  bindings: Record<string, WorkflowBinding | undefined>,
+) {
+  return readSelectorValue(spec, bindings);
+}
+
 export function selectorAccepts(spec: SelectorTargetSpec, resourceId: string | undefined) {
   if (!resourceId?.trim()) return false;
   if (!spec.pattern) return true;
@@ -153,4 +179,8 @@ export function selectorAccepts(spec: SelectorTargetSpec, resourceId: string | u
   } catch {
     return true;
   }
+}
+
+export function packageAccepts(spec: PackageTargetSpec, packageName: string | undefined) {
+  return selectorAccepts(spec, packageName);
 }

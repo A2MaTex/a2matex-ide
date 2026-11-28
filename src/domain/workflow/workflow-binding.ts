@@ -31,9 +31,11 @@ export function workflowBindingKind(
   return bindingKinds.find((kind) => kind === binding?.kind);
 }
 
-export function firstBindingKind(input: BindingInputDefinition): WorkflowBindingKind | undefined {
-  const first = Object.keys(input.bindingKinds)[0];
-  return bindingKinds.find((kind) => kind === first);
+/** Selects a stable authoring default instead of relying on JSON object key order from Catalog. */
+export function preferredBindingKind(
+  input: BindingInputDefinition,
+): WorkflowBindingKind | undefined {
+  return bindingKinds.find((kind) => Boolean(input.bindingKinds[kind]));
 }
 
 function scalarType(value: JsonValue): 'boolean' | 'number' | 'string' | undefined {
